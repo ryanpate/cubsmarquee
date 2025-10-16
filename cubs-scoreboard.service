@@ -1,0 +1,35 @@
+[Unit]
+Description=Chicago Cubs LED Matrix Scoreboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+
+# Corrected working directory
+WorkingDirectory=/home/pi
+
+# Environment variables
+Environment="PYTHONUNBUFFERED=1"
+
+# Execute the launch script from the correct location
+ExecStart=/home/pi/launch_scoreboard.sh
+
+# Restart configuration
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+
+# Give the service time to startup
+TimeoutStartSec=120
+
+# Kill only the main process
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target

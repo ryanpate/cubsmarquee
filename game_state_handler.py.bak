@@ -1,0 +1,171 @@
+"""Handlers for different game states and display modes"""
+
+import time
+import pendulum
+import statsapi
+from PIL import Image
+from rgbmatrix import graphics
+from scoreboard_config import Colors, Positions, GameConfig
+
+class GameStateHandler:
+    """Handles display for different game states"""
+    
+    def __init__(self, scoreboard_manager):
+        """Initialize with reference to main scoreboard manager"""
+        self.manager = scoreboard_manager
+        self.scroll_position = 96  # For scrolling text
+        
+    def display_warmup(self, game_data, game_index, lineup, gameid):
+        """Display warmup/pre-game screen"""
+        start_time = self.manager.format_game_time(game_data, game_index)
+        self._display_pregame_base("WARM UP", Colors.GREEN, start_time, lineup, game_data, game_index, gameid)
+        
+    def display_delayed(self, game_data, game_index, lineup, gameid):
+        """Display delayed game screen"""
+        start_time = self.manager.format_game_time(game_data, game_index)
+        self._display_pregame_base("DELAYED", Colors.DELAY_YELLOW, start_time, lineup, game_data, game_index, gameid)
+        
+    def display_postponed(self, game_data, game_index, lineup, gameid):
+        """Display postponed game screen"""
+        start_time = self.manager.format_game_time(game_data, game_index)
+        self._display_pregame_base("POSTPONED", Colors.POSTPONE_RED, start_time, lineup, game_data, game_index, gameid)
+        
+
+    def _display_pregame_base(self, status_text, bg_color, start_time, lineup, game_data, game_index, gameid):
+        """Base method for pregame displays (warmup, delayed, postponed) - OPTIMIZED"""
+        # Compare times for game start
+        game_datetime = game_data[game_index]['game_datetime'][-9:19]
+        time_compare = game_datetime[:5]
+        current_time = pendulum.now().format('HH:MM')
+
+        # Counter for when to refresh data (every 100 iterations instead of constantly)
+        refresh_counter = 0
+        refresh_interval = 1000  # Refresh data every 100 scroll iterations
+
+        while current_time != time_compare and game_data[game_index]['status'] not in ['In Progress', 'Final']:
+            self.manager.clear_canvas()
+            self.manager.fill_canvas(*bg_color)
+
+            # Draw divider line
+            for x in range(96):
+                self.manager.draw_pixel(x, 14, 255, 255, 255)
+
+            # Draw status text
+            x_offset = 17 if status_text != "POSTPONED" else 8
+            self.manager.draw_text('medium_bold', x_offset,
+                                12, Colors.WHITE, status_text)
+            self.manager.draw_text('small', 17, 24, Colors.WHITE, 'START TIME')
+            self.manager.draw_text('small', 36, 32, Colors.WHITE, start_time)
+
+            # Scroll lineup
+            self.scroll_position -= 1
+            text_length = len(lineup) * 7  # Approximate character width
+
+            if self.scroll_position + text_length < 0:
+                self.scroll_position = 96
+                # Only refresh lineup when text loops, not every frame
+                lineup = self.manager.get_lineup(gameid)
+
+            self.manager.draw_text(
+                'lineup', self.scroll_position, 45, Colors.WHITE, lineup)
+            self.manager.swap_canvas()
+
+            # Use consistent scroll speed
+            time.sleep(GameConfig.SCROLL_SPEED)
+
+            # Increment refresh counter
+            refresh_counter += 1
+
+            # Only check for status changes periodically, not every frame
+            if refresh_counter >= refresh_interval:
+                refresh_counter = 0
+                # Check for status changes
+                game_data = self.manager.get_schedule()
+                if game_data[game_index]['status'] == 'In Progress':
+                    break
+                current_time = pendulum.now().format('HH:MM')
+            else:
+                # Just update current time without hitting the API
+                current_time = pendulum.now().format('HH:MM')
+
+    def display_no_game(self, game_data, game_index):
+        """Display when no game is currently playing"""
+        gameid = game_data[game_index]['game_id']
+        game_date = game_data[game_index]['game_date']
+        game_time = self.manager.format_game_time(game_data, game_index)
+        
+        # Get opponent info
+        game_info = statsapi.get('game', {'gamePk': gameid})
+        if game_info['gameData']['teams']['home']['abbreviation'] == 'CHC':
+            away = 'away'
+        else:
+            away = 'home'
+        away_team = game_info['gameData']['teams'][away]['name']
+        
+        # Create next game text
+        pitchers = self.manager.get_pitchers(game_data, game_index, gameid)
+        next_game_text = f'NEXT GAME {game_date[5:]} at {game_time} vs {away_team}     {pitchers}'
+        
+        # Main display loop
+        while True:
+            self.manager.clear_canvas()
+            
+            # Display marquee image
+            output_image = Image.new("RGB", (96, 48))
+            output_image.paste(self.manager.game_images['marquee'], (0, 0))
+            self.manager.canvas.SetImage(output_image.convert("RGB"), 0, 0)
+            
+            # Scroll next game text
+            self.scroll_position -= 1
+            text_length = len(next_game_text) * 7
+            if self.scroll_position + text_length < 0:
+                self.scroll_position = 96
+                # Show standings briefly
+                self._display_standings()
+                
+                # Check game status
+                game_data = self.manager.get_schedule()
+                if self._should_transition_state(game_data, game_index):
+                    break
+            
+            self.manager.draw_text('standard_bold', self.scroll_position, 46, Colors.YELLOW, next_game_text)
+            self.manager.swap_canvas()
+            time.sleep(GameConfig.SCROLL_SPEED)
+    
+    def _display_standings(self):
+        """Display division standings"""
+        self.manager.clear_canvas()
+        self.manager.fill_canvas(*Colors.GREEN)
+        
+        # Get standings
+        standings = statsapi.get('standings', {'leagueId': 104})['records'][1]['teamRecords']
+        
+        # Draw title
+        self.manager.draw_text('tiny_bold', 3, 8, Colors.YELLOW, 'DIVISION STANDINGS')
+        
+        # Draw each team
+        y_position = 15
+        for team_record in standings:
+            team_id = team_record['team']['id']
+            team_info = statsapi.get('team', {'teamId': team_id})['teams'][0]
+            team_abv = team_info['abbreviation']
+            
+            games_back = team_record['gamesBack']
+            if games_back == '-':
+                games_back = ''
+            
+            record = f"{team_record['leagueRecord']['wins']}-{team_record['leagueRecord']['losses']} {team_record['leagueRecord']['pct']}"
+            
+            self.manager.draw_text('micro', 5, y_position, Colors.WHITE, team_abv)
+            self.manager.draw_text('micro', 26, y_position, Colors.WHITE, record)
+            self.manager.draw_text('micro', 75, y_position, Colors.WHITE, games_back)
+            
+            y_position += 8
+        
+        self.manager.swap_canvas()
+        time.sleep(GameConfig.NO_GAME_STANDINGS_DISPLAY_TIME)
+    
+    def _should_transition_state(self, game_data, game_index):
+        """Check if we should transition to a different game state"""
+        status = game_data[game_index]['status']
+        return status in ['Warmup', 'Pre-Game', 'In Progress', 'Delayed', 'Postponed']
