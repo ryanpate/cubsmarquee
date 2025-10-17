@@ -27,6 +27,14 @@ class WeatherDisplay:
         self.star_twinkle = []
         self.lightning_flash = 0
 
+        # Track when background was last drawn
+        self._last_hour = None
+        self._last_condition = None
+        self._last_mode = None  # Track which display mode we're in
+
+        # Cache the current background for efficient redraws
+        self._background_cache = None
+
     def _load_config(self):
         """Load configuration"""
         config_path = '/home/pi/config.json'
@@ -76,52 +84,121 @@ class WeatherDisplay:
 
     def display_weather_screen(self, duration=300):
         """Display weather for specified duration"""
+        print(f"Starting weather display for {duration} seconds")
+
         # Fetch weather if needed
         if self._should_update_weather():
             if not self._fetch_weather():
+                print("Failed to fetch weather, exiting")
                 return  # Failed to fetch
 
         if not self.weather_data:
+            print("No weather data available, exiting")
             return
+
+        # Initialize animations once at start
+        if not self.rain_drops and not self.snow_flakes:
+            self._initialize_animations()
 
         start_time = time.time()
         display_mode = 0  # 0 = current, 1 = forecast
         mode_switch_time = time.time()
         mode_duration = 15  # Switch every 15 seconds
+        frame_count = 0
 
         while time.time() - start_time < duration:
+            frame_count += 1
+
             # Switch between current and forecast
             if time.time() - mode_switch_time > mode_duration:
                 display_mode = (display_mode + 1) % 2
                 mode_switch_time = time.time()
+                # Force background redraw on mode switch
+                if display_mode == 0:  # Switching to current weather
+                    self._last_mode = None
+                    self._background_cache = None
+                print(
+                    f"Switching to {'forecast' if display_mode == 1 else 'current weather'}")
 
             # Check if we need to update weather
             if self._should_update_weather():
                 self._fetch_weather()
 
             if display_mode == 0:
-                self._draw_current_weather()
+                self._draw_current_weather_animated()
             else:
                 self._draw_forecast()
 
             self.manager.swap_canvas()
             time.sleep(0.5)
 
-    def _draw_current_weather(self):
-        """Draw current weather conditions"""
-        self.manager.clear_canvas()
+        print(f"Weather display completed after {frame_count} frames")
 
-        # Background gradient (blue sky)
+    def _draw_current_weather_animated(self):
+        """Draw current weather with animations (called each frame)"""
+        current_hour = pendulum.now().hour
+        condition = self.weather_data['weather'][0]['main']
+
+        # Check if we need to regenerate the background
+        needs_background_redraw = (
+            self._last_mode != 'current' or
+            self._last_hour != current_hour or
+            self._last_condition != condition or
+            self._background_cache is None
+        )
+
+        if needs_background_redraw:
+            # Generate and cache the background
+            self._background_cache = self._generate_background_cache(
+                current_hour, condition)
+            self._last_hour = current_hour
+            self._last_condition = condition
+            self._last_mode = 'current'
+
+        # STEP 1: Draw the cached background (full screen)
+        self._draw_cached_background()
+
+        # STEP 2: Draw animations on top of background
+        self._draw_animated_weather(condition, current_hour)
+        self.animation_frame += 1
+
+        # STEP 3: Draw all text on top of animations
+        self._draw_weather_text()
+
+    def _generate_background_cache(self, hour, condition):
+        """Generate and cache the background gradient as a pixel array"""
+        top_color, bottom_color = self._get_gradient_colors(hour, condition)
+        r1, g1, b1 = top_color
+        r2, g2, b2 = bottom_color
+
+        # Create a 2D array to store the background
+        background = []
         for y in range(48):
-            blue_val = int(200 - (y * 2))
+            row = []
+            ratio = y / 48
+            r = int(r1 + (r2 - r1) * ratio)
+            g = int(g1 + (g2 - g1) * ratio)
+            b = int(b1 + (b2 - b1) * ratio)
             for x in range(96):
-                self.manager.draw_pixel(x, y, 100, 150, blue_val)
+                row.append((r, g, b))
+            background.append(row)
 
+        return background
+
+    def _draw_cached_background(self):
+        """Draw the cached background to canvas"""
+        if self._background_cache:
+            for y in range(48):
+                for x in range(96):
+                    r, g, b = self._background_cache[y][x]
+                    self.manager.draw_pixel(x, y, r, g, b)
+
+    def _draw_weather_text(self):
+        """Draw all weather text elements"""
         # Get weather data
         temp = int(self.weather_data['main']['temp'])
         feels_like = int(self.weather_data['main']['feels_like'])
-        condition = self.weather_data['weather'][0]['main']
-        description = self.weather_data['weather'][0]['description'].title()
+        condition_text = self.weather_data['weather'][0]['main']
         humidity = self.weather_data['main']['humidity']
         city = self.weather_data['name']
 
@@ -145,9 +222,9 @@ class WeatherDisplay:
         self.manager.draw_text('small', degree_x + 4, 26, Colors.WHITE, 'F')
 
         # Draw condition
-        cond_x = max(2, (96 - len(condition) * 5) // 2)
+        cond_x = max(2, (96 - len(condition_text) * 5) // 2)
         self.manager.draw_text(
-            'tiny', cond_x, 40, Colors.BRIGHT_YELLOW, condition)
+            'tiny', cond_x, 40, Colors.BRIGHT_YELLOW, condition_text)
 
         # Draw feels like and humidity
         self.manager.draw_text(
@@ -155,81 +232,8 @@ class WeatherDisplay:
         self.manager.draw_text(
             'micro', 60, 47, Colors.WHITE, f'HUM:{humidity}%')
 
-    def _draw_forecast(self):
-        """Draw forecast information"""
-        self.manager.clear_canvas()
-
-        # Background
-        self.manager.fill_canvas(*Colors.CUBS_BLUE)
-
-        # Draw title
-        self.manager.draw_text(
-            'tiny_bold', 12, 8, Colors.BRIGHT_YELLOW, '3-DAY FORECAST')
-
-        if not self.forecast_data:
-            return
-
-        try:
-            # Get forecast for next 3 days at noon
-            forecasts = []
-            seen_days = set()
-
-            for item in self.forecast_data['list']:
-                dt = pendulum.parse(item['dt_txt'])
-                day_key = dt.format('YYYY-MM-DD')
-
-                # Get forecast around noon (12:00)
-                if dt.hour == 12 and day_key not in seen_days:
-                    forecasts.append({
-                        'day': dt.format('ddd'),
-                        'temp_high': int(item['main']['temp_max']),
-                        'temp_low': int(item['main']['temp_min']),
-                        'condition': item['weather'][0]['main'][:6].upper()
-                    })
-                    seen_days.add(day_key)
-
-                if len(forecasts) >= 3:
-                    break
-
-            # Draw forecasts
-            y_pos = 22
-            for forecast in forecasts:
-                # Day name
-                self.manager.draw_text(
-                    'tiny', 4, y_pos, Colors.WHITE, forecast['day'])
-
-                # High temp
-                self.manager.draw_text('tiny', 26, y_pos, Colors.YELLOW,
-                                       f"{forecast['temp_high']}")
-
-                # Low temp
-                self.manager.draw_text('tiny', 46, y_pos, Colors.WHITE,
-                                       f"{forecast['temp_low']}")
-
-                # Condition
-                self.manager.draw_text('micro', 66, y_pos - 1, Colors.WHITE,
-                                       forecast['condition'])
-
-                y_pos += 10
-
-        except Exception as e:
-            print(f"Error drawing forecast: {e}")
-
-    def _get_weather_icon(self, condition):
-        """Get simple ASCII representation of weather condition"""
-        icons = {
-            'Clear': 'O',
-            'Clouds': '~',
-            'Rain': '|',
-            'Snow': '*',
-            'Thunderstorm': 'Z'
-        }
-        return icons.get(condition, '?')
-
-    def _draw_complete_background(self, hour, condition):
-        """Draw complete background combining time of day and weather condition"""
-        import random
-
+    def _get_gradient_colors(self, hour, condition):
+        """Get the gradient colors for current time and condition"""
         # Determine time period
         if 6 <= hour < 8:
             time_period = 'dawn'
@@ -240,130 +244,260 @@ class WeatherDisplay:
         else:
             time_period = 'night'
 
-        print(f"Weather background: {time_period.upper()} + {condition}")
-
-        # CLEAR SKY BACKGROUNDS
+        # Return tuple of (top_color, bottom_color)
         if condition == 'Clear':
             if time_period == 'dawn':
-                # Dawn - Orange/pink sunrise
-                self._gradient_background((255, 180, 120), (255, 220, 180))
+                return ((255, 180, 120), (255, 220, 180))
             elif time_period == 'day':
-                # Day - Bright blue sky
-                self._gradient_background((100, 180, 255), (150, 220, 255))
+                return ((100, 180, 255), (150, 220, 255))
             elif time_period == 'dusk':
-                # Dusk - Orange/purple sunset
-                self._gradient_background((255, 120, 80), (120, 80, 150))
-            else:  # night
-                # Night - Dark blue/purple
-                self._gradient_background((20, 30, 80), (10, 15, 40))
-
-        # CLOUDY BACKGROUNDS
+                return ((255, 120, 80), (120, 80, 150))
+            else:
+                return ((20, 30, 80), (10, 15, 40))
         elif condition == 'Clouds':
             if time_period == 'dawn':
-                # Cloudy dawn - Muted warm gray
-                self._gradient_background((180, 170, 160), (200, 190, 180))
+                return ((180, 170, 160), (200, 190, 180))
             elif time_period == 'day':
-                # Cloudy day - Light gray
-                self._gradient_background((150, 160, 170), (180, 190, 200))
+                return ((150, 160, 170), (180, 190, 200))
             elif time_period == 'dusk':
-                # Cloudy dusk - Purple gray
-                self._gradient_background((120, 100, 120), (90, 80, 100))
-            else:  # night
-                # Cloudy night - Dark gray
-                self._gradient_background((50, 55, 60), (30, 35, 40))
-
-        # RAINY BACKGROUNDS
+                return ((120, 100, 120), (90, 80, 100))
+            else:
+                return ((50, 55, 60), (30, 35, 40))
         elif condition in ['Rain', 'Drizzle']:
             if time_period == 'dawn':
-                # Rainy dawn - Dark blue-gray
-                self._gradient_background((90, 100, 110), (110, 120, 130))
+                return ((90, 100, 110), (110, 120, 130))
             elif time_period == 'day':
-                # Rainy day - Storm gray
-                self._gradient_background((80, 90, 105), (100, 110, 125))
+                return ((80, 90, 105), (100, 110, 125))
             elif time_period == 'dusk':
-                # Rainy dusk - Deep gray-blue
-                self._gradient_background((70, 70, 90), (50, 50, 70))
-            else:  # night
-                # Rainy night - Very dark gray
-                self._gradient_background((40, 45, 55), (25, 30, 40))
-
-        # THUNDERSTORM BACKGROUNDS
+                return ((70, 70, 90), (50, 50, 70))
+            else:
+                return ((40, 45, 55), (25, 30, 40))
         elif condition == 'Thunderstorm':
             if time_period == 'dawn':
-                # Stormy dawn - Dark purple-gray
-                self._gradient_background((60, 60, 80), (50, 50, 70))
+                return ((60, 60, 80), (50, 50, 70))
             elif time_period == 'day':
-                # Stormy day - Dark storm colors
-                self._gradient_background((50, 55, 70), (60, 65, 80))
+                return ((50, 55, 70), (60, 65, 80))
             elif time_period == 'dusk':
-                # Stormy dusk - Very dark purple
-                self._gradient_background((45, 40, 60), (35, 30, 50))
-            else:  # night
-                # Stormy night - Almost black
-                self._gradient_background((30, 30, 45), (15, 15, 30))
-
-        # SNOWY BACKGROUNDS
+                return ((45, 40, 60), (35, 30, 50))
+            else:
+                return ((30, 30, 45), (15, 15, 30))
         elif condition == 'Snow':
             if time_period == 'dawn':
-                # Snowy dawn - Pale pink/blue
-                self._gradient_background((220, 210, 220), (240, 230, 240))
+                return ((220, 210, 220), (240, 230, 240))
             elif time_period == 'day':
-                # Snowy day - Bright white/blue
-                self._gradient_background((230, 235, 245), (245, 250, 255))
+                return ((230, 235, 245), (245, 250, 255))
             elif time_period == 'dusk':
-                # Snowy dusk - Cool gray/blue
-                self._gradient_background((160, 165, 180), (180, 185, 200))
-            else:  # night
-                # Snowy night - Dark blue-gray
-                self._gradient_background((70, 75, 90), (55, 60, 75))
-
-        # FOGGY/MISTY BACKGROUNDS
+                return ((160, 165, 180), (180, 185, 200))
+            else:
+                return ((70, 75, 90), (55, 60, 75))
         elif condition in ['Mist', 'Fog', 'Haze', 'Smoke']:
             if time_period == 'dawn':
-                # Misty dawn - Light gray
-                self._gradient_background((190, 190, 190), (210, 210, 210))
+                return ((190, 190, 190), (210, 210, 210))
             elif time_period == 'day':
-                # Misty day - Bright gray
-                self._gradient_background((200, 200, 200), (220, 220, 220))
+                return ((200, 200, 200), (220, 220, 220))
             elif time_period == 'dusk':
-                # Misty dusk - Medium gray
-                self._gradient_background((130, 135, 140), (150, 155, 160))
-            else:  # night
-                # Misty night - Dark gray
-                self._gradient_background((60, 65, 70), (45, 50, 55))
-
-        # FALLBACK - Use Clear sky if condition unknown
-        else:
-            print(f"Unknown condition '{condition}', using Clear fallback")
-            if time_period == 'dawn':
-                self._gradient_background((255, 180, 120), (255, 220, 180))
-            elif time_period == 'day':
-                self._gradient_background((100, 180, 255), (150, 220, 255))
-            elif time_period == 'dusk':
-                self._gradient_background((255, 120, 80), (120, 80, 150))
+                return ((130, 135, 140), (150, 155, 160))
             else:
-                self._gradient_background((20, 30, 80), (10, 15, 40))
+                return ((60, 65, 70), (45, 50, 55))
+        else:
+            # Fallback to Clear
+            if time_period == 'dawn':
+                return ((255, 180, 120), (255, 220, 180))
+            elif time_period == 'day':
+                return ((100, 180, 255), (150, 220, 255))
+            elif time_period == 'dusk':
+                return ((255, 120, 80), (120, 80, 150))
+            else:
+                return ((20, 30, 80), (10, 15, 40))
 
-    def _gradient_background(self, top_color, bottom_color):
-        """Draw a gradient background from top to bottom"""
-        r1, g1, b1 = top_color
-        r2, g2, b2 = bottom_color
-
+    def _draw_forecast(self):
+        """Draw professional forecast information"""
+        # Clear canvas
+        self.manager.clear_canvas()
+        
+        # Create gradient background (darker blue at top, lighter at bottom)
         for y in range(48):
-            # Calculate gradient interpolation
             ratio = y / 48
-            r = int(r1 + (r2 - r1) * ratio)
-            g = int(g1 + (g2 - g1) * ratio)
-            b = int(b1 + (b2 - b1) * ratio)
-
+            r = int(10 + (30 * ratio))
+            g = int(40 + (80 * ratio))
+            b = int(80 + (120 * ratio))
             for x in range(96):
                 self.manager.draw_pixel(x, y, r, g, b)
+
+        # Mark that we're in forecast mode
+        self._last_mode = 'forecast'
+        self._background_cache = None
+
+        # Draw title (moved down to avoid cutoff)
+        self.manager.draw_text(
+            'tiny_bold', 8, 6, Colors.WHITE, '3-DAY FORECAST')
+        
+        # Draw title underline
+        for x in range(4, 92):
+            self.manager.draw_pixel(x, 13, 80, 130, 180)
+
+        if not self.forecast_data:
+            return
+
+        try:
+            # Get forecast for next 3 days - collect all temps per day
+            daily_data = {}
+            
+            for item in self.forecast_data['list']:
+                dt = pendulum.parse(item['dt_txt'])
+                day_key = dt.format('YYYY-MM-DD')
+                
+                # Initialize day if not seen
+                if day_key not in daily_data:
+                    daily_data[day_key] = {
+                        'day': dt.format('ddd').upper(),
+                        'temps': [],
+                        'conditions': []
+                    }
+                
+                # Collect all temps and conditions for the day
+                daily_data[day_key]['temps'].append(item['main']['temp'])
+                daily_data[day_key]['conditions'].append(item['weather'][0]['main'])
+            
+            # Process into forecast list with actual high/low
+            forecasts = []
+            for day_key in sorted(daily_data.keys())[:3]:  # Get first 3 days
+                day_info = daily_data[day_key]
+                
+                # Get actual high and low from all readings that day
+                temp_high = int(max(day_info['temps']))
+                temp_low = int(min(day_info['temps']))
+                
+                # Use most common condition for the day
+                condition = max(set(day_info['conditions']), key=day_info['conditions'].count)
+                
+                forecasts.append({
+                    'day': day_info['day'],
+                    'temp_high': temp_high,
+                    'temp_low': temp_low,
+                    'condition': condition,
+                    'icon': self._get_weather_icon(condition)
+                })
+                
+                if len(forecasts) >= 3:
+                    break
+
+            # Draw column headers
+            self.manager.draw_text('micro', 4, 13, Colors.BRIGHT_YELLOW, 'DAY')
+            self.manager.draw_text('micro', 28, 13, Colors.BRIGHT_YELLOW, 'HIGH')
+            self.manager.draw_text('micro', 52, 13, Colors.BRIGHT_YELLOW, 'LOW')
+            self.manager.draw_text('micro', 72, 13, Colors.BRIGHT_YELLOW, 'COND')
+
+            # Draw divider line under headers
+            for x in range(2, 94):
+                self.manager.draw_pixel(x, 19, 100, 150, 200)
+
+            # Draw forecasts with alternating subtle backgrounds
+            y_pos = 22
+            for i, forecast in enumerate(forecasts):
+                # Subtle alternating row background (skip drawing background to avoid line issues)
+                row_start_y = y_pos - 1
+                row_end_y = y_pos + 8
+                
+                if i % 2 == 0:
+                    for y in range(row_start_y, row_end_y):
+                        # Calculate background color based on gradient position
+                        ratio = y / 48
+                        r = int(10 + (30 * ratio) + 15)  # Slightly lighter
+                        g = int(40 + (80 * ratio) + 15)
+                        b = int(80 + (120 * ratio) + 15)
+                        for x in range(2, 94):
+                            self.manager.draw_pixel(x, y, r, g, b)
+
+                # Day name (bold white)
+                self.manager.draw_text(
+                    'tiny_bold', 4, y_pos, Colors.WHITE, forecast['day'])
+
+                # Weather icon
+                icon_color = self._get_icon_color(forecast['condition'])
+                self.manager.draw_text('small', 18, y_pos - 1, icon_color, forecast['icon'])
+
+                # High temp (orange/red)
+                temp_high_color = (255, 140, 0) if forecast['temp_high'] >= 80 else (255, 180, 60)
+                self.manager.draw_text('tiny_bold', 30, y_pos, temp_high_color,
+                                       f"{forecast['temp_high']}")
+                # Degree symbol positioned at top right
+                self.manager.draw_text('micro', 42, y_pos - 1, temp_high_color, 'o')
+
+                # Low temp (light blue)
+                temp_low_color = (120, 180, 255) if forecast['temp_low'] <= 50 else (180, 200, 220)
+                self.manager.draw_text('tiny', 54, y_pos, temp_low_color,
+                                       f"{forecast['temp_low']}")
+                # Degree symbol positioned at top right
+                self.manager.draw_text('micro', 66, y_pos - 1, temp_low_color, 'o')
+
+                # Condition text (abbreviated)
+                cond_text = self._get_condition_abbrev(forecast['condition'])
+                self.manager.draw_text('micro', 72, y_pos + 1, Colors.WHITE, cond_text)
+
+                y_pos += 10
+
+            # Draw bottom accent line
+            for x in range(2, 94):
+                self.manager.draw_pixel(x, 47, 80, 130, 180)
+
+        except Exception as e:
+            print(f"Error drawing forecast: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _get_weather_icon(self, condition):
+        """Get weather icon character - using standard ASCII characters"""
+        icons = {
+            'Clear': 'O',      # Sun
+            'Clouds': '~',     # Cloud
+            'Rain': '|',       # Rain drops
+            'Drizzle': ':',    # Light rain
+            'Snow': '*',       # Snowflake
+            'Thunderstorm': 'Z', # Lightning
+            'Mist': '=',       # Mist
+            'Fog': '=',        # Fog
+            'Haze': '=',       # Haze
+            'Smoke': '='       # Smoke
+        }
+        return icons.get(condition, '?')
+
+    def _get_icon_color(self, condition):
+        """Get color for weather icon"""
+        colors = {
+            'Clear': (255, 220, 0),
+            'Clouds': (200, 200, 200),
+            'Rain': (100, 150, 255),
+            'Drizzle': (120, 170, 255),
+            'Snow': (240, 240, 255),
+            'Thunderstorm': (255, 200, 0),
+            'Mist': (180, 180, 180),
+            'Fog': (160, 160, 160),
+            'Haze': (200, 180, 160),
+            'Smoke': (140, 140, 140)
+        }
+        return colors.get(condition, (200, 200, 200))
+
+    def _get_condition_abbrev(self, condition):
+        """Get abbreviated condition text"""
+        abbrev = {
+            'Clear': 'CLEAR',
+            'Clouds': 'CLOUD',
+            'Rain': 'RAIN',
+            'Drizzle': 'DRZL',
+            'Snow': 'SNOW',
+            'Thunderstorm': 'STRM',
+            'Mist': 'MIST',
+            'Fog': 'FOG',
+            'Haze': 'HAZE',
+            'Smoke': 'SMOKE'
+        }
+        return abbrev.get(condition, condition[:5].upper())
 
     def _initialize_animations(self):
         """Initialize animation objects"""
         import random
 
-        # Initialize rain drops (x, y, speed)
         self.rain_drops = []
         for i in range(12):
             self.rain_drops.append({
@@ -372,7 +506,6 @@ class WeatherDisplay:
                 'speed': random.uniform(1.5, 2.5)
             })
 
-        # Initialize snow flakes (x, y, speed, drift)
         self.snow_flakes = []
         for i in range(15):
             self.snow_flakes.append({
@@ -382,7 +515,6 @@ class WeatherDisplay:
                 'drift': random.uniform(-0.2, 0.2)
             })
 
-        # Initialize clouds (x, y, speed, width)
         self.cloud_positions = []
         for i in range(3):
             self.cloud_positions.append({
@@ -392,7 +524,6 @@ class WeatherDisplay:
                 'width': random.randint(6, 10)
             })
 
-        # Initialize stars (x, y, brightness, twinkle_speed)
         self.star_twinkle = []
         for i in range(12):
             self.star_twinkle.append({
@@ -408,8 +539,6 @@ class WeatherDisplay:
 
     def _draw_animated_weather(self, condition, hour):
         """Draw animated weather effects"""
-        import random
-
         if condition in ['Rain', 'Drizzle']:
             self._animate_rain()
         elif condition == 'Thunderstorm':
@@ -427,19 +556,13 @@ class WeatherDisplay:
     def _animate_rain(self):
         """Animate falling rain"""
         import random
-
         for drop in self.rain_drops:
-            # Draw rain drop (2 pixels vertical)
             y = int(drop['y'])
             if 0 <= y < 47:
                 self.manager.draw_pixel(drop['x'], y, 180, 200, 220)
             if 0 <= y + 1 < 48:
                 self.manager.draw_pixel(drop['x'], y + 1, 160, 180, 200)
-
-            # Update position
             drop['y'] += drop['speed']
-
-            # Reset if off screen
             if drop['y'] > 48:
                 drop['y'] = -2
                 drop['x'] = random.randint(0, 95)
@@ -448,33 +571,23 @@ class WeatherDisplay:
     def _animate_snow(self):
         """Animate falling snow"""
         import random
-
         for flake in self.snow_flakes:
-            # Draw snowflake (small cross pattern)
             x = int(flake['x'])
             y = int(flake['y'])
-
             if 0 <= y < 48 and 0 <= x < 96:
                 self.manager.draw_pixel(x, y, 255, 255, 255)
-                # Add cross pattern
                 if x > 0:
                     self.manager.draw_pixel(x - 1, y, 240, 240, 245)
                 if x < 95:
                     self.manager.draw_pixel(x + 1, y, 240, 240, 245)
                 if y > 0:
                     self.manager.draw_pixel(x, y - 1, 240, 240, 245)
-
-            # Update position with drift
             flake['y'] += flake['speed']
             flake['x'] += flake['drift']
-
-            # Keep x in bounds
             if flake['x'] < 0:
                 flake['x'] = 95
             elif flake['x'] > 95:
                 flake['x'] = 0
-
-            # Reset if off screen
             if flake['y'] > 48:
                 flake['y'] = -2
                 flake['x'] = random.randint(0, 95)
@@ -482,28 +595,18 @@ class WeatherDisplay:
     def _animate_clouds(self):
         """Animate drifting clouds"""
         import random
-
         for cloud in self.cloud_positions:
-            # Draw simple cloud shape
             x_start = int(cloud['x'])
             y = cloud['y']
             width = cloud['width']
-
             cloud_color = (220, 225, 235)
-
-            # Draw cloud as horizontal line
             for x_offset in range(width):
                 x = x_start + x_offset
                 if 0 <= x < 96 and 0 <= y < 48:
                     self.manager.draw_pixel(x, y, *cloud_color)
-                    # Add some height
                     if y > 0:
                         self.manager.draw_pixel(x, y - 1, 200, 205, 215)
-
-            # Update position
             cloud['x'] += cloud['speed']
-
-            # Wrap around
             if cloud['x'] > 96:
                 cloud['x'] = -cloud['width']
                 cloud['y'] = random.randint(2, 10)
@@ -511,16 +614,10 @@ class WeatherDisplay:
     def _animate_thunderstorm(self):
         """Animate thunderstorm with rain and lightning"""
         import random
-
-        # Animate rain
         self._animate_rain()
-
-        # Lightning flash effect
         if self.animation_frame % 100 == 0 and random.random() > 0.7:
             self.lightning_flash = 3
-
         if self.lightning_flash > 0:
-            # Draw lightning bolt
             x = random.randint(30, 65)
             y = 0
             for segment in range(3):
@@ -532,28 +629,19 @@ class WeatherDisplay:
                 y += 5
                 x += random.choice([-2, -1, 0, 1, 2])
                 x = max(0, min(95, x))
-
             self.lightning_flash -= 1
 
     def _animate_sun(self):
         """Animate pulsing sun"""
         import math
-
-        # Sun position
         sun_x, sun_y = 88, 5
-
-        # Pulsing effect
         pulse = int(abs(math.sin(self.animation_frame * 0.1) * 20))
-
-        # Draw sun core
         for dy in range(-2, 3):
             for dx in range(-2, 3):
                 if dx * dx + dy * dy <= 4:
                     brightness = min(255, 235 + pulse)
                     self.manager.draw_pixel(
                         sun_x + dx, sun_y + dy, brightness, brightness, 100)
-
-        # Draw rays
         for angle in [0, 45, 90, 135, 180, 225, 270, 315]:
             ray_length = 4 + int(pulse / 10)
             ray_x = sun_x + int(ray_length * math.cos(math.radians(angle)))
@@ -564,16 +652,11 @@ class WeatherDisplay:
     def _animate_stars(self):
         """Animate twinkling stars"""
         for star in self.star_twinkle:
-            # Draw star with current brightness
             brightness = int(star['brightness'])
             if 0 <= star['x'] < 96 and 0 <= star['y'] < 48:
                 self.manager.draw_pixel(
                     star['x'], star['y'], brightness, brightness, brightness + 20)
-
-            # Update brightness (twinkling effect)
             star['brightness'] += star['direction'] * star['speed']
-
-            # Reverse direction at limits
             if star['brightness'] >= 255:
                 star['brightness'] = 255
                 star['direction'] = -1

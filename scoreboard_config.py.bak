@@ -1,6 +1,5 @@
 """Configuration and constants for the Cubs LED Scoreboard"""
 
-
 class DisplayConfig:
     """LED Matrix display configuration"""
     MATRIX_ROWS = 48
@@ -8,13 +7,11 @@ class DisplayConfig:
     CHAIN_LENGTH = 1
     PARALLEL = 1
     HARDWARE_MAPPING = 'regular'
-
-
+    
 class TeamConfig:
     """Team-specific configuration"""
     CUBS_TEAM_ID = 112
-
-
+    
 class Colors:
     """RGB color definitions"""
     WHITE = (255, 255, 255)
@@ -27,26 +24,24 @@ class Colors:
     GREEN = (70, 128, 83)
     DELAY_YELLOW = (255, 210, 0)
     POSTPONE_RED = (255, 100, 100)
-
-
+    
 class Positions:
     """Display positions for various elements"""
     # Base positions
     SECOND_BASE = (46, 8)
     FIRST_BASE = (53, 15)  # second_base + (7, 7)
     THIRD_BASE = (39, 15)  # second_base - (7, 7)
-
+    
     # Image positions
     CUBS_IMAGE = (1, 0)
     OPP_IMAGE = (1, 17)
     BATTING_HOME = (30, 6)
     BATTING_AWAY = (30, 22)
-
+    
     # Game over positions
     CUBS_IMAGE_GAMEOVER = (1, 1)
     OPP_IMAGE_GAMEOVER = (68, 1)
-
-
+    
 class Fonts:
     """Font file paths"""
     LARGE_BOLD = "./fonts/10x20.bdf"
@@ -59,15 +54,12 @@ class Fonts:
     TINY = "./fonts/5x7.bdf"
     MICRO = "./fonts/4x6.bdf"
     ULTRA_MICRO = "./fonts/tom-thumb.bdf"
-
-
+    
 class GameConfig:
     """Game-related configuration"""
     MAX_DAYS_TO_CHECK = 14
     GAME_CHECK_DELAY = 5  # seconds between game status checks
     NO_GAME_STANDINGS_DISPLAY_TIME = 15  # seconds
-    # seconds between scroll updates (faster and smoother)
-    SCROLL_SPEED = 0.02
-    SCROLL_PIXELS = 1  # pixels to move per frame (smoother scrolling)
+    SCROLL_SPEED = 0.02  # seconds between scroll updates
     GAME_OVER_WAIT_TIME = 360  # seconds for doubleheader wait
     ERROR_RETRY_DELAY = 10  # seconds

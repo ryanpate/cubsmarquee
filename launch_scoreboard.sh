@@ -83,18 +83,26 @@ done
 
 echo "Network check complete" | tee -a "$LOG_FILE"
 
-# Launch the scoreboard with proper permissions for GPIO access
-echo "Launching scoreboard application..." | tee -a "$LOG_FILE"
-sudo -E "$PYTHON_PATH" main.py >> "$LOG_FILE" 2>> "$ERROR_LOG"
-
 # Set capability on Python to avoid realtime priority warning
+# Get the actual Python binary path (not just symlink)
 echo "Setting Python capabilities..." | tee -a "$LOG_FILE"
-sudo setcap cap_sys_nice=eip /usr/bin/python3.9 | tee -a "$LOG_FILE"
+PYTHON_REAL_PATH=$(readlink -f "$PYTHON_PATH")
+echo "Python path: $PYTHON_PATH -> $PYTHON_REAL_PATH" | tee -a "$LOG_FILE"
+
+# Set capabilities on both the symlink and real binary
+sudo setcap 'cap_sys_nice+eip' "$PYTHON_PATH" 2>/dev/null
+sudo setcap 'cap_sys_nice+eip' "$PYTHON_REAL_PATH" 2>/dev/null
+sudo setcap 'cap_sys_nice+eip' /usr/bin/python3.9 2>/dev/null
+
 if [ $? -eq 0 ]; then
     echo "✓ Python capabilities set successfully" | tee -a "$LOG_FILE"
 else
-    echo "⚠ Warning: Could not set Python capabilities (will still work)" | tee -a "$LOG_FILE"
+    echo "⚠ Warning: Could not set Python capabilities (will still work with sudo)" | tee -a "$LOG_FILE"
 fi
+
+# Launch the scoreboard with proper permissions for GPIO access
+echo "Launching scoreboard application..." | tee -a "$LOG_FILE"
+sudo -E "$PYTHON_PATH" main.py >> "$LOG_FILE" 2>> "$ERROR_LOG"
 
 # If the scoreboard exits, log the event
 echo "Scoreboard exited at $(date)" | tee -a "$LOG_FILE"
