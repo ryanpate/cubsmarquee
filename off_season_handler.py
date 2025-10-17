@@ -154,7 +154,7 @@ class OffSeasonHandler:
 
             # Draw Cubs logo if available
             try:
-                cubs_logo = Image.open('./logos/cubs.png').resize((32, 32))
+                cubs_logo = Image.open('./logos/cubs28x28.png')#.resize((32, 32))
                 output_image = Image.new("RGB", (96, 48), (0, 51, 102))
                 output_image.paste(cubs_logo, (32, 2))
                 self.manager.canvas.SetImage(output_image.convert("RGB"), 0, 0)
@@ -209,14 +209,14 @@ class OffSeasonHandler:
                 pass
 
             # Scroll the message
-            self.scroll_position -= 1
+            self.scroll_position -= .2
             text_length = len(message) * 9
 
             if self.scroll_position + text_length < 0:
                 self.scroll_position = 96
 
             self.manager.draw_text(
-                'medium_bold', self.scroll_position, 42, Colors.YELLOW, message
+                'medium_bold', self.scroll_position, 48, Colors.YELLOW, message
             )
 
             self.manager.swap_canvas()

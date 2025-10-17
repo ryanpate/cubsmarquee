@@ -83,18 +83,18 @@ done
 
 echo "Network check complete" | tee -a "$LOG_FILE"
 
+# Launch the scoreboard with proper permissions for GPIO access
+echo "Launching scoreboard application..." | tee -a "$LOG_FILE"
+sudo -E "$PYTHON_PATH" main.py >> "$LOG_FILE" 2>> "$ERROR_LOG"
+
 # Set capability on Python to avoid realtime priority warning
 echo "Setting Python capabilities..." | tee -a "$LOG_FILE"
-sudo setcap 'cap_sys_nice=eip' "$PYTHON_PATH" 2>&1 | tee -a "$LOG_FILE"
+sudo setcap cap_sys_nice=eip /usr/bin/python3.9 | tee -a "$LOG_FILE"
 if [ $? -eq 0 ]; then
     echo "✓ Python capabilities set successfully" | tee -a "$LOG_FILE"
 else
     echo "⚠ Warning: Could not set Python capabilities (will still work)" | tee -a "$LOG_FILE"
 fi
-
-# Launch the scoreboard with proper permissions for GPIO access
-echo "Launching scoreboard application..." | tee -a "$LOG_FILE"
-sudo -E "$PYTHON_PATH" main.py >> "$LOG_FILE" 2>> "$ERROR_LOG"
 
 # If the scoreboard exits, log the event
 echo "Scoreboard exited at $(date)" | tee -a "$LOG_FILE"
