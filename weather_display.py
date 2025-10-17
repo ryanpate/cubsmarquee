@@ -184,7 +184,7 @@ class WeatherDisplay:
                         'day': dt.format('ddd'),
                         'temp_high': int(item['main']['temp_max']),
                         'temp_low': int(item['main']['temp_min']),
-                        'condition': item['weather'][0]['main'][:4].upper()
+                        'condition': item['weather'][0]['main'][:6].upper()
                     })
                     seen_days.add(day_key)
 
@@ -192,22 +192,22 @@ class WeatherDisplay:
                     break
 
             # Draw forecasts
-            y_pos = 18
+            y_pos = 22
             for forecast in forecasts:
                 # Day name
                 self.manager.draw_text(
-                    'tiny', 3, y_pos, Colors.WHITE, forecast['day'])
+                    'tiny', 4, y_pos, Colors.WHITE, forecast['day'])
 
                 # High temp
-                self.manager.draw_text('tiny', 25, y_pos, Colors.YELLOW,
+                self.manager.draw_text('tiny', 26, y_pos, Colors.YELLOW,
                                        f"{forecast['temp_high']}")
 
                 # Low temp
-                self.manager.draw_text('tiny', 45, y_pos, Colors.WHITE,
+                self.manager.draw_text('tiny', 46, y_pos, Colors.WHITE,
                                        f"{forecast['temp_low']}")
 
                 # Condition
-                self.manager.draw_text('micro', 65, y_pos - 1, Colors.WHITE,
+                self.manager.draw_text('micro', 66, y_pos - 1, Colors.WHITE,
                                        forecast['condition'])
 
                 y_pos += 10
