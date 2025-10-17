@@ -19,6 +19,14 @@ class WeatherDisplay:
         self.last_update = None
         self.update_interval = 1800  # 30 minutes in seconds
 
+        # Animation state variables
+        self.animation_frame = 0
+        self.rain_drops = []
+        self.snow_flakes = []
+        self.cloud_positions = []
+        self.star_twinkle = []
+        self.lightning_flash = 0
+
     def _load_config(self):
         """Load configuration"""
         config_path = '/home/pi/config.json'
@@ -176,7 +184,7 @@ class WeatherDisplay:
                         'day': dt.format('ddd'),
                         'temp_high': int(item['main']['temp_max']),
                         'temp_low': int(item['main']['temp_min']),
-                        'condition': item['weather'][0]['main'][:6].upper()
+                        'condition': item['weather'][0]['main'][:4].upper()
                     })
                     seen_days.add(day_key)
 
@@ -184,22 +192,22 @@ class WeatherDisplay:
                     break
 
             # Draw forecasts
-            y_pos = 22
+            y_pos = 18
             for forecast in forecasts:
                 # Day name
                 self.manager.draw_text(
-                    'tiny', 4, y_pos, Colors.WHITE, forecast['day'])
+                    'tiny', 3, y_pos, Colors.WHITE, forecast['day'])
 
                 # High temp
-                self.manager.draw_text('tiny', 26, y_pos, Colors.YELLOW,
+                self.manager.draw_text('tiny', 25, y_pos, Colors.YELLOW,
                                        f"{forecast['temp_high']}")
 
                 # Low temp
-                self.manager.draw_text('tiny', 46, y_pos, Colors.WHITE,
+                self.manager.draw_text('tiny', 45, y_pos, Colors.WHITE,
                                        f"{forecast['temp_low']}")
 
                 # Condition
-                self.manager.draw_text('micro', 66, y_pos - 1, Colors.WHITE,
+                self.manager.draw_text('micro', 65, y_pos - 1, Colors.WHITE,
                                        forecast['condition'])
 
                 y_pos += 10
@@ -350,3 +358,225 @@ class WeatherDisplay:
 
             for x in range(96):
                 self.manager.draw_pixel(x, y, r, g, b)
+
+    def _initialize_animations(self):
+        """Initialize animation objects"""
+        import random
+
+        # Initialize rain drops (x, y, speed)
+        self.rain_drops = []
+        for i in range(12):
+            self.rain_drops.append({
+                'x': random.randint(0, 95),
+                'y': random.randint(-10, 30),
+                'speed': random.uniform(1.5, 2.5)
+            })
+
+        # Initialize snow flakes (x, y, speed, drift)
+        self.snow_flakes = []
+        for i in range(15):
+            self.snow_flakes.append({
+                'x': random.randint(0, 95),
+                'y': random.randint(-10, 30),
+                'speed': random.uniform(0.3, 0.8),
+                'drift': random.uniform(-0.2, 0.2)
+            })
+
+        # Initialize clouds (x, y, speed, width)
+        self.cloud_positions = []
+        for i in range(3):
+            self.cloud_positions.append({
+                'x': random.randint(-20, 96),
+                'y': random.randint(2, 10),
+                'speed': random.uniform(0.1, 0.3),
+                'width': random.randint(6, 10)
+            })
+
+        # Initialize stars (x, y, brightness, twinkle_speed)
+        self.star_twinkle = []
+        for i in range(12):
+            self.star_twinkle.append({
+                'x': random.randint(0, 95),
+                'y': random.randint(0, 15),
+                'brightness': random.randint(150, 255),
+                'direction': random.choice([-1, 1]),
+                'speed': random.uniform(2, 5)
+            })
+
+        self.animation_frame = 0
+        self.lightning_flash = 0
+
+    def _draw_animated_weather(self, condition, hour):
+        """Draw animated weather effects"""
+        import random
+
+        if condition in ['Rain', 'Drizzle']:
+            self._animate_rain()
+        elif condition == 'Thunderstorm':
+            self._animate_thunderstorm()
+        elif condition == 'Snow':
+            self._animate_snow()
+        elif condition == 'Clouds':
+            self._animate_clouds()
+        elif condition == 'Clear':
+            if 6 <= hour < 20:
+                self._animate_sun()
+            else:
+                self._animate_stars()
+
+    def _animate_rain(self):
+        """Animate falling rain"""
+        import random
+
+        for drop in self.rain_drops:
+            # Draw rain drop (2 pixels vertical)
+            y = int(drop['y'])
+            if 0 <= y < 47:
+                self.manager.draw_pixel(drop['x'], y, 180, 200, 220)
+            if 0 <= y + 1 < 48:
+                self.manager.draw_pixel(drop['x'], y + 1, 160, 180, 200)
+
+            # Update position
+            drop['y'] += drop['speed']
+
+            # Reset if off screen
+            if drop['y'] > 48:
+                drop['y'] = -2
+                drop['x'] = random.randint(0, 95)
+                drop['speed'] = random.uniform(1.5, 2.5)
+
+    def _animate_snow(self):
+        """Animate falling snow"""
+        import random
+
+        for flake in self.snow_flakes:
+            # Draw snowflake (small cross pattern)
+            x = int(flake['x'])
+            y = int(flake['y'])
+
+            if 0 <= y < 48 and 0 <= x < 96:
+                self.manager.draw_pixel(x, y, 255, 255, 255)
+                # Add cross pattern
+                if x > 0:
+                    self.manager.draw_pixel(x - 1, y, 240, 240, 245)
+                if x < 95:
+                    self.manager.draw_pixel(x + 1, y, 240, 240, 245)
+                if y > 0:
+                    self.manager.draw_pixel(x, y - 1, 240, 240, 245)
+
+            # Update position with drift
+            flake['y'] += flake['speed']
+            flake['x'] += flake['drift']
+
+            # Keep x in bounds
+            if flake['x'] < 0:
+                flake['x'] = 95
+            elif flake['x'] > 95:
+                flake['x'] = 0
+
+            # Reset if off screen
+            if flake['y'] > 48:
+                flake['y'] = -2
+                flake['x'] = random.randint(0, 95)
+
+    def _animate_clouds(self):
+        """Animate drifting clouds"""
+        import random
+
+        for cloud in self.cloud_positions:
+            # Draw simple cloud shape
+            x_start = int(cloud['x'])
+            y = cloud['y']
+            width = cloud['width']
+
+            cloud_color = (220, 225, 235)
+
+            # Draw cloud as horizontal line
+            for x_offset in range(width):
+                x = x_start + x_offset
+                if 0 <= x < 96 and 0 <= y < 48:
+                    self.manager.draw_pixel(x, y, *cloud_color)
+                    # Add some height
+                    if y > 0:
+                        self.manager.draw_pixel(x, y - 1, 200, 205, 215)
+
+            # Update position
+            cloud['x'] += cloud['speed']
+
+            # Wrap around
+            if cloud['x'] > 96:
+                cloud['x'] = -cloud['width']
+                cloud['y'] = random.randint(2, 10)
+
+    def _animate_thunderstorm(self):
+        """Animate thunderstorm with rain and lightning"""
+        import random
+
+        # Animate rain
+        self._animate_rain()
+
+        # Lightning flash effect
+        if self.animation_frame % 100 == 0 and random.random() > 0.7:
+            self.lightning_flash = 3
+
+        if self.lightning_flash > 0:
+            # Draw lightning bolt
+            x = random.randint(30, 65)
+            y = 0
+            for segment in range(3):
+                for dy in range(5):
+                    if y + dy < 20:
+                        brightness = 255 if self.lightning_flash == 3 else 200
+                        self.manager.draw_pixel(
+                            x, y + dy, brightness, brightness, brightness - 50)
+                y += 5
+                x += random.choice([-2, -1, 0, 1, 2])
+                x = max(0, min(95, x))
+
+            self.lightning_flash -= 1
+
+    def _animate_sun(self):
+        """Animate pulsing sun"""
+        import math
+
+        # Sun position
+        sun_x, sun_y = 88, 5
+
+        # Pulsing effect
+        pulse = int(abs(math.sin(self.animation_frame * 0.1) * 20))
+
+        # Draw sun core
+        for dy in range(-2, 3):
+            for dx in range(-2, 3):
+                if dx * dx + dy * dy <= 4:
+                    brightness = min(255, 235 + pulse)
+                    self.manager.draw_pixel(
+                        sun_x + dx, sun_y + dy, brightness, brightness, 100)
+
+        # Draw rays
+        for angle in [0, 45, 90, 135, 180, 225, 270, 315]:
+            ray_length = 4 + int(pulse / 10)
+            ray_x = sun_x + int(ray_length * math.cos(math.radians(angle)))
+            ray_y = sun_y + int(ray_length * math.sin(math.radians(angle)))
+            if 0 <= ray_x < 96 and 0 <= ray_y < 48:
+                self.manager.draw_pixel(ray_x, ray_y, 255, 255, 150)
+
+    def _animate_stars(self):
+        """Animate twinkling stars"""
+        for star in self.star_twinkle:
+            # Draw star with current brightness
+            brightness = int(star['brightness'])
+            if 0 <= star['x'] < 96 and 0 <= star['y'] < 48:
+                self.manager.draw_pixel(
+                    star['x'], star['y'], brightness, brightness, brightness + 20)
+
+            # Update brightness (twinkling effect)
+            star['brightness'] += star['direction'] * star['speed']
+
+            # Reverse direction at limits
+            if star['brightness'] >= 255:
+                star['brightness'] = 255
+                star['direction'] = -1
+            elif star['brightness'] <= 150:
+                star['brightness'] = 150
+                star['direction'] = 1
