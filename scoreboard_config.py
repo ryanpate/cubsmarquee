@@ -67,7 +67,7 @@ class GameConfig:
     GAME_CHECK_DELAY = 5  # seconds between game status checks
     NO_GAME_STANDINGS_DISPLAY_TIME = 15  # seconds
     # seconds between scroll updates (faster and smoother)
-    SCROLL_SPEED = 0.02
+    SCROLL_SPEED = 0.002
     SCROLL_PIXELS = 1  # pixels to move per frame (smoother scrolling)
     GAME_OVER_WAIT_TIME = 360  # seconds for doubleheader wait
     ERROR_RETRY_DELAY = 10  # seconds

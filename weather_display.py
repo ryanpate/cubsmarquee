@@ -314,7 +314,7 @@ class WeatherDisplay:
         """Draw professional forecast information"""
         # Clear canvas
         self.manager.clear_canvas()
-        
+
         # Create gradient background (darker blue at top, lighter at bottom)
         for y in range(48):
             ratio = y / 48
@@ -331,10 +331,10 @@ class WeatherDisplay:
         # Draw title (moved down to avoid cutoff)
         self.manager.draw_text(
             'tiny_bold', 8, 6, Colors.WHITE, '3-DAY FORECAST')
-        
+
         # Draw title underline
-        for x in range(4, 92):
-            self.manager.draw_pixel(x, 13, 80, 130, 180)
+        for x in range(0, 96):
+            self.manager.draw_pixel(x, 7, 80, 130, 180)
 
         if not self.forecast_data:
             return
@@ -342,11 +342,11 @@ class WeatherDisplay:
         try:
             # Get forecast for next 3 days - collect all temps per day
             daily_data = {}
-            
+
             for item in self.forecast_data['list']:
                 dt = pendulum.parse(item['dt_txt'])
                 day_key = dt.format('YYYY-MM-DD')
-                
+
                 # Initialize day if not seen
                 if day_key not in daily_data:
                     daily_data[day_key] = {
@@ -354,23 +354,25 @@ class WeatherDisplay:
                         'temps': [],
                         'conditions': []
                     }
-                
+
                 # Collect all temps and conditions for the day
                 daily_data[day_key]['temps'].append(item['main']['temp'])
-                daily_data[day_key]['conditions'].append(item['weather'][0]['main'])
-            
+                daily_data[day_key]['conditions'].append(
+                    item['weather'][0]['main'])
+
             # Process into forecast list with actual high/low
             forecasts = []
             for day_key in sorted(daily_data.keys())[:3]:  # Get first 3 days
                 day_info = daily_data[day_key]
-                
+
                 # Get actual high and low from all readings that day
                 temp_high = int(max(day_info['temps']))
                 temp_low = int(min(day_info['temps']))
-                
+
                 # Use most common condition for the day
-                condition = max(set(day_info['conditions']), key=day_info['conditions'].count)
-                
+                condition = max(
+                    set(day_info['conditions']), key=day_info['conditions'].count)
+
                 forecasts.append({
                     'day': day_info['day'],
                     'temp_high': temp_high,
@@ -378,27 +380,30 @@ class WeatherDisplay:
                     'condition': condition,
                     'icon': self._get_weather_icon(condition)
                 })
-                
+
                 if len(forecasts) >= 3:
                     break
 
             # Draw column headers
-            self.manager.draw_text('micro', 4, 13, Colors.BRIGHT_YELLOW, 'DAY')
-            self.manager.draw_text('micro', 28, 13, Colors.BRIGHT_YELLOW, 'HIGH')
-            self.manager.draw_text('micro', 52, 13, Colors.BRIGHT_YELLOW, 'LOW')
-            self.manager.draw_text('micro', 72, 13, Colors.BRIGHT_YELLOW, 'COND')
+            self.manager.draw_text('micro', 4, 15, Colors.BRIGHT_YELLOW, 'DAY')
+            self.manager.draw_text(
+                'micro', 28, 15, Colors.BRIGHT_YELLOW, 'HIGH')
+            self.manager.draw_text(
+                'micro', 52, 15, Colors.BRIGHT_YELLOW, 'LOW')
+            self.manager.draw_text(
+                'micro', 72, 15, Colors.BRIGHT_YELLOW, 'COND')
 
             # Draw divider line under headers
-            for x in range(2, 94):
-                self.manager.draw_pixel(x, 19, 100, 150, 200)
+            for x in range(0, 96):
+                self.manager.draw_pixel(x, 16, 100, 150, 200)
 
             # Draw forecasts with alternating subtle backgrounds
-            y_pos = 22
+            y_pos = 25
             for i, forecast in enumerate(forecasts):
                 # Subtle alternating row background (skip drawing background to avoid line issues)
                 row_start_y = y_pos - 1
                 row_end_y = y_pos + 8
-                
+
                 if i % 2 == 0:
                     for y in range(row_start_y, row_end_y):
                         # Calculate background color based on gradient position
@@ -415,25 +420,31 @@ class WeatherDisplay:
 
                 # Weather icon
                 icon_color = self._get_icon_color(forecast['condition'])
-                self.manager.draw_text('small', 18, y_pos - 1, icon_color, forecast['icon'])
+                self.manager.draw_text(
+                    'small', 19, y_pos - 1, icon_color, forecast['icon'])
 
                 # High temp (orange/red)
-                temp_high_color = (255, 140, 0) if forecast['temp_high'] >= 80 else (255, 180, 60)
+                temp_high_color = (
+                    255, 140, 0) if forecast['temp_high'] >= 80 else (255, 180, 60)
                 self.manager.draw_text('tiny_bold', 30, y_pos, temp_high_color,
                                        f"{forecast['temp_high']}")
                 # Degree symbol positioned at top right
-                self.manager.draw_text('micro', 42, y_pos - 1, temp_high_color, 'o')
+                self.manager.draw_text(
+                    'micro', 42, y_pos - 1, temp_high_color, 'o')
 
                 # Low temp (light blue)
-                temp_low_color = (120, 180, 255) if forecast['temp_low'] <= 50 else (180, 200, 220)
+                temp_low_color = (
+                    120, 180, 255) if forecast['temp_low'] <= 50 else (180, 200, 220)
                 self.manager.draw_text('tiny', 54, y_pos, temp_low_color,
                                        f"{forecast['temp_low']}")
                 # Degree symbol positioned at top right
-                self.manager.draw_text('micro', 66, y_pos - 1, temp_low_color, 'o')
+                self.manager.draw_text(
+                    'micro', 66, y_pos - 1, temp_low_color, 'o')
 
                 # Condition text (abbreviated)
                 cond_text = self._get_condition_abbrev(forecast['condition'])
-                self.manager.draw_text('micro', 72, y_pos + 1, Colors.WHITE, cond_text)
+                self.manager.draw_text(
+                    'micro', 72, y_pos + 1, Colors.WHITE, cond_text)
 
                 y_pos += 10
 
@@ -454,7 +465,7 @@ class WeatherDisplay:
             'Rain': '|',       # Rain drops
             'Drizzle': ':',    # Light rain
             'Snow': '*',       # Snowflake
-            'Thunderstorm': 'Z', # Lightning
+            'Thunderstorm': 'Z',  # Lightning
             'Mist': '=',       # Mist
             'Fog': '=',        # Fog
             'Haze': '=',       # Haze
@@ -519,9 +530,9 @@ class WeatherDisplay:
         for i in range(3):
             self.cloud_positions.append({
                 'x': random.randint(-20, 96),
-                'y': random.randint(2, 10),
-                'speed': random.uniform(0.1, 0.3),
-                'width': random.randint(6, 10)
+                'y': random.randint(2, 42),
+                'speed': random.uniform(0.5, 1.0),  # Faster clouds
+                'width': random.randint(8, 14)  # Larger clouds
             })
 
         self.star_twinkle = []
@@ -593,19 +604,69 @@ class WeatherDisplay:
                 flake['x'] = random.randint(0, 95)
 
     def _animate_clouds(self):
-        """Animate drifting clouds"""
+        """Animate drifting clouds with rounded edges"""
         import random
         for cloud in self.cloud_positions:
             x_start = int(cloud['x'])
             y = cloud['y']
             width = cloud['width']
-            cloud_color = (220, 225, 235)
+            # Bright white clouds for visibility
+            cloud_color = (255, 255, 255)
+
+            # Draw cloud with rounded, puffy shape
             for x_offset in range(width):
                 x = x_start + x_offset
-                if 0 <= x < 96 and 0 <= y < 48:
-                    self.manager.draw_pixel(x, y, *cloud_color)
-                    if y > 0:
-                        self.manager.draw_pixel(x, y - 1, 200, 205, 215)
+                if 0 <= x < 96:
+                    # Determine if we're at the edges
+                    at_left_edge = x_offset < 2
+                    at_right_edge = x_offset >= width - 2
+                    at_edge = at_left_edge or at_right_edge
+
+                    # Top layer - only draw in middle, skip edges for rounding
+                    if not at_edge and y > 1 and 0 <= y - 2 < 48:
+                        self.manager.draw_pixel(x, y - 2, 200, 200, 210)
+
+                    # Upper shadow layer - softer at edges
+                    if y > 0 and 0 <= y - 1 < 48:
+                        if at_edge:
+                            self.manager.draw_pixel(x, y - 1, 200, 200, 210)
+                        else:
+                            self.manager.draw_pixel(x, y - 1, 230, 230, 240)
+
+                    # Main cloud body (bright white core - 2 rows)
+                    if 0 <= y < 48:
+                        self.manager.draw_pixel(x, y, *cloud_color)
+                    if y < 47 and 0 <= y + 1 < 48:
+                        self.manager.draw_pixel(x, y + 1, *cloud_color)
+
+                    # Lower shadow layer - softer at edges
+                    if y < 46 and 0 <= y + 2 < 48:
+                        if at_edge:
+                            self.manager.draw_pixel(x, y + 2, 200, 200, 210)
+                        else:
+                            self.manager.draw_pixel(x, y + 2, 230, 230, 240)
+
+                    # Bottom layer - only draw in middle, skip edges for rounding
+                    if not at_edge and y < 45 and 0 <= y + 3 < 48:
+                        self.manager.draw_pixel(x, y + 3, 200, 200, 210)
+
+            # Add rounded puffs on edges for organic look
+            # Left rounded edge
+            if x_start >= 0 and x_start < 96:
+                if 0 <= y < 48:
+                    self.manager.draw_pixel(x_start, y, 230, 230, 240)
+                if y < 47 and 0 <= y + 1 < 48:
+                    self.manager.draw_pixel(x_start, y + 1, 230, 230, 240)
+
+            # Right rounded edge
+            right_edge = x_start + width - 1
+            if right_edge >= 0 and right_edge < 96:
+                if 0 <= y < 48:
+                    self.manager.draw_pixel(right_edge, y, 230, 230, 240)
+                if y < 47 and 0 <= y + 1 < 48:
+                    self.manager.draw_pixel(right_edge, y + 1, 230, 230, 240)
+
+            # Move cloud
             cloud['x'] += cloud['speed']
             if cloud['x'] > 96:
                 cloud['x'] = -cloud['width']
