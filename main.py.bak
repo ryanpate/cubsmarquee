@@ -6,7 +6,6 @@ import pendulum
 from scoreboard_manager import ScoreboardManager
 from game_state_handler import GameStateHandler
 from live_game_handler import LiveGameHandler
-from off_season_handler import OffSeasonHandler
 from scoreboard_config import GameConfig, TeamConfig
 
 class CubsScoreboard:
@@ -17,7 +16,6 @@ class CubsScoreboard:
         self.manager = ScoreboardManager()
         self.state_handler = GameStateHandler(self.manager)
         self.live_handler = LiveGameHandler(self.manager)
-        self.off_season_handler = OffSeasonHandler(self.manager)
         self.current_game_index = 0
         
     def run(self):
@@ -26,14 +24,7 @@ class CubsScoreboard:
         
         try:
             while True:
-                # Check if it's off-season
-                if self.is_off_season():
-                    print("Off-season detected - entering off-season display mode")
-                    self.off_season_handler.display_off_season_content()
-                    # After off-season handler exits (season started), continue with game cycle
-                
                 self.process_game_cycle()
-                
         except KeyboardInterrupt:
             print("\nShutting down Cubs LED Scoreboard...")
             self.manager.clear_canvas()
@@ -42,36 +33,6 @@ class CubsScoreboard:
             print(f"Unexpected error in main loop: {e}")
             self.handle_error()
     
-    def is_off_season(self):
-        """
-        Determine if it's currently the off-season.
-        Returns True if no games are found in the next 14 days.
-        """
-        try:
-            game_data = self.manager.get_schedule()
-            
-            if not game_data:
-                print("No games scheduled in the next 14 days - off-season mode")
-                return True
-            
-            # Check if the game is far in the future (more than 30 days)
-            # This handles the gap between end of regular season and playoffs
-            if game_data:
-                game_date_str = game_data[0]['game_date']
-                game_date = pendulum.parse(game_date_str)
-                days_until_game = (game_date - pendulum.now()).days
-                
-                if days_until_game > 30:
-                    print(f"Next game is {days_until_game} days away - off-season mode")
-                    return True
-            
-            return False
-            
-        except Exception as e:
-            print(f"Error checking off-season status: {e}")
-            # Default to regular season if there's an error
-            return False
-    
     def process_game_cycle(self):
         """Process one complete game cycle"""
         try:
@@ -79,9 +40,8 @@ class CubsScoreboard:
             game_data = self.manager.get_schedule()
             
             if not game_data:
-                print("No games found in schedule - entering off-season mode")
-                # Enter off-season display
-                self.off_season_handler.display_off_season_content()
+                print("No games found in schedule")
+                time.sleep(GameConfig.ERROR_RETRY_DELAY)
                 return
             
             # Check for doubleheader

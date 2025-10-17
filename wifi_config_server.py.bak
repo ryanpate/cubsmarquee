@@ -5,6 +5,7 @@ from flask import Flask, render_template_string, request, jsonify, redirect
 import subprocess
 import os
 import socket
+import glob
 
 app = Flask(__name__)
 
@@ -189,7 +190,7 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <div class="container">
-        <h1>🐻 Cubs Scoreboard WiFi Setup</h1>
+        <h1>Cubs Scoreboard WiFi Setup</h1>
         <div class="subtitle">Device: {{ hostname }}.local</div>
         
         <div class="info-box">
@@ -200,7 +201,7 @@ HTML_TEMPLATE = """
         
         {% if 'Access Point' in mode %}
         <div class="warning">
-            ⚠️ <strong>Access Point Mode Active</strong><br>
+            <strong>Access Point Mode Active</strong><br>
             The scoreboard couldn't connect to a WiFi network and is running in hotspot mode.
             Configure your WiFi credentials below to connect.
         </div>
@@ -235,6 +236,20 @@ HTML_TEMPLATE = """
         <h2 class="section-title">System Control</h2>
         
         <button onclick="rebootDevice()" id="rebootBtn" class="button-secondary">Reboot Scoreboard</button>
+        
+        <h2 class="section-title">System Logs</h2>
+        
+        <button onclick="viewLogs('application')" class="button-secondary">View Application Logs</button>
+        <button onclick="viewLogs('error')" class="button-secondary" style="margin-top: 10px;">View Error Logs</button>
+        <button onclick="viewLogs('wifi')" class="button-secondary" style="margin-top: 10px;">View WiFi Manager Logs</button>
+        
+        <div id="logViewer" style="display: none; margin-top: 20px;">
+            <h3 id="logTitle" style="color: #0C2340;"></h3>
+            <div style="background: #f8f9fa; border: 2px solid #0C2340; border-radius: 5px; padding: 10px; max-height: 400px; overflow-y: auto;">
+                <pre id="logContent" style="margin: 0; font-size: 11px; white-space: pre-wrap; word-wrap: break-word;"></pre>
+            </div>
+            <button onclick="closeLogViewer()" class="button-secondary" style="margin-top: 10px;">Close Logs</button>
+        </div>
         
         <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; text-align: center; color: #666; font-size: 12px;">
             Access this page anytime at: <strong>{{ hostname }}.local/admin</strong>
@@ -320,6 +335,45 @@ HTML_TEMPLATE = """
                 status.className = 'status success';
                 status.textContent = 'Reboot in progress. The page will be unavailable until the device restarts (about 30 seconds).';
             });
+        }
+        
+        function viewLogs(logType) {
+            const viewer = document.getElementById('logViewer');
+            const title = document.getElementById('logTitle');
+            const content = document.getElementById('logContent');
+            
+            // Show viewer and set loading state
+            viewer.style.display = 'block';
+            title.textContent = 'Loading logs...';
+            content.textContent = 'Please wait...';
+            
+            // Scroll to viewer
+            viewer.scrollIntoView({ behavior: 'smooth' });
+            
+            fetch(`/logs/${logType}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const logNames = {
+                            'application': 'Application Logs',
+                            'error': 'Error Logs',
+                            'wifi': 'WiFi Manager Logs'
+                        };
+                        title.textContent = logNames[logType] + (data.filename ? ` - ${data.filename}` : '');
+                        content.textContent = data.content || 'No logs available';
+                    } else {
+                        title.textContent = 'Error Loading Logs';
+                        content.textContent = data.message;
+                    }
+                })
+                .catch(error => {
+                    title.textContent = 'Error Loading Logs';
+                    content.textContent = 'Failed to fetch logs: ' + error;
+                });
+        }
+        
+        function closeLogViewer() {
+            document.getElementById('logViewer').style.display = 'none';
         }
         
         document.getElementById('wifiForm').addEventListener('submit', function(e) {
@@ -502,6 +556,100 @@ def reboot_device():
         })
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
+
+
+@app.route('/logs/<log_type>')
+def get_logs(log_type):
+    """Retrieve logs based on type"""
+    try:
+        log_dir = '/home/pi/scoreboard_logs'
+        
+        if log_type == 'application':
+            # Get most recent application log
+            log_files = glob.glob(f'{log_dir}/scoreboard_*.log')
+            if not log_files:
+                return jsonify({
+                    'success': False,
+                    'message': 'No application logs found'
+                })
+            
+            latest_log = max(log_files, key=os.path.getmtime)
+            with open(latest_log, 'r') as f:
+                # Get last 500 lines
+                lines = f.readlines()
+                content = ''.join(lines[-500:])
+            
+            return jsonify({
+                'success': True,
+                'content': content,
+                'filename': os.path.basename(latest_log)
+            })
+            
+        elif log_type == 'error':
+            # Get most recent error log
+            log_files = glob.glob(f'{log_dir}/scoreboard_error_*.log')
+            if not log_files:
+                return jsonify({
+                    'success': False,
+                    'message': 'No error logs found'
+                })
+            
+            latest_log = max(log_files, key=os.path.getmtime)
+            with open(latest_log, 'r') as f:
+                # Get last 500 lines
+                lines = f.readlines()
+                content = ''.join(lines[-500:])
+            
+            return jsonify({
+                'success': True,
+                'content': content,
+                'filename': os.path.basename(latest_log)
+            })
+            
+        elif log_type == 'wifi':
+            # Get WiFi manager logs from system journal
+            result = subprocess.run(
+                ['journalctl', '-u', 'wifi-manager', '-n', '200', '--no-pager'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            
+            if result.returncode == 0:
+                return jsonify({
+                    'success': True,
+                    'content': result.stdout,
+                    'filename': 'WiFi Manager Journal'
+                })
+            else:
+                # Fallback to log file if journal fails
+                wifi_log = '/var/log/wifi_manager.log'
+                if os.path.exists(wifi_log):
+                    with open(wifi_log, 'r') as f:
+                        lines = f.readlines()
+                        content = ''.join(lines[-200:])
+                    return jsonify({
+                        'success': True,
+                        'content': content,
+                        'filename': 'wifi_manager.log'
+                    })
+                else:
+                    return jsonify({
+                        'success': False,
+                        'message': 'WiFi manager logs not available'
+                    })
+        
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Invalid log type'
+            })
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error reading logs: {str(e)}'
+        })
 
 
 if __name__ == '__main__':
