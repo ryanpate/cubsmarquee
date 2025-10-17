@@ -184,7 +184,7 @@ class WeatherDisplay:
                     break
 
             # Draw forecasts
-            y_pos = 24
+            y_pos = 22
             for forecast in forecasts:
                 # Day name
                 self.manager.draw_text(
@@ -217,3 +217,136 @@ class WeatherDisplay:
             'Thunderstorm': 'Z'
         }
         return icons.get(condition, '?')
+
+    def _draw_complete_background(self, hour, condition):
+        """Draw complete background combining time of day and weather condition"""
+        import random
+
+        # Determine time period
+        if 6 <= hour < 8:
+            time_period = 'dawn'
+        elif 8 <= hour < 17:
+            time_period = 'day'
+        elif 17 <= hour < 20:
+            time_period = 'dusk'
+        else:
+            time_period = 'night'
+
+        print(f"Weather background: {time_period.upper()} + {condition}")
+
+        # CLEAR SKY BACKGROUNDS
+        if condition == 'Clear':
+            if time_period == 'dawn':
+                # Dawn - Orange/pink sunrise
+                self._gradient_background((255, 180, 120), (255, 220, 180))
+            elif time_period == 'day':
+                # Day - Bright blue sky
+                self._gradient_background((100, 180, 255), (150, 220, 255))
+            elif time_period == 'dusk':
+                # Dusk - Orange/purple sunset
+                self._gradient_background((255, 120, 80), (120, 80, 150))
+            else:  # night
+                # Night - Dark blue/purple
+                self._gradient_background((20, 30, 80), (10, 15, 40))
+
+        # CLOUDY BACKGROUNDS
+        elif condition == 'Clouds':
+            if time_period == 'dawn':
+                # Cloudy dawn - Muted warm gray
+                self._gradient_background((180, 170, 160), (200, 190, 180))
+            elif time_period == 'day':
+                # Cloudy day - Light gray
+                self._gradient_background((150, 160, 170), (180, 190, 200))
+            elif time_period == 'dusk':
+                # Cloudy dusk - Purple gray
+                self._gradient_background((120, 100, 120), (90, 80, 100))
+            else:  # night
+                # Cloudy night - Dark gray
+                self._gradient_background((50, 55, 60), (30, 35, 40))
+
+        # RAINY BACKGROUNDS
+        elif condition in ['Rain', 'Drizzle']:
+            if time_period == 'dawn':
+                # Rainy dawn - Dark blue-gray
+                self._gradient_background((90, 100, 110), (110, 120, 130))
+            elif time_period == 'day':
+                # Rainy day - Storm gray
+                self._gradient_background((80, 90, 105), (100, 110, 125))
+            elif time_period == 'dusk':
+                # Rainy dusk - Deep gray-blue
+                self._gradient_background((70, 70, 90), (50, 50, 70))
+            else:  # night
+                # Rainy night - Very dark gray
+                self._gradient_background((40, 45, 55), (25, 30, 40))
+
+        # THUNDERSTORM BACKGROUNDS
+        elif condition == 'Thunderstorm':
+            if time_period == 'dawn':
+                # Stormy dawn - Dark purple-gray
+                self._gradient_background((60, 60, 80), (50, 50, 70))
+            elif time_period == 'day':
+                # Stormy day - Dark storm colors
+                self._gradient_background((50, 55, 70), (60, 65, 80))
+            elif time_period == 'dusk':
+                # Stormy dusk - Very dark purple
+                self._gradient_background((45, 40, 60), (35, 30, 50))
+            else:  # night
+                # Stormy night - Almost black
+                self._gradient_background((30, 30, 45), (15, 15, 30))
+
+        # SNOWY BACKGROUNDS
+        elif condition == 'Snow':
+            if time_period == 'dawn':
+                # Snowy dawn - Pale pink/blue
+                self._gradient_background((220, 210, 220), (240, 230, 240))
+            elif time_period == 'day':
+                # Snowy day - Bright white/blue
+                self._gradient_background((230, 235, 245), (245, 250, 255))
+            elif time_period == 'dusk':
+                # Snowy dusk - Cool gray/blue
+                self._gradient_background((160, 165, 180), (180, 185, 200))
+            else:  # night
+                # Snowy night - Dark blue-gray
+                self._gradient_background((70, 75, 90), (55, 60, 75))
+
+        # FOGGY/MISTY BACKGROUNDS
+        elif condition in ['Mist', 'Fog', 'Haze', 'Smoke']:
+            if time_period == 'dawn':
+                # Misty dawn - Light gray
+                self._gradient_background((190, 190, 190), (210, 210, 210))
+            elif time_period == 'day':
+                # Misty day - Bright gray
+                self._gradient_background((200, 200, 200), (220, 220, 220))
+            elif time_period == 'dusk':
+                # Misty dusk - Medium gray
+                self._gradient_background((130, 135, 140), (150, 155, 160))
+            else:  # night
+                # Misty night - Dark gray
+                self._gradient_background((60, 65, 70), (45, 50, 55))
+
+        # FALLBACK - Use Clear sky if condition unknown
+        else:
+            print(f"Unknown condition '{condition}', using Clear fallback")
+            if time_period == 'dawn':
+                self._gradient_background((255, 180, 120), (255, 220, 180))
+            elif time_period == 'day':
+                self._gradient_background((100, 180, 255), (150, 220, 255))
+            elif time_period == 'dusk':
+                self._gradient_background((255, 120, 80), (120, 80, 150))
+            else:
+                self._gradient_background((20, 30, 80), (10, 15, 40))
+
+    def _gradient_background(self, top_color, bottom_color):
+        """Draw a gradient background from top to bottom"""
+        r1, g1, b1 = top_color
+        r2, g2, b2 = bottom_color
+
+        for y in range(48):
+            # Calculate gradient interpolation
+            ratio = y / 48
+            r = int(r1 + (r2 - r1) * ratio)
+            g = int(g1 + (g2 - g1) * ratio)
+            b = int(b1 + (b2 - b1) * ratio)
+
+            for x in range(96):
+                self.manager.draw_pixel(x, y, r, g, b)
