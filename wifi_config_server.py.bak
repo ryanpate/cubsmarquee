@@ -6,8 +6,11 @@ import subprocess
 import os
 import socket
 import glob
+import json
 
 app = Flask(__name__)
+
+CONFIG_PATH = '/home/pi/config.json'
 
 
 def get_connection_mode():
@@ -47,17 +50,48 @@ def get_ip_address():
         return 'Unknown'
 
 
+def load_config():
+    """Load configuration from JSON file"""
+    default_config = {
+        'zip_code': '',
+        'weather_api_key': '',
+        'custom_message': 'GO CUBS GO! SEE YOU NEXT SEASON!',
+        'display_mode': 'auto'
+    }
+    
+    try:
+        if os.path.exists(CONFIG_PATH):
+            with open(CONFIG_PATH, 'r') as f:
+                loaded = json.load(f)
+                default_config.update(loaded)
+    except Exception as e:
+        print(f"Error loading config: {e}")
+    
+    return default_config
+
+
+def save_config(config):
+    """Save configuration to JSON file"""
+    try:
+        with open(CONFIG_PATH, 'w') as f:
+            json.dump(config, f, indent=2)
+        return True
+    except Exception as e:
+        print(f"Error saving config: {e}")
+        return False
+
+
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Cubs Scoreboard WiFi Setup</title>
+    <title>Cubs Scoreboard Admin</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 600px;
-            margin: 50px auto;
+            max-width: 800px;
+            margin: 20px auto;
             padding: 20px;
             background: #0C2340;
             color: white;
@@ -74,11 +108,42 @@ HTML_TEMPLATE = """
             text-align: center;
             margin-bottom: 10px;
         }
+        h2 {
+            color: #0C2340;
+            border-bottom: 2px solid #CC3433;
+            padding-bottom: 5px;
+            margin: 30px 0 15px 0;
+        }
         .subtitle {
             text-align: center;
             color: #666;
             margin-bottom: 20px;
             font-size: 14px;
+        }
+        .nav-tabs {
+            display: flex;
+            border-bottom: 2px solid #0C2340;
+            margin-bottom: 20px;
+        }
+        .nav-tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            background: #f0f0f0;
+            border: none;
+            font-size: 16px;
+            font-weight: bold;
+            margin-right: 5px;
+            border-radius: 5px 5px 0 0;
+        }
+        .nav-tab.active {
+            background: #0C2340;
+            color: white;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
         }
         .info-box {
             background: #f8f9fa;
@@ -101,13 +166,17 @@ HTML_TEMPLATE = """
             margin-bottom: 5px;
             font-weight: bold;
         }
-        input, select {
+        input, select, textarea {
             width: 100%;
             padding: 10px;
             border: 2px solid #0C2340;
             border-radius: 5px;
             box-sizing: border-box;
             font-size: 16px;
+        }
+        textarea {
+            resize: vertical;
+            min-height: 60px;
         }
         button {
             width: 100%;
@@ -180,17 +249,24 @@ HTML_TEMPLATE = """
             border-radius: 4px;
             color: #856404;
         }
-        .section-title {
-            color: #0C2340;
-            border-bottom: 2px solid #CC3433;
-            padding-bottom: 5px;
-            margin: 30px 0 15px 0;
+        .help-text {
+            font-size: 13px;
+            color: #666;
+            margin-top: 5px;
+        }
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            text-align: center;
+            color: #666;
+            font-size: 12px;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Cubs Scoreboard WiFi Setup</h1>
+        <h1>Cubs Scoreboard Admin</h1>
         <div class="subtitle">Device: {{ hostname }}.local</div>
         
         <div class="info-box">
@@ -199,64 +275,145 @@ HTML_TEMPLATE = """
             <div class="info-row"><strong>Connection Mode:</strong> {{ mode }}</div>
         </div>
         
-        {% if 'Access Point' in mode %}
-        <div class="warning">
-            <strong>Access Point Mode Active</strong><br>
-            The scoreboard couldn't connect to a WiFi network and is running in hotspot mode.
-            Configure your WiFi credentials below to connect.
-        </div>
-        {% endif %}
-        
-        <h2 class="section-title">WiFi Configuration</h2>
-        
-        <div class="form-group">
-            <label>Available Networks:</label>
-            <div class="network-list" id="networkList">
-                <div style="padding: 10px; text-align: center;">Click "Refresh Networks" to scan</div>
-            </div>
-            <button onclick="scanNetworks()" id="scanBtn">Refresh Networks</button>
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="showTab('wifi')">WiFi</button>
+            <button class="nav-tab" onclick="showTab('display')">Display Settings</button>
+            <button class="nav-tab" onclick="showTab('system')">System</button>
         </div>
         
-        <form id="wifiForm">
-            <div class="form-group">
-                <label for="ssid">Network Name (SSID):</label>
-                <input type="text" id="ssid" name="ssid" required placeholder="Enter network name">
+        <!-- WiFi Tab -->
+        <div id="wifi-tab" class="tab-content active">
+            {% if 'Access Point' in mode %}
+            <div class="warning">
+                <strong>Access Point Mode Active</strong><br>
+                The scoreboard couldn't connect to a WiFi network and is running in hotspot mode.
+                Configure your WiFi credentials below to connect.
             </div>
+            {% endif %}
+            
+            <h2>WiFi Configuration</h2>
             
             <div class="form-group">
-                <label for="password">Password:</label>
-                <input type="password" id="password" name="password" required placeholder="Enter network password">
+                <label>Available Networks:</label>
+                <div class="network-list" id="networkList">
+                    <div style="padding: 10px; text-align: center;">Click "Refresh Networks" to scan</div>
+                </div>
+                <button onclick="scanNetworks()" id="scanBtn">Refresh Networks</button>
             </div>
             
-            <button type="submit" id="connectBtn">Connect to Network</button>
-        </form>
-        
-        <div id="status" class="status"></div>
-        
-        <h2 class="section-title">System Control</h2>
-        
-        <button onclick="rebootDevice()" id="rebootBtn" class="button-secondary">Reboot Scoreboard</button>
-        
-        <h2 class="section-title">System Logs</h2>
-        
-        <button onclick="viewLogs('application')" class="button-secondary">View Application Logs</button>
-        <button onclick="viewLogs('error')" class="button-secondary" style="margin-top: 10px;">View Error Logs</button>
-        <button onclick="viewLogs('wifi')" class="button-secondary" style="margin-top: 10px;">View WiFi Manager Logs</button>
-        
-        <div id="logViewer" style="display: none; margin-top: 20px;">
-            <h3 id="logTitle" style="color: #0C2340;"></h3>
-            <div style="background: #f8f9fa; border: 2px solid #0C2340; border-radius: 5px; padding: 10px; max-height: 400px; overflow-y: auto;">
-                <pre id="logContent" style="margin: 0; font-size: 11px; white-space: pre-wrap; word-wrap: break-word;"></pre>
-            </div>
-            <button onclick="closeLogViewer()" class="button-secondary" style="margin-top: 10px;">Close Logs</button>
+            <form id="wifiForm">
+                <div class="form-group">
+                    <label for="ssid">Network Name (SSID):</label>
+                    <input type="text" id="ssid" name="ssid" required placeholder="Enter network name">
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Password:</label>
+                    <input type="password" id="password" name="password" required placeholder="Enter network password">
+                </div>
+                
+                <button type="submit" id="connectBtn">Connect to Network</button>
+            </form>
+            
+            <div id="wifiStatus" class="status"></div>
         </div>
         
-        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; text-align: center; color: #666; font-size: 12px;">
+        <!-- Display Settings Tab -->
+        <div id="display-tab" class="tab-content">
+            <h2>Off-Season Display Settings</h2>
+            
+            <form id="displayForm">
+                <div class="form-group">
+                    <label for="zip_code">Zip Code (for weather):</label>
+                    <input type="text" id="zip_code" name="zip_code" 
+                           value="{{ config.zip_code }}" 
+                           placeholder="60613" 
+                           maxlength="5" 
+                           pattern="[0-9]{5}">
+                    <div class="help-text">Enter your 5-digit US zip code for local weather</div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="weather_api_key">OpenWeatherMap API Key:</label>
+                    <input type="text" id="weather_api_key" name="weather_api_key" 
+                           value="{{ config.weather_api_key }}" 
+                           placeholder="Enter your API key">
+                    <div class="help-text">
+                        Get a free API key at <a href="https://openweathermap.org/api" target="_blank">openweathermap.org/api</a>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="custom_message">Custom Message:</label>
+                    <textarea id="custom_message" name="custom_message" 
+                              placeholder="GO CUBS GO! SEE YOU NEXT SEASON!">{{ config.custom_message }}</textarea>
+                    <div class="help-text">This message will scroll on the display during off-season</div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="display_mode">Display Mode:</label>
+                    <select id="display_mode" name="display_mode">
+                        <option value="auto" {% if config.display_mode == 'auto' %}selected{% endif %}>
+                            Auto (Rotate between weather, Cubs trivia, and message)
+                        </option>
+                        <option value="weather_only" {% if config.display_mode == 'weather_only' %}selected{% endif %}>
+                            Weather Only
+                        </option>
+                        <option value="message_only" {% if config.display_mode == 'message_only' %}selected{% endif %}>
+                            Message Only
+                        </option>
+                    </select>
+                </div>
+                
+                <button type="submit" id="saveDisplayBtn">Save Display Settings</button>
+            </form>
+            
+            <div id="displayStatus" class="status"></div>
+        </div>
+        
+        <!-- System Tab -->
+        <div id="system-tab" class="tab-content">
+            <h2>System Control</h2>
+            
+            <button onclick="rebootDevice()" id="rebootBtn" class="button-secondary">Reboot Scoreboard</button>
+            
+            <h2>System Logs</h2>
+            
+            <button onclick="viewLogs('application')" class="button-secondary">View Application Logs</button>
+            <button onclick="viewLogs('error')" class="button-secondary" style="margin-top: 10px;">View Error Logs</button>
+            <button onclick="viewLogs('wifi')" class="button-secondary" style="margin-top: 10px;">View WiFi Manager Logs</button>
+            
+            <div id="logViewer" style="display: none; margin-top: 20px;">
+                <h3 id="logTitle" style="color: #0C2340;"></h3>
+                <div style="background: #f8f9fa; border: 2px solid #0C2340; border-radius: 5px; padding: 10px; max-height: 400px; overflow-y: auto;">
+                    <pre id="logContent" style="margin: 0; font-size: 11px; white-space: pre-wrap; word-wrap: break-word;"></pre>
+                </div>
+                <button onclick="closeLogViewer()" class="button-secondary" style="margin-top: 10px;">Close Logs</button>
+            </div>
+            
+            <div id="systemStatus" class="status"></div>
+        </div>
+        
+        <div class="footer">
             Access this page anytime at: <strong>{{ hostname }}.local/admin</strong>
         </div>
     </div>
 
     <script>
+        function showTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabName + '-tab').classList.add('active');
+            event.target.classList.add('active');
+        }
+        
         function scanNetworks() {
             const btn = document.getElementById('scanBtn');
             const list = document.getElementById('networkList');
@@ -306,7 +463,7 @@ HTML_TEMPLATE = """
             }
             
             const btn = document.getElementById('rebootBtn');
-            const status = document.getElementById('status');
+            const status = document.getElementById('systemStatus');
             
             btn.disabled = true;
             btn.textContent = 'Rebooting...';
@@ -331,7 +488,6 @@ HTML_TEMPLATE = """
                 }
             })
             .catch(error => {
-                // Connection will be lost during reboot, this is expected
                 status.className = 'status success';
                 status.textContent = 'Reboot in progress. The page will be unavailable until the device restarts (about 30 seconds).';
             });
@@ -342,12 +498,9 @@ HTML_TEMPLATE = """
             const title = document.getElementById('logTitle');
             const content = document.getElementById('logContent');
             
-            // Show viewer and set loading state
             viewer.style.display = 'block';
             title.textContent = 'Loading logs...';
             content.textContent = 'Please wait...';
-            
-            // Scroll to viewer
             viewer.scrollIntoView({ behavior: 'smooth' });
             
             fetch(`/logs/${logType}`)
@@ -381,7 +534,7 @@ HTML_TEMPLATE = """
             
             const ssid = document.getElementById('ssid').value;
             const password = document.getElementById('password').value;
-            const status = document.getElementById('status');
+            const status = document.getElementById('wifiStatus');
             const connectBtn = document.getElementById('connectBtn');
             
             status.style.display = 'block';
@@ -402,11 +555,7 @@ HTML_TEMPLATE = """
                 if (data.success) {
                     status.className = 'status success';
                     status.textContent = 'Success! The scoreboard is connecting to the network. The page will reload in 30 seconds to check the connection.';
-                    
-                    // Reload after 30 seconds to show new status
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 30000);
+                    setTimeout(() => window.location.reload(), 30000);
                 } else {
                     status.className = 'status error';
                     status.textContent = 'Error: ' + data.message;
@@ -419,6 +568,49 @@ HTML_TEMPLATE = """
                 status.textContent = 'Error connecting to network: ' + error;
                 connectBtn.disabled = false;
                 connectBtn.textContent = 'Connect to Network';
+            });
+        });
+        
+        document.getElementById('displayForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = {
+                zip_code: document.getElementById('zip_code').value,
+                weather_api_key: document.getElementById('weather_api_key').value,
+                custom_message: document.getElementById('custom_message').value,
+                display_mode: document.getElementById('display_mode').value
+            };
+            
+            const status = document.getElementById('displayStatus');
+            const saveBtn = document.getElementById('saveDisplayBtn');
+            
+            status.style.display = 'block';
+            status.className = 'status';
+            status.textContent = 'Saving settings...';
+            saveBtn.disabled = true;
+            
+            fetch('/save_config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(formData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    status.className = 'status success';
+                    status.textContent = 'Settings saved successfully! Changes will take effect during the next off-season display cycle.';
+                } else {
+                    status.className = 'status error';
+                    status.textContent = 'Error: ' + data.message;
+                }
+                saveBtn.disabled = false;
+            })
+            .catch(error => {
+                status.className = 'status error';
+                status.textContent = 'Error saving settings: ' + error;
+                saveBtn.disabled = false;
             });
         });
     </script>
@@ -440,13 +632,15 @@ def admin():
     hostname = get_hostname()
     current_network = get_current_network()
     ip_address = get_ip_address()
+    config = load_config()
 
     return render_template_string(
         HTML_TEMPLATE,
         mode=mode,
         hostname=hostname,
         current_network=current_network,
-        ip_address=ip_address
+        ip_address=ip_address,
+        config=config
     )
 
 
@@ -473,7 +667,6 @@ def scan_networks():
                     current_network['ssid'] = ssid
 
             elif 'Quality=' in line:
-                # Extract signal quality
                 quality = line.split('Quality=')[1].split(' ')[0]
                 numerator, denominator = quality.split('/')
                 signal_percent = int((int(numerator) / int(denominator)) * 100)
@@ -483,7 +676,6 @@ def scan_networks():
                     networks.append(current_network.copy())
                     current_network = {}
 
-        # Remove duplicates and sort by signal strength
         unique_networks = {n['ssid']: n for n in networks}
         sorted_networks = sorted(unique_networks.values(),
                                  key=lambda x: x['signal'],
@@ -506,7 +698,6 @@ def connect_wifi():
         if not ssid or not password:
             return jsonify({'success': False, 'message': 'SSID and password required'})
 
-        # Create wpa_supplicant configuration
         wpa_config = f"""ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
 update_config=1
 country=US
@@ -518,18 +709,15 @@ network={{
 }}
 """
 
-        # Write configuration
         with open('/tmp/wpa_supplicant.conf', 'w') as f:
             f.write(wpa_config)
 
-        # Copy to proper location
         subprocess.run(
             ['sudo', 'cp', '/tmp/wpa_supplicant.conf',
              '/etc/wpa_supplicant/wpa_supplicant.conf'],
             check=True
         )
 
-        # Restart networking
         subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'], check=False)
         subprocess.run(['sudo', 'wpa_cli', '-i', 'wlan0',
                        'reconfigure'], check=False)
@@ -543,17 +731,36 @@ network={{
         return jsonify({'success': False, 'message': str(e)})
 
 
+@app.route('/save_config', methods=['POST'])
+def save_config_route():
+    """Save display configuration"""
+    try:
+        data = request.json
+        current_config = load_config()
+        
+        # Update with new values
+        current_config.update({
+            'zip_code': data.get('zip_code', ''),
+            'weather_api_key': data.get('weather_api_key', ''),
+            'custom_message': data.get('custom_message', 'GO CUBS GO!'),
+            'display_mode': data.get('display_mode', 'auto')
+        })
+        
+        if save_config(current_config):
+            return jsonify({'success': True})
+        else:
+            return jsonify({'success': False, 'message': 'Failed to save configuration'})
+            
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+
 @app.route('/reboot', methods=['POST'])
 def reboot_device():
     """Reboot the Raspberry Pi"""
     try:
-        # Schedule a reboot in 2 seconds to allow the response to be sent
         subprocess.Popen(['sudo', 'reboot', '2'])
-        
-        return jsonify({
-            'success': True,
-            'message': 'Reboot initiated'
-        })
+        return jsonify({'success': True, 'message': 'Reboot initiated'})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
 
@@ -565,17 +772,12 @@ def get_logs(log_type):
         log_dir = '/home/pi/scoreboard_logs'
         
         if log_type == 'application':
-            # Get most recent application log
             log_files = glob.glob(f'{log_dir}/scoreboard_*.log')
             if not log_files:
-                return jsonify({
-                    'success': False,
-                    'message': 'No application logs found'
-                })
+                return jsonify({'success': False, 'message': 'No application logs found'})
             
             latest_log = max(log_files, key=os.path.getmtime)
             with open(latest_log, 'r') as f:
-                # Get last 500 lines
                 lines = f.readlines()
                 content = ''.join(lines[-500:])
             
@@ -586,17 +788,12 @@ def get_logs(log_type):
             })
             
         elif log_type == 'error':
-            # Get most recent error log
             log_files = glob.glob(f'{log_dir}/scoreboard_error_*.log')
             if not log_files:
-                return jsonify({
-                    'success': False,
-                    'message': 'No error logs found'
-                })
+                return jsonify({'success': False, 'message': 'No error logs found'})
             
             latest_log = max(log_files, key=os.path.getmtime)
             with open(latest_log, 'r') as f:
-                # Get last 500 lines
                 lines = f.readlines()
                 content = ''.join(lines[-500:])
             
@@ -607,7 +804,6 @@ def get_logs(log_type):
             })
             
         elif log_type == 'wifi':
-            # Get WiFi manager logs from system journal
             result = subprocess.run(
                 ['journalctl', '-u', 'wifi-manager', '-n', '200', '--no-pager'],
                 capture_output=True,
@@ -622,7 +818,6 @@ def get_logs(log_type):
                     'filename': 'WiFi Manager Journal'
                 })
             else:
-                # Fallback to log file if journal fails
                 wifi_log = '/var/log/wifi_manager.log'
                 if os.path.exists(wifi_log):
                     with open(wifi_log, 'r') as f:
@@ -640,18 +835,11 @@ def get_logs(log_type):
                     })
         
         else:
-            return jsonify({
-                'success': False,
-                'message': 'Invalid log type'
-            })
+            return jsonify({'success': False, 'message': 'Invalid log type'})
             
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'message': f'Error reading logs: {str(e)}'
-        })
+        return jsonify({'success': False, 'message': f'Error reading logs: {str(e)}'})
 
 
 if __name__ == '__main__':
-    # Run on port 80 to be accessible without specifying port
     app.run(host='0.0.0.0', port=80, debug=False)

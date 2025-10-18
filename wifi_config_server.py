@@ -56,9 +56,10 @@ def load_config():
         'zip_code': '',
         'weather_api_key': '',
         'custom_message': 'GO CUBS GO! SEE YOU NEXT SEASON!',
-        'display_mode': 'auto'
+        'display_mode': 'auto',
+        'enable_bears': True  # ADDED: Bears display toggle
     }
-    
+
     try:
         if os.path.exists(CONFIG_PATH):
             with open(CONFIG_PATH, 'r') as f:
@@ -66,7 +67,7 @@ def load_config():
                 default_config.update(loaded)
     except Exception as e:
         print(f"Error loading config: {e}")
-    
+
     return default_config
 
 
@@ -177,6 +178,11 @@ HTML_TEMPLATE = """
         textarea {
             resize: vertical;
             min-height: 60px;
+        }
+        input[type="checkbox"] {
+            width: auto;
+            display: inline-block;
+            margin-right: 8px;
         }
         button {
             width: 100%;
@@ -354,7 +360,7 @@ HTML_TEMPLATE = """
                     <label for="display_mode">Display Mode:</label>
                     <select id="display_mode" name="display_mode">
                         <option value="auto" {% if config.display_mode == 'auto' %}selected{% endif %}>
-                            Auto (Rotate between weather, Cubs trivia, and message)
+                            Auto (Rotate between weather, Bears, Cubs trivia, and message)
                         </option>
                         <option value="weather_only" {% if config.display_mode == 'weather_only' %}selected{% endif %}>
                             Weather Only
@@ -363,6 +369,21 @@ HTML_TEMPLATE = """
                             Message Only
                         </option>
                     </select>
+                    <div class="help-text">Choose how content is displayed during off-season</div>
+                </div>
+                
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" 
+                               id="enable_bears" 
+                               name="enable_bears"
+                               {% if config.enable_bears %}checked{% endif %}>
+                        Enable Chicago Bears Display (Football Season)
+                    </label>
+                    <div class="help-text">
+                        Show Bears game info during football season (September - February).
+                        Uses free ESPN API - no additional setup required.
+                    </div>
                 </div>
                 
                 <button type="submit" id="saveDisplayBtn">Save Display Settings</button>
@@ -578,7 +599,8 @@ HTML_TEMPLATE = """
                 zip_code: document.getElementById('zip_code').value,
                 weather_api_key: document.getElementById('weather_api_key').value,
                 custom_message: document.getElementById('custom_message').value,
-                display_mode: document.getElementById('display_mode').value
+                display_mode: document.getElementById('display_mode').value,
+                enable_bears: document.getElementById('enable_bears').checked
             };
             
             const status = document.getElementById('displayStatus');
@@ -737,20 +759,22 @@ def save_config_route():
     try:
         data = request.json
         current_config = load_config()
-        
+
         # Update with new values
         current_config.update({
             'zip_code': data.get('zip_code', ''),
             'weather_api_key': data.get('weather_api_key', ''),
             'custom_message': data.get('custom_message', 'GO CUBS GO!'),
-            'display_mode': data.get('display_mode', 'auto')
+            'display_mode': data.get('display_mode', 'auto'),
+            # ADDED: Save Bears toggle
+            'enable_bears': data.get('enable_bears', True)
         })
-        
+
         if save_config(current_config):
             return jsonify({'success': True})
         else:
             return jsonify({'success': False, 'message': 'Failed to save configuration'})
-            
+
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
 
@@ -770,39 +794,39 @@ def get_logs(log_type):
     """Retrieve logs based on type"""
     try:
         log_dir = '/home/pi/scoreboard_logs'
-        
+
         if log_type == 'application':
             log_files = glob.glob(f'{log_dir}/scoreboard_*.log')
             if not log_files:
                 return jsonify({'success': False, 'message': 'No application logs found'})
-            
+
             latest_log = max(log_files, key=os.path.getmtime)
             with open(latest_log, 'r') as f:
                 lines = f.readlines()
                 content = ''.join(lines[-500:])
-            
+
             return jsonify({
                 'success': True,
                 'content': content,
                 'filename': os.path.basename(latest_log)
             })
-            
+
         elif log_type == 'error':
             log_files = glob.glob(f'{log_dir}/scoreboard_error_*.log')
             if not log_files:
                 return jsonify({'success': False, 'message': 'No error logs found'})
-            
+
             latest_log = max(log_files, key=os.path.getmtime)
             with open(latest_log, 'r') as f:
                 lines = f.readlines()
                 content = ''.join(lines[-500:])
-            
+
             return jsonify({
                 'success': True,
                 'content': content,
                 'filename': os.path.basename(latest_log)
             })
-            
+
         elif log_type == 'wifi':
             result = subprocess.run(
                 ['journalctl', '-u', 'wifi-manager', '-n', '200', '--no-pager'],
@@ -810,7 +834,7 @@ def get_logs(log_type):
                 text=True,
                 timeout=5
             )
-            
+
             if result.returncode == 0:
                 return jsonify({
                     'success': True,
@@ -833,10 +857,10 @@ def get_logs(log_type):
                         'success': False,
                         'message': 'WiFi manager logs not available'
                     })
-        
+
         else:
             return jsonify({'success': False, 'message': 'Invalid log type'})
-            
+
     except Exception as e:
         return jsonify({'success': False, 'message': f'Error reading logs: {str(e)}'})
 
