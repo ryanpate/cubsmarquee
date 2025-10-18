@@ -6,8 +6,48 @@ SCOREBOARD_DIR="/home/pi"  # Your files are here
 LOG_DIR="/home/pi/scoreboard_logs"
 PYTHON_PATH="/usr/bin/python3"
 
+# Log rotation settings
+MAX_LOG_FILES=5  # Keep only the last 5 log files
+MAX_LOG_SIZE_MB=10  # Rotate logs larger than 10MB
+
 # Create log directory if it doesn't exist
 mkdir -p "$LOG_DIR"
+
+# Function to rotate old logs
+rotate_logs() {
+    echo "Checking for old logs to rotate..."
+    
+    # Count number of regular log files
+    log_count=$(ls -1 "$LOG_DIR"/scoreboard_[0-9]*.log 2>/dev/null | wc -l)
+    
+    # If we have more than MAX_LOG_FILES, delete the oldest ones
+    if [ $log_count -gt $MAX_LOG_FILES ]; then
+        files_to_delete=$((log_count - MAX_LOG_FILES))
+        echo "Found $log_count log files. Removing $files_to_delete oldest files..."
+        ls -1t "$LOG_DIR"/scoreboard_[0-9]*.log | tail -n $files_to_delete | xargs rm -f
+    fi
+    
+    # Count number of error log files
+    error_log_count=$(ls -1 "$LOG_DIR"/scoreboard_error_*.log 2>/dev/null | wc -l)
+    
+    # If we have more than MAX_LOG_FILES error logs, delete the oldest ones
+    if [ $error_log_count -gt $MAX_LOG_FILES ]; then
+        files_to_delete=$((error_log_count - MAX_LOG_FILES))
+        echo "Found $error_log_count error log files. Removing $files_to_delete oldest files..."
+        ls -1t "$LOG_DIR"/scoreboard_error_*.log | tail -n $files_to_delete | xargs rm -f
+    fi
+    
+    # Check for large log files and compress them
+    find "$LOG_DIR" -name "scoreboard*.log" -size +${MAX_LOG_SIZE_MB}M -exec gzip {} \;
+    
+    # Remove compressed logs older than 7 days
+    find "$LOG_DIR" -name "scoreboard*.log.gz" -mtime +7 -delete
+    
+    echo "Log rotation complete."
+}
+
+# Rotate old logs before starting
+rotate_logs
 
 # Set up logging with timestamp
 LOG_FILE="$LOG_DIR/scoreboard_$(date +%Y%m%d_%H%M%S).log"
@@ -104,5 +144,6 @@ fi
 echo "Launching scoreboard application..." | tee -a "$LOG_FILE"
 sudo -E "$PYTHON_PATH" main.py >> "$LOG_FILE" 2>> "$ERROR_LOG"
 
-# If the scoreboard exits, log the event
+# If the scoreboard exits, log the event and rotate logs
 echo "Scoreboard exited at $(date)" | tee -a "$LOG_FILE"
+rotate_logs

@@ -5,7 +5,6 @@ import json
 import os
 import requests
 import pendulum
-from PIL import Image
 from scoreboard_config import Colors, GameConfig
 
 
@@ -205,15 +204,15 @@ class WeatherDisplay:
 
         # Draw title
         self.manager.draw_text(
-            'tiny_bold', 10, 8, Colors.WHITE, 'CURRENT WEATHER')
+            'tiny_bold', 2, 8, Colors.WHITE, 'CURRENT WEATHER')
 
         # Draw city name
-        city_x = max(2, (96 - len(city) * 4) // 2)
+        city_x = max(2, (96 - len(city) * 5) // 2)
         self.manager.draw_text('tiny', city_x, 16, Colors.YELLOW, city)
 
         # Draw temperature (large)
         temp_str = f"{temp}"
-        temp_x = 28 if temp >= 100 else (38 if temp >= 10 else 46)
+        temp_x = 20 if temp >= 100 else (30 if temp >= 10 else 38)
         self.manager.draw_text('large_bold', temp_x, 32,
                                Colors.WHITE, temp_str)
 
@@ -223,15 +222,15 @@ class WeatherDisplay:
         self.manager.draw_text('small', degree_x + 4, 26, Colors.WHITE, 'F')
 
         # Draw condition
-        cond_x = max(2, (96 - len(condition_text) * 4) // 2)
+        cond_x = max(2, (96 - len(condition_text) * 5) // 2)
         self.manager.draw_text(
             'tiny', cond_x, 40, Colors.BRIGHT_YELLOW, condition_text)
 
         # Draw feels like and humidity
         self.manager.draw_text(
-            'micro', 4, 47, Colors.WHITE, f'FEELS:{feels_like}')
+            'micro', 2, 47, Colors.WHITE, f'FEELS:{feels_like}')
         self.manager.draw_text(
-            'micro', 64, 47, Colors.WHITE, f'HUM:{humidity}%')
+            'micro', 60, 47, Colors.WHITE, f'HUM:{humidity}%')
 
     def _get_gradient_colors(self, hour, condition):
         """Get the gradient colors for current time and condition"""
@@ -311,42 +310,6 @@ class WeatherDisplay:
             else:
                 return ((20, 30, 80), (10, 15, 40))
 
-    def _get_weather_icon_filename(self, condition):
-        """Get the filename for weather icon PNG"""
-        # Map condition to PNG filename
-        icon_map = {
-            'Clear': 'clear.png',
-            'Clouds': 'clouds.png',
-            'Rain': 'rain.png',
-            'Drizzle': 'drizzle.png',
-            'Snow': 'snow.png',
-            'Thunderstorm': 'thunderstorm.png',
-            'Mist': 'mist.png',
-            'Fog': 'fog.png',
-            'Haze': 'haze.png',
-            'Smoke': 'smoke.png'
-        }
-        return icon_map.get(condition, 'default.png')
-
-    def _load_weather_icon(self, condition):
-        """Load and return weather icon PNG, or None if not found"""
-        icon_filename = self._get_weather_icon_filename(condition)
-        icon_path = f'/home/pi/{icon_filename}'
-
-        try:
-            if os.path.exists(icon_path):
-                icon = Image.open(icon_path)
-                # Keep RGBA mode to preserve transparency
-                if icon.mode not in ['RGB', 'RGBA']:
-                    icon = icon.convert('RGBA')
-                return icon
-            else:
-                print(f"Weather icon not found: {icon_path}")
-                return None
-        except Exception as e:
-            print(f"Error loading weather icon {icon_path}: {e}")
-            return None
-
     def _draw_forecast(self):
         """Draw professional forecast information"""
         # Clear canvas
@@ -367,7 +330,7 @@ class WeatherDisplay:
 
         # Draw title (moved down to avoid cutoff)
         self.manager.draw_text(
-            'tiny_bold', 14, 6, Colors.WHITE, '3-DAY FORECAST')
+            'tiny_bold', 8, 6, Colors.WHITE, '3-DAY FORECAST')
 
         # Draw title underline
         for x in range(0, 96):
@@ -414,7 +377,8 @@ class WeatherDisplay:
                     'day': day_info['day'],
                     'temp_high': temp_high,
                     'temp_low': temp_low,
-                    'condition': condition
+                    'condition': condition,
+                    'icon': self._get_weather_icon(condition)
                 })
 
                 if len(forecasts) >= 3:
@@ -436,9 +400,9 @@ class WeatherDisplay:
             # Draw forecasts with alternating subtle backgrounds
             y_pos = 25
             for i, forecast in enumerate(forecasts):
-                # Subtle alternating row background
-                row_start_y = y_pos - 7
-                row_end_y = y_pos + 1
+                # Subtle alternating row background (skip drawing background to avoid line issues)
+                row_start_y = y_pos - 1
+                row_end_y = y_pos + 8
 
                 if i % 2 == 0:
                     for y in range(row_start_y, row_end_y):
@@ -454,74 +418,10 @@ class WeatherDisplay:
                 self.manager.draw_text(
                     'tiny_bold', 4, y_pos, Colors.WHITE, forecast['day'])
 
-                # Weather icon PNG (if available)
-                weather_icon = self._load_weather_icon(forecast['condition'])
-                if weather_icon:
-                    # Position the icon (adjust size if needed - assuming 10x10 or smaller)
-                    icon_x = 19
-                    icon_y = y_pos - 7
-
-                    # Resize icon if it's too large (max 10x10 for the forecast display)
-                    icon_width, icon_height = weather_icon.size
-                    max_size = 10
-                    if icon_width > max_size or icon_height > max_size:
-                        weather_icon = weather_icon.resize(
-                            (max_size, max_size), Image.LANCZOS)
-
-                    # Draw the icon pixel by pixel with transparency support
-                    try:
-                        # Get the background color at this position
-                        ratio = icon_y / 48
-                        bg_r = int(10 + (30 * ratio))
-                        bg_g = int(40 + (80 * ratio))
-                        bg_b = int(80 + (120 * ratio))
-                        if i % 2 == 0:
-                            bg_r += 15
-                            bg_g += 15
-                            bg_b += 15
-
-                        # Draw icon pixel by pixel
-                        for py in range(weather_icon.height):
-                            for px in range(weather_icon.width):
-                                pixel = weather_icon.getpixel((px, py))
-
-                                # Handle different image modes
-                                if weather_icon.mode == 'RGBA':
-                                    r, g, b, a = pixel
-                                    if a > 0:  # Only draw non-transparent pixels
-                                        # Blend with background based on alpha
-                                        if a < 255:
-                                            alpha = a / 255.0
-                                            r = int(
-                                                r * alpha + bg_r * (1 - alpha))
-                                            g = int(
-                                                g * alpha + bg_g * (1 - alpha))
-                                            b = int(
-                                                b * alpha + bg_b * (1 - alpha))
-                                        self.manager.draw_pixel(
-                                            icon_x + px, icon_y + py, r, g, b)
-                                else:  # RGB mode
-                                    r, g, b = pixel[:3]
-                                    self.manager.draw_pixel(
-                                        icon_x + px, icon_y + py, r, g, b)
-
-                    except Exception as e:
-                        print(f"Error drawing weather icon: {e}")
-                        import traceback
-                        traceback.print_exc()
-                        # Fallback to text if image fails
-                        icon_color = self._get_icon_color(
-                            forecast['condition'])
-                        icon_char = self._get_weather_icon(
-                            forecast['condition'])
-                        self.manager.draw_text(
-                            'small', icon_x, icon_y, icon_color, icon_char)
-                else:
-                    # Fallback to ASCII character if PNG not found
-                    icon_color = self._get_icon_color(forecast['condition'])
-                    icon_char = self._get_weather_icon(forecast['condition'])
-                    self.manager.draw_text(
-                        'small', 19, y_pos - 1, icon_color, icon_char)
+                # Weather icon
+                icon_color = self._get_icon_color(forecast['condition'])
+                self.manager.draw_text(
+                    'small', 19, y_pos - 1, icon_color, forecast['icon'])
 
                 # High temp (orange/red)
                 temp_high_color = (
@@ -558,7 +458,7 @@ class WeatherDisplay:
             traceback.print_exc()
 
     def _get_weather_icon(self, condition):
-        """Get weather icon character - using standard ASCII characters (FALLBACK)"""
+        """Get weather icon character - using standard ASCII characters"""
         icons = {
             'Clear': 'O',      # Sun
             'Clouds': '~',     # Cloud
@@ -814,14 +714,9 @@ class WeatherDisplay:
         """Animate twinkling stars"""
         for star in self.star_twinkle:
             brightness = int(star['brightness'])
-            # Clamp brightness to valid range (0-255)
-            brightness = max(0, min(255, brightness))
-            # Clamp the blue component to prevent overflow
-            blue_brightness = min(255, brightness + 20)
-
             if 0 <= star['x'] < 96 and 0 <= star['y'] < 48:
                 self.manager.draw_pixel(
-                    star['x'], star['y'], brightness, brightness, blue_brightness)
+                    star['x'], star['y'], brightness, brightness, brightness + 20)
             star['brightness'] += star['direction'] * star['speed']
             if star['brightness'] >= 255:
                 star['brightness'] = 255
