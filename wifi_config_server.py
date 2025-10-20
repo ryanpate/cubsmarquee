@@ -1015,7 +1015,7 @@ def control_service():
 def reboot_device():
     """Reboot the Raspberry Pi"""
     try:
-        subprocess.Popen(['sudo', 'reboot', '2'])
+        subprocess.Popen(['sudo', 'reboot'])
         return jsonify({'success': True, 'message': 'Reboot initiated'})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})

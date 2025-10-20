@@ -32,6 +32,7 @@ class WeatherDisplay:
         self._last_hour = None
         self._last_condition = None
         self._last_mode = None  # Track which display mode we're in
+        self._last_time_period = None  # NEW: Track time period for animation resets
 
         # Cache the current background for efficient redraws
         self._background_cache = None
@@ -131,14 +132,67 @@ class WeatherDisplay:
                 self._draw_forecast()
 
             self.manager.swap_canvas()
-            time.sleep(0.5)
+            time.sleep(0.3)
 
         print(f"Weather display completed after {frame_count} frames")
+
+    def _get_time_period(self, hour):
+        """Determine the time period (dawn/day/dusk/night) for current conditions"""
+        # Get sunrise and sunset times from weather data
+        sunrise_timestamp = self.weather_data.get('sys', {}).get('sunrise', 0)
+        sunset_timestamp = self.weather_data.get('sys', {}).get('sunset', 0)
+
+        # Convert to local hour with minutes as decimal for accurate comparison
+        current_time = pendulum.now()
+        current_hour_decimal = current_time.hour + (current_time.minute / 60.0)
+
+        # Determine time period based on actual sun position
+        if sunrise_timestamp and sunset_timestamp:
+            # Convert UTC timestamps to local timezone
+            local_tz = 'America/Chicago'  # Rochester, IL is in Central Time
+            sunrise_time = pendulum.from_timestamp(
+                sunrise_timestamp, tz=local_tz)
+            sunset_time = pendulum.from_timestamp(
+                sunset_timestamp, tz=local_tz)
+
+            sunrise_hour_decimal = sunrise_time.hour + \
+                (sunrise_time.minute / 60.0)
+            sunset_hour_decimal = sunset_time.hour + \
+                (sunset_time.minute / 60.0)
+
+            # Dawn: 1 hour before sunrise to 30 minutes after sunrise
+            dawn_start = sunrise_hour_decimal - 1
+            dawn_end = sunrise_hour_decimal + 0.5
+
+            # Dusk: 30 minutes before sunset to 1 hour after sunset
+            dusk_start = sunset_hour_decimal - 0.5
+            dusk_end = sunset_hour_decimal + 1
+
+            # Determine time period based on actual sun position
+            if dawn_start <= current_hour_decimal < dawn_end:
+                return 'dawn'
+            elif dawn_end <= current_hour_decimal < dusk_start:
+                return 'day'
+            elif dusk_start <= current_hour_decimal < dusk_end:
+                return 'dusk'
+            else:
+                return 'night'
+        else:
+            # Fallback to fixed times if sunrise/sunset not available
+            if 6 <= hour < 8:
+                return 'dawn'
+            elif 8 <= hour < 17:
+                return 'day'
+            elif 17 <= hour < 20:
+                return 'dusk'
+            else:
+                return 'night'
 
     def _draw_current_weather_animated(self):
         """Draw current weather with animations (called each frame)"""
         current_hour = pendulum.now().hour
         condition = self.weather_data['weather'][0]['main']
+        time_period = self._get_time_period(current_hour)
 
         # Check if we need to regenerate the background
         needs_background_redraw = (
@@ -148,27 +202,38 @@ class WeatherDisplay:
             self._background_cache is None
         )
 
+        # NEW: Check if time period changed (for animation resets)
+        time_period_changed = (self._last_time_period != time_period)
+
         if needs_background_redraw:
             # Generate and cache the background
             self._background_cache = self._generate_background_cache(
-                current_hour, condition)
+                current_hour, condition, time_period)
             self._last_hour = current_hour
             self._last_condition = condition
             self._last_mode = 'current'
+
+        # NEW: Reset animations when time period changes
+        if time_period_changed:
+            print(
+                f"Time period changed to {time_period}, reinitializing animations")
+            self._initialize_animations_for_condition(condition, time_period)
+            self._last_time_period = time_period
 
         # STEP 1: Draw the cached background (full screen)
         self._draw_cached_background()
 
         # STEP 2: Draw animations on top of background
-        self._draw_animated_weather(condition, current_hour)
+        self._draw_animated_weather(condition, current_hour, time_period)
         self.animation_frame += 1
 
         # STEP 3: Draw all text on top of animations
         self._draw_weather_text()
 
-    def _generate_background_cache(self, hour, condition):
+    def _generate_background_cache(self, hour, condition, time_period):
         """Generate and cache the background gradient as a pixel array"""
-        top_color, bottom_color = self._get_gradient_colors(hour, condition)
+        top_color, bottom_color = self._get_gradient_colors(
+            hour, condition, time_period)
         r1, g1, b1 = top_color
         r2, g2, b2 = bottom_color
 
@@ -233,59 +298,8 @@ class WeatherDisplay:
         self.manager.draw_text(
             'micro', 64, 47, Colors.WHITE, f'HUM:{humidity}%')
 
-    def _get_gradient_colors(self, hour, condition):
+    def _get_gradient_colors(self, hour, condition, time_period):
         """Get the gradient colors for current time and condition"""
-        # Get sunrise and sunset times from weather data
-        sunrise_timestamp = self.weather_data.get('sys', {}).get('sunrise', 0)
-        sunset_timestamp = self.weather_data.get('sys', {}).get('sunset', 0)
-
-        # Convert to local hour with minutes as decimal for accurate comparison
-        current_time = pendulum.now()
-        current_hour_decimal = current_time.hour + (current_time.minute / 60.0)
-
-        # Determine time period based on actual sun position
-        if sunrise_timestamp and sunset_timestamp:
-            # Convert UTC timestamps to local timezone
-            local_tz = 'America/Chicago'  # Rochester, IL is in Central Time
-            sunrise_time = pendulum.from_timestamp(sunrise_timestamp, tz=local_tz)
-            sunset_time = pendulum.from_timestamp(sunset_timestamp, tz=local_tz)
-
-            sunrise_hour_decimal = sunrise_time.hour + (sunrise_time.minute / 60.0)
-            sunset_hour_decimal = sunset_time.hour + (sunset_time.minute / 60.0)
-
-            # Dawn: 1 hour before sunrise to 30 minutes after sunrise
-            dawn_start = sunrise_hour_decimal - 1
-            dawn_end = sunrise_hour_decimal + 0.5
-
-            # Dusk: 30 minutes before sunset to 1 hour after sunset
-            dusk_start = sunset_hour_decimal - 0.5
-            dusk_end = sunset_hour_decimal + 1
-
-            # Determine time period based on actual sun position
-            if dawn_start <= current_hour_decimal < dawn_end:
-                time_period = 'dawn'
-            elif dawn_end <= current_hour_decimal < dusk_start:
-                time_period = 'day'
-            elif dusk_start <= current_hour_decimal < dusk_end:
-                time_period = 'dusk'
-            else:
-                time_period = 'night'
-
-            # Debug logging to help troubleshoot
-            print(
-                f"Time check: Current={current_hour_decimal:.2f}, Sunrise={sunrise_hour_decimal:.2f}, Sunset={sunset_hour_decimal:.2f}, Period={time_period}")
-        else:
-            # Fallback to fixed times if sunrise/sunset not available
-            if 6 <= hour < 8:
-                time_period = 'dawn'
-            elif 8 <= hour < 17:
-                time_period = 'day'
-            elif 17 <= hour < 20:
-                time_period = 'dusk'
-            else:
-                time_period = 'night'
-            print(f"Using fallback time periods (no sunrise/sunset data)")
-
         # Return tuple of (top_color, bottom_color)
         if condition == 'Clear':
             if time_period == 'dawn':
@@ -515,11 +529,10 @@ class WeatherDisplay:
                     # Adjust rain icon position up by 1 pixel for better centering
                     if forecast['condition'] == 'Rain':
                         icon_y -= 1
-                    
+
                     # Adjust rain icon position up by 1 pixel for better centering
                     if forecast['condition'] == 'Clouds':
                         icon_y += 2
-
 
                     # Resize icon if it's too large (max 10x10 for the forecast display)
                     icon_width, icon_height = weather_icon.size
@@ -586,7 +599,7 @@ class WeatherDisplay:
                 temp_high_color = (
                     255, 140, 0) if forecast['temp_high'] >= 80 else (255, 180, 60)
                 self.manager.draw_text('tiny_bold', 30, y_pos, temp_high_color,
-                                    f"{forecast['temp_high']}")
+                                       f"{forecast['temp_high']}")
                 # Degree symbol positioned at top right
                 self.manager.draw_text(
                     'micro', 42, y_pos - 1, temp_high_color, 'o')
@@ -595,7 +608,7 @@ class WeatherDisplay:
                 temp_low_color = (
                     120, 180, 255) if forecast['temp_low'] <= 50 else (180, 200, 220)
                 self.manager.draw_text('tiny', 54, y_pos, temp_low_color,
-                                    f"{forecast['temp_low']}")
+                                       f"{forecast['temp_low']}")
                 # Degree symbol positioned at top right
                 self.manager.draw_text(
                     'micro', 66, y_pos - 1, temp_low_color, 'o')
@@ -664,9 +677,10 @@ class WeatherDisplay:
         return abbrev.get(condition, condition[:5].upper())
 
     def _initialize_animations(self):
-        """Initialize animation objects"""
+        """Initialize all animation objects at startup"""
         import random
 
+        # Initialize all animation types
         self.rain_drops = []
         for i in range(12):
             self.rain_drops.append({
@@ -689,15 +703,15 @@ class WeatherDisplay:
             self.cloud_positions.append({
                 'x': random.randint(-20, 96),
                 'y': random.randint(2, 42),
-                'speed': random.uniform(0.5, 1.0),  # Faster clouds
-                'width': random.randint(8, 14)  # Larger clouds
+                'speed': random.uniform(0.5, 1.0),
+                'width': random.randint(8, 14)
             })
 
         self.star_twinkle = []
         for i in range(12):
             self.star_twinkle.append({
                 'x': random.randint(0, 95),
-                'y': random.randint(0, 15),
+                'y': random.randint(0, 35),
                 'brightness': random.randint(150, 255),
                 'direction': random.choice([-1, 1]),
                 'speed': random.uniform(2, 5)
@@ -706,7 +720,62 @@ class WeatherDisplay:
         self.animation_frame = 0
         self.lightning_flash = 0
 
-    def _draw_animated_weather(self, condition, hour):
+    def _initialize_animations_for_condition(self, condition, time_period):
+        """Reinitialize animations when condition or time period changes"""
+        import random
+
+        print(
+            f"Reinitializing animations for {condition} during {time_period}")
+
+        # Reset animation frame counter for fresh start
+        self.animation_frame = 0
+
+        # Only reinitialize the relevant animation type
+        if condition in ['Rain', 'Drizzle', 'Thunderstorm']:
+            self.rain_drops = []
+            for i in range(12):
+                self.rain_drops.append({
+                    'x': random.randint(0, 95),
+                    'y': random.randint(-10, 30),
+                    'speed': random.uniform(1.5, 2.5)
+                })
+            if condition == 'Thunderstorm':
+                self.lightning_flash = 0
+
+        elif condition == 'Snow':
+            self.snow_flakes = []
+            for i in range(15):
+                self.snow_flakes.append({
+                    'x': random.randint(0, 95),
+                    'y': random.randint(-10, 30),
+                    'speed': random.uniform(0.3, 0.8),
+                    'drift': random.uniform(-0.2, 0.2)
+                })
+
+        elif condition == 'Clouds':
+            self.cloud_positions = []
+            for i in range(3):
+                self.cloud_positions.append({
+                    'x': random.randint(-20, 96),
+                    'y': random.randint(2, 42),
+                    'speed': random.uniform(0.5, 1.0),
+                    'width': random.randint(8, 14)
+                })
+
+        elif condition == 'Clear':
+            if time_period == 'night':
+                # Fresh stars for night time!
+                self.star_twinkle = []
+                for i in range(12):
+                    self.star_twinkle.append({
+                        'x': random.randint(0, 95),
+                        'y': random.randint(0, 35),
+                        'brightness': random.randint(100, 255),
+                        'direction': random.choice([-1, 1]),
+                        'speed': random.uniform(8, 15)
+                    })
+
+    def _draw_animated_weather(self, condition, hour, time_period):
         """Draw animated weather effects"""
         if condition in ['Rain', 'Drizzle']:
             self._animate_rain()
@@ -717,9 +786,9 @@ class WeatherDisplay:
         elif condition == 'Clouds':
             self._animate_clouds()
         elif condition == 'Clear':
-            if 6 <= hour < 20:
+            if time_period in ['day', 'dawn', 'dusk']:
                 self._animate_sun()
-            else:
+            else:  # night
                 self._animate_stars()
 
     def _animate_rain(self):
@@ -878,12 +947,34 @@ class WeatherDisplay:
             blue_brightness = min(255, brightness + 20)
 
             if 0 <= star['x'] < 96 and 0 <= star['y'] < 48:
+                # Draw the star with current brightness
                 self.manager.draw_pixel(
                     star['x'], star['y'], brightness, brightness, blue_brightness)
+
+                # Add a subtle glow effect for brighter stars
+                if brightness > 200:
+                    glow_brightness = int(brightness * 0.4)
+                    # Draw glow pixels around the star
+                    if star['x'] > 0:
+                        self.manager.draw_pixel(
+                            star['x'] - 1, star['y'], glow_brightness, glow_brightness, min(255, glow_brightness + 10))
+                    if star['x'] < 95:
+                        self.manager.draw_pixel(
+                            star['x'] + 1, star['y'], glow_brightness, glow_brightness, min(255, glow_brightness + 10))
+                    if star['y'] > 0:
+                        self.manager.draw_pixel(
+                            star['x'], star['y'] - 1, glow_brightness, glow_brightness, min(255, glow_brightness + 10))
+                    if star['y'] < 47:
+                        self.manager.draw_pixel(
+                            star['x'], star['y'] + 1, glow_brightness, glow_brightness, min(255, glow_brightness + 10))
+
+            # Update brightness for twinkling
             star['brightness'] += star['direction'] * star['speed']
+
+            # Reverse direction at brightness limits with wider range
             if star['brightness'] >= 255:
                 star['brightness'] = 255
                 star['direction'] = -1
-            elif star['brightness'] <= 150:
-                star['brightness'] = 150
+            elif star['brightness'] <= 80:
+                star['brightness'] = 80
                 star['direction'] = 1
