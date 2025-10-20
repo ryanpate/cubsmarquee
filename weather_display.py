@@ -235,15 +235,56 @@ class WeatherDisplay:
 
     def _get_gradient_colors(self, hour, condition):
         """Get the gradient colors for current time and condition"""
-        # Determine time period
-        if 6 <= hour < 8:
-            time_period = 'dawn'
-        elif 8 <= hour < 17:
-            time_period = 'day'
-        elif 17 <= hour < 20:
-            time_period = 'dusk'
+        # Get sunrise and sunset times from weather data
+        sunrise_timestamp = self.weather_data.get('sys', {}).get('sunrise', 0)
+        sunset_timestamp = self.weather_data.get('sys', {}).get('sunset', 0)
+
+        # Convert to local hour with minutes as decimal for accurate comparison
+        current_time = pendulum.now()
+        current_hour_decimal = current_time.hour + (current_time.minute / 60.0)
+
+        # Determine time period based on actual sun position
+        if sunrise_timestamp and sunset_timestamp:
+            # Convert UTC timestamps to local timezone
+            local_tz = 'America/Chicago'  # Rochester, IL is in Central Time
+            sunrise_time = pendulum.from_timestamp(sunrise_timestamp, tz=local_tz)
+            sunset_time = pendulum.from_timestamp(sunset_timestamp, tz=local_tz)
+
+            sunrise_hour_decimal = sunrise_time.hour + (sunrise_time.minute / 60.0)
+            sunset_hour_decimal = sunset_time.hour + (sunset_time.minute / 60.0)
+
+            # Dawn: 1 hour before sunrise to 30 minutes after sunrise
+            dawn_start = sunrise_hour_decimal - 1
+            dawn_end = sunrise_hour_decimal + 0.5
+
+            # Dusk: 30 minutes before sunset to 1 hour after sunset
+            dusk_start = sunset_hour_decimal - 0.5
+            dusk_end = sunset_hour_decimal + 1
+
+            # Determine time period based on actual sun position
+            if dawn_start <= current_hour_decimal < dawn_end:
+                time_period = 'dawn'
+            elif dawn_end <= current_hour_decimal < dusk_start:
+                time_period = 'day'
+            elif dusk_start <= current_hour_decimal < dusk_end:
+                time_period = 'dusk'
+            else:
+                time_period = 'night'
+
+            # Debug logging to help troubleshoot
+            print(
+                f"Time check: Current={current_hour_decimal:.2f}, Sunrise={sunrise_hour_decimal:.2f}, Sunset={sunset_hour_decimal:.2f}, Period={time_period}")
         else:
-            time_period = 'night'
+            # Fallback to fixed times if sunrise/sunset not available
+            if 6 <= hour < 8:
+                time_period = 'dawn'
+            elif 8 <= hour < 17:
+                time_period = 'day'
+            elif 17 <= hour < 20:
+                time_period = 'dusk'
+            else:
+                time_period = 'night'
+            print(f"Using fallback time periods (no sunrise/sunset data)")
 
         # Return tuple of (top_color, bottom_color)
         if condition == 'Clear':
@@ -349,6 +390,8 @@ class WeatherDisplay:
 
     def _draw_forecast(self):
         """Draw professional forecast information"""
+        import traceback
+
         # Clear canvas
         self.manager.clear_canvas()
 
@@ -377,12 +420,19 @@ class WeatherDisplay:
             return
 
         try:
+            # Get current date to exclude today
+            today = pendulum.now().format('YYYY-MM-DD')
+
             # Get forecast for next 3 days - collect all temps per day
             daily_data = {}
 
             for item in self.forecast_data['list']:
                 dt = pendulum.parse(item['dt_txt'])
                 day_key = dt.format('YYYY-MM-DD')
+
+                # Skip today's data
+                if day_key == today:
+                    continue
 
                 # Initialize day if not seen
                 if day_key not in daily_data:
@@ -399,7 +449,8 @@ class WeatherDisplay:
 
             # Process into forecast list with actual high/low
             forecasts = []
-            for day_key in sorted(daily_data.keys())[:3]:  # Get first 3 days
+            # Get first 3 days after today
+            for day_key in sorted(daily_data.keys())[:3]:
                 day_info = daily_data[day_key]
 
                 # Get actual high and low from all readings that day
@@ -461,6 +512,15 @@ class WeatherDisplay:
                     icon_x = 19
                     icon_y = y_pos - 7
 
+                    # Adjust rain icon position up by 1 pixel for better centering
+                    if forecast['condition'] == 'Rain':
+                        icon_y -= 1
+                    
+                    # Adjust rain icon position up by 1 pixel for better centering
+                    if forecast['condition'] == 'Clouds':
+                        icon_y += 2
+
+
                     # Resize icon if it's too large (max 10x10 for the forecast display)
                     icon_width, icon_height = weather_icon.size
                     max_size = 10
@@ -507,7 +567,6 @@ class WeatherDisplay:
 
                     except Exception as e:
                         print(f"Error drawing weather icon: {e}")
-                        import traceback
                         traceback.print_exc()
                         # Fallback to text if image fails
                         icon_color = self._get_icon_color(
@@ -527,7 +586,7 @@ class WeatherDisplay:
                 temp_high_color = (
                     255, 140, 0) if forecast['temp_high'] >= 80 else (255, 180, 60)
                 self.manager.draw_text('tiny_bold', 30, y_pos, temp_high_color,
-                                       f"{forecast['temp_high']}")
+                                    f"{forecast['temp_high']}")
                 # Degree symbol positioned at top right
                 self.manager.draw_text(
                     'micro', 42, y_pos - 1, temp_high_color, 'o')
@@ -536,7 +595,7 @@ class WeatherDisplay:
                 temp_low_color = (
                     120, 180, 255) if forecast['temp_low'] <= 50 else (180, 200, 220)
                 self.manager.draw_text('tiny', 54, y_pos, temp_low_color,
-                                       f"{forecast['temp_low']}")
+                                    f"{forecast['temp_low']}")
                 # Degree symbol positioned at top right
                 self.manager.draw_text(
                     'micro', 66, y_pos - 1, temp_low_color, 'o')
@@ -554,7 +613,6 @@ class WeatherDisplay:
 
         except Exception as e:
             print(f"Error drawing forecast: {e}")
-            import traceback
             traceback.print_exc()
 
     def _get_weather_icon(self, condition):
@@ -677,7 +735,7 @@ class WeatherDisplay:
             if drop['y'] > 48:
                 drop['y'] = -2
                 drop['x'] = random.randint(0, 95)
-                drop['speed'] = random.uniform(1.5, 2.5)
+                drop['speed'] = random.uniform(2.5, 3.5)
 
     def _animate_snow(self):
         """Animate falling snow"""

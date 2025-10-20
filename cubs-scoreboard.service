@@ -28,8 +28,13 @@ StandardError=journal
 # Give the service time to startup
 TimeoutStartSec=120
 
-# Kill only the main process
-KillMode=process
+# FIXED: Kill all processes in the service's control group
+# This ensures child processes (like the Python script) are also stopped
+KillMode=control-group
+KillSignal=SIGTERM
+
+# Give processes time to clean up before force killing
+TimeoutStopSec=30
 
 [Install]
 WantedBy=multi-user.target

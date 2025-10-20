@@ -3,7 +3,7 @@
 import time
 import requests
 import pendulum
-from scoreboard_config import Colors
+from scoreboard_config import Colors, GameConfig
 
 
 class BearsDisplay:
@@ -157,13 +157,31 @@ class BearsDisplay:
             opponent_name = opponent['team']['displayName']
             opponent_abbr = opponent['team']['abbreviation']
 
-            # Get scores if game has started
-            bears_score = bears['score']
-            opp_score = opponent['score']
+            # Get scores from the API - score is an object with 'value' and 'displayValue'
+            # Example: {"value": 24.0, "displayValue": "24"}
+            bears_score_obj = bears.get('score', {})
+            opp_score_obj = opponent.get('score', {})
+
+            # Extract the actual score value safely
+            if isinstance(bears_score_obj, dict):
+                bears_score = str(int(bears_score_obj.get('value', 0)))
+            else:
+                bears_score = str(bears_score_obj) if bears_score_obj else '0'
+
+            if isinstance(opp_score_obj, dict):
+                opp_score = str(int(opp_score_obj.get('value', 0)))
+            else:
+                opp_score = str(opp_score_obj) if opp_score_obj else '0'
+
+            print(f"Bears score: {bears_score}, Opponent score: {opp_score}")
 
             # Get game status
             status = competition['status']['type']['name']
-            game_time = competition['status']['type']['shortDetail']
+            game_time_raw = competition['status']['type']['shortDetail']
+
+            # If game_time contains actual time info, convert to Central
+            # Otherwise just use as-is (for "Final", "Postponed", etc.)
+            game_time = game_time_raw
 
             while time.time() - start_time < duration:
                 self.manager.clear_canvas()
@@ -189,9 +207,16 @@ class BearsDisplay:
                                            self.BEARS_ORANGE, game_time)
 
                 elif status == 'STATUS_FINAL':
-                    # Game final
-                    result = 'WIN' if int(bears_score) > int(
-                        opp_score) else 'LOSS'
+                    # Game final - safely convert scores to integers for comparison
+                    try:
+                        bears_score_int = int(
+                            float(bears_score)) if bears_score else 0
+                        opp_score_int = int(
+                            float(opp_score)) if opp_score else 0
+                        result = 'WIN' if bears_score_int > opp_score_int else 'LOSS'
+                    except (ValueError, TypeError):
+                        result = 'FINAL'
+
                     result_color = (
                         0, 200, 0) if result == 'WIN' else (200, 0, 0)
 
@@ -209,6 +234,12 @@ class BearsDisplay:
 
                 else:
                     # Game scheduled but not started
+                    # Convert game time to Central timezone
+                    game_datetime = pendulum.parse(game['date'])
+                    game_datetime_central = game_datetime.in_timezone(
+                        'America/Chicago')
+                    display_time = game_datetime_central.format('h:mm A')
+
                     self.manager.draw_text('tiny', 28, 28,
                                            self.BEARS_WHITE, 'TODAY vs')
 
@@ -217,21 +248,23 @@ class BearsDisplay:
                     self.manager.draw_text('tiny', opp_x, 36,
                                            self.BEARS_ORANGE, opponent_name)
 
-                    # Game time at bottom
-                    time_x = max(5, (96 - len(game_time) * 4) // 2)
+                    # Game time at bottom (in Central time)
+                    time_x = max(5, (96 - len(display_time) * 4) // 2)
                     self.manager.draw_text('micro', time_x, 44,
-                                           self.BEARS_WHITE, game_time)
+                                           self.BEARS_WHITE, display_time)
 
                 self.manager.swap_canvas()
                 time.sleep(0.5)
 
         except Exception as e:
             print(f"Error displaying Bears game: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _display_next_game(self, game, duration):
         """Display next upcoming Bears game with scrolling text"""
         start_time = time.time()
-        scroll_pos = 96
+        scroll_position = 96
 
         try:
             # Parse game data
@@ -252,9 +285,12 @@ class BearsDisplay:
             game_date_raw = game['date']
             game_date = pendulum.parse(game_date_raw)
 
-            # Format date and time
-            date_str = game_date.format('ddd MMM D')
-            time_str = game_date.format('h:mm A')
+            # Convert to Central timezone (system timezone)
+            game_date_central = game_date.in_timezone('America/Chicago')
+
+            # Format date and time in Central time
+            date_str = game_date_central.format('ddd MMM D')
+            time_str = game_date_central.format('h:mm A')
 
             message = f"NEXT GAME: {date_str} {vs_at} {opponent_name} at {time_str}"
 
@@ -264,19 +300,24 @@ class BearsDisplay:
                 # Draw sweater-style header
                 self._draw_sweater_header()
 
-                # Scroll the message at the bottom
-                scroll_pos -= 1
-                text_length = len(message) * 7
+                # Scroll the message using GameConfig settings for consistency
+                scroll_increment = getattr(GameConfig, 'SCROLL_PIXELS', 2)
+                scroll_position -= scroll_increment
+                text_length = len(message) * 9
 
-                if scroll_pos + text_length < 0:
-                    scroll_pos = 96
+                if scroll_position + text_length < 0:
+                    scroll_position = 96
 
                 # Draw scrolling message below the header
-                self.manager.draw_text('lineup', scroll_pos, 44,
+                self.manager.draw_text('medium_bold', int(scroll_position), 44,
                                        self.BEARS_WHITE, message)
 
                 self.manager.swap_canvas()
-                time.sleep(0.02)
+
+                # Use GameConfig SCROLL_SPEED for consistent timing
+                time.sleep(GameConfig.SCROLL_SPEED)
 
         except Exception as e:
-            print(f"Error displaying next Bears game: {e}")
+            print(f"Error displaying Bears game: {e}")
+            import traceback
+            traceback.print_exc()

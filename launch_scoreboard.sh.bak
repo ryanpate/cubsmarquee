@@ -1,5 +1,5 @@
 #!/bin/bash
-# Cubs LED Scoreboard Launch Script - FIXED VERSION
+# Cubs LED Scoreboard Launch Script
 
 # Configuration - CORRECTED PATHS
 SCOREBOARD_DIR="/home/pi"  # Your files are here
@@ -45,21 +45,6 @@ rotate_logs() {
     
     echo "Log rotation complete."
 }
-
-# Cleanup function to kill Python process on exit
-cleanup() {
-    echo "Cleanup: Stopping scoreboard processes..."
-    if [ -n "$PYTHON_PID" ]; then
-        sudo kill $PYTHON_PID 2>/dev/null
-        wait $PYTHON_PID 2>/dev/null
-    fi
-    # Also kill any remaining scoreboard Python processes
-    sudo pkill -f "python.*main.py" 2>/dev/null
-    echo "Cleanup complete"
-}
-
-# Set up trap to catch termination signals
-trap cleanup SIGTERM SIGINT EXIT
 
 # Rotate old logs before starting
 rotate_logs
@@ -157,15 +142,8 @@ fi
 
 # Launch the scoreboard with proper permissions for GPIO access
 echo "Launching scoreboard application..." | tee -a "$LOG_FILE"
-
-# Run Python in background and capture PID
-sudo -E "$PYTHON_PATH" main.py >> "$LOG_FILE" 2>> "$ERROR_LOG" &
-PYTHON_PID=$!
-
-echo "Scoreboard running with PID: $PYTHON_PID" | tee -a "$LOG_FILE"
-
-# Wait for the Python process to finish (or be killed)
-wait $PYTHON_PID
+sudo -E "$PYTHON_PATH" main.py >> "$LOG_FILE" 2>> "$ERROR_LOG"
 
 # If the scoreboard exits, log the event and rotate logs
 echo "Scoreboard exited at $(date)" | tee -a "$LOG_FILE"
+rotate_logs
