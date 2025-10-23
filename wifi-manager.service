@@ -1,6 +1,7 @@
 [Unit]
 Description=WiFi Manager with AP Fallback for Cubs Scoreboard
-After=network.target
+After=network-online.target
+Wants=network-online.target
 Before=cubs-scoreboard.service
 
 [Service]
@@ -17,8 +18,8 @@ RestartSec=10
 StandardOutput=journal
 StandardError=journal
 
-# Give network time to initialize
-TimeoutStartSec=120
+# Give network time to initialize - increased timeout
+TimeoutStartSec=180
 
 [Install]
 WantedBy=multi-user.target

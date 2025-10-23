@@ -137,6 +137,24 @@ trap cleanup EXIT SIGTERM SIGINT
 log_message "WiFi Manager starting..."
 log_message "Hostname: ${HOSTNAME}"
 
+# Wait for wlan0 interface to be available (up to 30 seconds)
+log_message "Waiting for wlan0 interface to be available..."
+WLAN_WAIT=0
+while [ $WLAN_WAIT -lt 30 ]; do
+    if ip link show wlan0 &>/dev/null; then
+        log_message "wlan0 interface is available"
+        break
+    fi
+    sleep 1
+    WLAN_WAIT=$((WLAN_WAIT + 1))
+done
+
+if [ $WLAN_WAIT -eq 30 ]; then
+    log_message "ERROR: wlan0 interface never became available after 30 seconds"
+    log_message "Waiting an additional 10 seconds as fallback..."
+    sleep 10
+fi
+
 # First, ensure AP services are stopped if WiFi is already connected
 if check_wifi_connection; then
     log_message "WiFi already connected on startup"
