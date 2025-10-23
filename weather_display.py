@@ -527,7 +527,7 @@ class WeatherDisplay:
                     icon_y = y_pos - 7
 
                     # Adjust rain icon position up by 1 pixel for better centering
-                    if forecast['condition'] == 'Rain':
+                    if forecast['condition'] == 'Rain' or forecast['condition'] == 'Clear':
                         icon_y -= 1
 
                     # Adjust rain icon position up by 1 pixel for better centering

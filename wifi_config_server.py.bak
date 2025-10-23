@@ -7,6 +7,7 @@ import os
 import socket
 import glob
 import json
+import time
 
 app = Flask(__name__)
 
@@ -56,9 +57,10 @@ def load_config():
         'zip_code': '',
         'weather_api_key': '',
         'custom_message': 'GO CUBS GO! SEE YOU NEXT SEASON!',
-        'display_mode': 'auto'
+        'display_mode': 'auto',
+        'enable_bears': True
     }
-    
+
     try:
         if os.path.exists(CONFIG_PATH):
             with open(CONFIG_PATH, 'r') as f:
@@ -66,7 +68,7 @@ def load_config():
                 default_config.update(loaded)
     except Exception as e:
         print(f"Error loading config: {e}")
-    
+
     return default_config
 
 
@@ -128,7 +130,7 @@ HTML_TEMPLATE = """
         .nav-tab {
             padding: 10px 20px;
             cursor: pointer;
-            background: #f0f0f0;
+            background: #6c757d;
             border: none;
             font-size: 16px;
             font-weight: bold;
@@ -177,6 +179,11 @@ HTML_TEMPLATE = """
         textarea {
             resize: vertical;
             min-height: 60px;
+        }
+        input[type="checkbox"] {
+            width: auto;
+            display: inline-block;
+            margin-right: 8px;
         }
         button {
             width: 100%;
@@ -354,7 +361,7 @@ HTML_TEMPLATE = """
                     <label for="display_mode">Display Mode:</label>
                     <select id="display_mode" name="display_mode">
                         <option value="auto" {% if config.display_mode == 'auto' %}selected{% endif %}>
-                            Auto (Rotate between weather, Cubs trivia, and message)
+                            Auto (Rotate between weather, Bears, Cubs trivia, and message)
                         </option>
                         <option value="weather_only" {% if config.display_mode == 'weather_only' %}selected{% endif %}>
                             Weather Only
@@ -363,6 +370,21 @@ HTML_TEMPLATE = """
                             Message Only
                         </option>
                     </select>
+                    <div class="help-text">Choose how content is displayed during off-season</div>
+                </div>
+                
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" 
+                               id="enable_bears" 
+                               name="enable_bears"
+                               {% if config.enable_bears %}checked{% endif %}>
+                        Enable Chicago Bears Display (Football Season)
+                    </label>
+                    <div class="help-text">
+                        Show Bears game info during football season (September - February).
+                        Uses free ESPN API - no additional setup required.
+                    </div>
                 </div>
                 
                 <button type="submit" id="saveDisplayBtn">Save Display Settings</button>
@@ -373,6 +395,23 @@ HTML_TEMPLATE = """
         
         <!-- System Tab -->
         <div id="system-tab" class="tab-content">
+            <h2>Display Service Control</h2>
+            
+            <div class="info-box">
+                <div class="info-row"><strong>Service Status:</strong> <span id="serviceStatus">Loading...</span></div>
+            </div>
+            
+            <button onclick="stopDisplay()" id="stopBtn" class="button-secondary">Stop Display Service</button>
+            <button onclick="startDisplay()" id="startBtn" class="button-secondary" style="margin-top: 10px;">Start Display Service</button>
+            <button onclick="restartDisplay()" id="restartBtn" class="button-secondary" style="margin-top: 10px;">Restart Display Service</button>
+            
+            <div class="warning" style="margin-top: 20px;">
+                <strong>Testing the Bears Display:</strong><br>
+                1. Click "Stop Display Service" above<br>
+                2. SSH into your Pi and run the demo commands from bears_display_demo.py<br>
+                3. When done testing, click "Start Display Service" to resume normal operation
+            </div>
+            
             <h2>System Control</h2>
             
             <button onclick="rebootDevice()" id="rebootBtn" class="button-secondary">Reboot Scoreboard</button>
@@ -400,6 +439,144 @@ HTML_TEMPLATE = """
     </div>
 
     <script>
+        // Load service status on page load
+        window.addEventListener('DOMContentLoaded', function() {
+            checkServiceStatus();
+        });
+        
+        function checkServiceStatus() {
+            fetch('/service_status')
+                .then(response => response.json())
+                .then(data => {
+                    const statusSpan = document.getElementById('serviceStatus');
+                    if (data.running) {
+                        statusSpan.textContent = 'Running ✓';
+                        statusSpan.style.color = '#155724';
+                    } else {
+                        statusSpan.textContent = 'Stopped';
+                        statusSpan.style.color = '#721c24';
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('serviceStatus').textContent = 'Unknown';
+                });
+        }
+        
+        function stopDisplay() {
+            if (!confirm('Stop the display service? The scoreboard will go blank until you start it again.')) {
+                return;
+            }
+            
+            const btn = document.getElementById('stopBtn');
+            const status = document.getElementById('systemStatus');
+            
+            btn.disabled = true;
+            btn.textContent = 'Stopping...';
+            
+            status.style.display = 'block';
+            status.className = 'status';
+            status.textContent = 'Stopping display service...';
+            
+            fetch('/control_service', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({action: 'stop'})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    status.className = 'status success';
+                    status.textContent = 'Display service stopped. You can now run the Bears demo via SSH.';
+                    checkServiceStatus();
+                } else {
+                    status.className = 'status error';
+                    status.textContent = 'Error: ' + data.message;
+                }
+                btn.disabled = false;
+                btn.textContent = 'Stop Display Service';
+            })
+            .catch(error => {
+                status.className = 'status error';
+                status.textContent = 'Error: ' + error;
+                btn.disabled = false;
+                btn.textContent = 'Stop Display Service';
+            });
+        }
+        
+        function startDisplay() {
+            const btn = document.getElementById('startBtn');
+            const status = document.getElementById('systemStatus');
+            
+            btn.disabled = true;
+            btn.textContent = 'Starting...';
+            
+            status.style.display = 'block';
+            status.className = 'status';
+            status.textContent = 'Starting display service...';
+            
+            fetch('/control_service', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({action: 'start'})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    status.className = 'status success';
+                    status.textContent = 'Display service started successfully.';
+                    checkServiceStatus();
+                } else {
+                    status.className = 'status error';
+                    status.textContent = 'Error: ' + data.message;
+                }
+                btn.disabled = false;
+                btn.textContent = 'Start Display Service';
+            })
+            .catch(error => {
+                status.className = 'status error';
+                status.textContent = 'Error: ' + error;
+                btn.disabled = false;
+                btn.textContent = 'Start Display Service';
+            });
+        }
+        
+        function restartDisplay() {
+            const btn = document.getElementById('restartBtn');
+            const status = document.getElementById('systemStatus');
+            
+            btn.disabled = true;
+            btn.textContent = 'Restarting...';
+            
+            status.style.display = 'block';
+            status.className = 'status';
+            status.textContent = 'Restarting display service...';
+            
+            fetch('/control_service', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({action: 'restart'})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    status.className = 'status success';
+                    status.textContent = 'Display service restarted successfully.';
+                    checkServiceStatus();
+                } else {
+                    status.className = 'status error';
+                    status.textContent = 'Error: ' + data.message;
+                }
+                btn.disabled = false;
+                btn.textContent = 'Restart Display Service';
+            })
+            .catch(error => {
+                status.className = 'status error';
+                status.textContent = 'Error: ' + error;
+                btn.disabled = false;
+                btn.textContent = 'Restart Display Service';
+            });
+        }
+        
         function showTab(tabName) {
             // Hide all tabs
             document.querySelectorAll('.tab-content').forEach(tab => {
@@ -578,7 +755,8 @@ HTML_TEMPLATE = """
                 zip_code: document.getElementById('zip_code').value,
                 weather_api_key: document.getElementById('weather_api_key').value,
                 custom_message: document.getElementById('custom_message').value,
-                display_mode: document.getElementById('display_mode').value
+                display_mode: document.getElementById('display_mode').value,
+                enable_bears: document.getElementById('enable_bears').checked
             };
             
             const status = document.getElementById('displayStatus');
@@ -737,20 +915,98 @@ def save_config_route():
     try:
         data = request.json
         current_config = load_config()
-        
+
         # Update with new values
         current_config.update({
             'zip_code': data.get('zip_code', ''),
             'weather_api_key': data.get('weather_api_key', ''),
             'custom_message': data.get('custom_message', 'GO CUBS GO!'),
-            'display_mode': data.get('display_mode', 'auto')
+            'display_mode': data.get('display_mode', 'auto'),
+            'enable_bears': data.get('enable_bears', True)
         })
-        
+
         if save_config(current_config):
             return jsonify({'success': True})
         else:
             return jsonify({'success': False, 'message': 'Failed to save configuration'})
-            
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+
+@app.route('/service_status')
+def service_status():
+    """Check if the scoreboard service is running"""
+    try:
+        result = subprocess.run(
+            ['systemctl', 'is-active', 'cubs-scoreboard'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+
+        is_running = result.stdout.strip() == 'active'
+
+        return jsonify({
+            'running': is_running,
+            'status': result.stdout.strip()
+        })
+
+    except Exception as e:
+        return jsonify({'running': False, 'error': str(e)})
+
+
+@app.route('/control_service', methods=['POST'])
+def control_service():
+    """Control the scoreboard service (stop/start/restart)"""
+    try:
+        data = request.json
+        action = data.get('action')
+
+        if action not in ['stop', 'start', 'restart']:
+            return jsonify({'success': False, 'message': 'Invalid action'})
+
+        if action == 'stop':
+            # First try to stop the service gracefully
+            subprocess.run(['sudo', 'systemctl', 'stop',
+                           'cubs-scoreboard'], timeout=5)
+            # Then force kill any remaining Python processes to ensure scoreboard stops
+            subprocess.run(
+                ['sudo', 'pkill', '-f', 'python.*main.py'], timeout=5)
+            return jsonify({'success': True, 'message': 'Service stopped'})
+
+        elif action == 'restart':
+            # For restart, stop completely first, then start
+            subprocess.run(['sudo', 'systemctl', 'stop',
+                           'cubs-scoreboard'], timeout=5)
+            subprocess.run(
+                ['sudo', 'pkill', '-f', 'python.*main.py'], timeout=5)
+            # Wait a moment for cleanup
+            time.sleep(2)
+            # Now start the service
+            result = subprocess.run(
+                ['sudo', 'systemctl', 'start', 'cubs-scoreboard'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.returncode == 0:
+                return jsonify({'success': True, 'message': 'Service restarted'})
+            else:
+                return jsonify({'success': False, 'message': f'Service restart failed: {result.stderr}'})
+
+        else:  # action == 'start'
+            result = subprocess.run(
+                ['sudo', 'systemctl', 'start', 'cubs-scoreboard'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.returncode == 0:
+                return jsonify({'success': True, 'message': 'Service started'})
+            else:
+                return jsonify({'success': False, 'message': f'Service start failed: {result.stderr}'})
+
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
 
@@ -759,7 +1015,7 @@ def save_config_route():
 def reboot_device():
     """Reboot the Raspberry Pi"""
     try:
-        subprocess.Popen(['sudo', 'reboot', '2'])
+        subprocess.Popen(['sudo', 'reboot'])
         return jsonify({'success': True, 'message': 'Reboot initiated'})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
@@ -770,39 +1026,39 @@ def get_logs(log_type):
     """Retrieve logs based on type"""
     try:
         log_dir = '/home/pi/scoreboard_logs'
-        
+
         if log_type == 'application':
             log_files = glob.glob(f'{log_dir}/scoreboard_*.log')
             if not log_files:
                 return jsonify({'success': False, 'message': 'No application logs found'})
-            
+
             latest_log = max(log_files, key=os.path.getmtime)
             with open(latest_log, 'r') as f:
                 lines = f.readlines()
                 content = ''.join(lines[-500:])
-            
+
             return jsonify({
                 'success': True,
                 'content': content,
                 'filename': os.path.basename(latest_log)
             })
-            
+
         elif log_type == 'error':
             log_files = glob.glob(f'{log_dir}/scoreboard_error_*.log')
             if not log_files:
                 return jsonify({'success': False, 'message': 'No error logs found'})
-            
+
             latest_log = max(log_files, key=os.path.getmtime)
             with open(latest_log, 'r') as f:
                 lines = f.readlines()
                 content = ''.join(lines[-500:])
-            
+
             return jsonify({
                 'success': True,
                 'content': content,
                 'filename': os.path.basename(latest_log)
             })
-            
+
         elif log_type == 'wifi':
             result = subprocess.run(
                 ['journalctl', '-u', 'wifi-manager', '-n', '200', '--no-pager'],
@@ -810,7 +1066,7 @@ def get_logs(log_type):
                 text=True,
                 timeout=5
             )
-            
+
             if result.returncode == 0:
                 return jsonify({
                     'success': True,
@@ -833,10 +1089,10 @@ def get_logs(log_type):
                         'success': False,
                         'message': 'WiFi manager logs not available'
                     })
-        
+
         else:
             return jsonify({'success': False, 'message': 'Invalid log type'})
-            
+
     except Exception as e:
         return jsonify({'success': False, 'message': f'Error reading logs: {str(e)}'})
 
