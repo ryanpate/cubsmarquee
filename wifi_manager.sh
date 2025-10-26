@@ -7,7 +7,7 @@ HOSTNAME=$(hostname)
 AP_SSID="CubsScoreboard-Setup"
 AP_PASSWORD="gocubsgo2024"
 AP_IP="10.0.0.1"
-MAX_WIFI_ATTEMPTS=30
+MAX_WIFI_ATTEMPTS=60
 CHECK_INTERVAL=2
 
 log_message() {
