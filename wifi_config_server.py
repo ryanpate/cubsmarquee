@@ -32,6 +32,58 @@ def get_hostname():
     return socket.gethostname()
 
 
+def set_hostname(new_hostname):
+    """Set the Pi's hostname"""
+    # Validate hostname format
+    # Must be alphanumeric with hyphens, 1-63 characters, lowercase
+    hostname_pattern = re.compile(r'^[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?$')
+
+    if not hostname_pattern.match(new_hostname):
+        return False, "Invalid hostname format. Use lowercase letters, numbers, and hyphens (1-63 chars)."
+
+    # Reserved/problematic hostnames
+    reserved = ['localhost', 'raspberrypi']
+    if new_hostname in reserved:
+        return False, f"Hostname '{new_hostname}' is reserved. Please choose a different name."
+
+    try:
+        current_hostname = get_hostname()
+
+        # Update /etc/hostname
+        with open('/tmp/hostname', 'w') as f:
+            f.write(f"{new_hostname}\n")
+
+        subprocess.run(['sudo', 'cp', '/tmp/hostname', '/etc/hostname'], check=True)
+
+        # Update /etc/hosts
+        # Read current hosts file
+        with open('/etc/hosts', 'r') as f:
+            hosts_content = f.read()
+
+        # Replace old hostname with new hostname
+        hosts_content = hosts_content.replace(current_hostname, new_hostname)
+
+        # Ensure localhost entries exist
+        if '127.0.0.1' not in hosts_content:
+            hosts_content = f"127.0.0.1\tlocalhost\n127.0.1.1\t{new_hostname}\n" + hosts_content
+
+        with open('/tmp/hosts', 'w') as f:
+            f.write(hosts_content)
+
+        subprocess.run(['sudo', 'cp', '/tmp/hosts', '/etc/hosts'], check=True)
+
+        # Set hostname immediately (without reboot)
+        subprocess.run(['sudo', 'hostnamectl', 'set-hostname', new_hostname], check=True)
+
+        # Restart Avahi daemon to advertise new hostname via mDNS
+        subprocess.run(['sudo', 'systemctl', 'restart', 'avahi-daemon'], check=False)
+
+        return True, f"Hostname changed to '{new_hostname}'. Access at http://{new_hostname}.local/admin"
+
+    except Exception as e:
+        return False, f"Error setting hostname: {str(e)}"
+
+
 def get_current_network():
     """Get currently connected network SSID"""
     try:
@@ -314,6 +366,7 @@ HTML_TEMPLATE = """
         <div class="nav-tabs">
             <button class="nav-tab active" onclick="switchTab('wifi')">WiFi Setup</button>
             <button class="nav-tab" onclick="switchTab('config')">Display Config</button>
+            <button class="nav-tab" onclick="switchTab('system')">System</button>
             <button class="nav-tab" onclick="switchTab('service')">Service Control</button>
             <button class="nav-tab" onclick="switchTab('logs')">Logs</button>
         </div>
@@ -381,6 +434,34 @@ HTML_TEMPLATE = """
 
             <button onclick="saveConfig()">Save Configuration</button>
             <div id="config-status" class="status"></div>
+        </div>
+
+        <div id="system-tab" class="tab-content">
+            <h2>System Settings</h2>
+
+            <div class="info-box">
+                <strong>Current Hostname:</strong> {{ hostname }}
+                <div class="help-text" style="margin-top: 10px;">
+                    This is how you access the scoreboard on your local network: <strong>http://{{ hostname }}.local/admin</strong>
+                </div>
+            </div>
+
+            <div class="warning">
+                <strong>⚠️ Important:</strong> If multiple scoreboards are on the same WiFi network, each must have a unique hostname.
+                After changing the hostname, you'll need to access the admin page at the new address: <strong>http://new-hostname.local/admin</strong>
+            </div>
+
+            <div class="form-group">
+                <label for="new_hostname">New Hostname:</label>
+                <input type="text" id="new_hostname" placeholder="e.g., cubsmarquee-1" pattern="[a-z0-9\-]+" value="{{ hostname }}">
+                <div class="help-text">
+                    Use lowercase letters, numbers, and hyphens only (1-63 characters).
+                    Examples: cubsmarquee-1, scoreboard-wrigley, cubs-display-01
+                </div>
+            </div>
+
+            <button onclick="changeHostname()">Change Hostname</button>
+            <div id="hostname-status" class="status"></div>
         </div>
 
         <div id="service-tab" class="tab-content">
@@ -567,6 +648,61 @@ HTML_TEMPLATE = """
             } finally {
                 button.disabled = false;
                 button.textContent = 'Save Configuration';
+            }
+        }
+
+        async function changeHostname() {
+            const newHostname = document.getElementById('new_hostname').value.toLowerCase().trim();
+            const currentHostname = '{{ hostname }}';
+
+            if (!newHostname) {
+                showStatus('hostname-status', 'Please enter a hostname', false);
+                return;
+            }
+
+            if (newHostname === currentHostname) {
+                showStatus('hostname-status', 'New hostname is the same as current hostname', false);
+                return;
+            }
+
+            // Validate hostname format
+            const hostnamePattern = /^[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?$/;
+            if (!hostnamePattern.test(newHostname)) {
+                showStatus('hostname-status', 'Invalid hostname format. Use lowercase letters, numbers, and hyphens only (1-63 chars)', false);
+                return;
+            }
+
+            if (!confirm(`Are you sure you want to change the hostname from "${currentHostname}" to "${newHostname}"?\n\nAfter the change, you'll need to access this page at:\nhttp://${newHostname}.local/admin`)) {
+                return;
+            }
+
+            const button = event.target;
+            button.disabled = true;
+            button.textContent = 'Changing Hostname...';
+
+            try {
+                const response = await fetch('/change_hostname', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ hostname: newHostname })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showStatus('hostname-status', data.message + ' Redirecting in 5 seconds...', true);
+                    setTimeout(() => {
+                        window.location.href = `http://${newHostname}.local/admin`;
+                    }, 5000);
+                } else {
+                    showStatus('hostname-status', 'Error: ' + data.message, false);
+                    button.disabled = false;
+                    button.textContent = 'Change Hostname';
+                }
+            } catch (error) {
+                showStatus('hostname-status', 'Error changing hostname: ' + error.message, false);
+                button.disabled = false;
+                button.textContent = 'Change Hostname';
             }
         }
 
@@ -883,6 +1019,24 @@ def save_config_route():
             return jsonify({'success': True})
         else:
             return jsonify({'success': False, 'message': 'Failed to save configuration'})
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+
+@app.route('/change_hostname', methods=['POST'])
+def change_hostname_route():
+    """Change the system hostname"""
+    try:
+        data = request.json
+        new_hostname = data.get('hostname', '').lower().strip()
+
+        if not new_hostname:
+            return jsonify({'success': False, 'message': 'Hostname is required'})
+
+        success, message = set_hostname(new_hostname)
+
+        return jsonify({'success': success, 'message': message})
 
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
