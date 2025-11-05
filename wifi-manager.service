@@ -1,8 +1,8 @@
 [Unit]
 Description=WiFi Manager with AP Fallback for Cubs Scoreboard
-After=network-online.target
-Wants=network-online.target
-Before=cubs-scoreboard.service
+After=network-pre.target avahi-daemon.service
+Wants=network-pre.target avahi-daemon.service
+Requires=avahi-daemon.service
 
 [Service]
 Type=simple

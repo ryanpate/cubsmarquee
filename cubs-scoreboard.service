@@ -1,6 +1,6 @@
 [Unit]
 Description=Chicago Cubs LED Matrix Scoreboard
-After=network-online.target
+After=network-online.target wifi-manager.service
 Wants=network-online.target
 
 [Service]
@@ -13,6 +13,9 @@ WorkingDirectory=/home/pi
 
 # Environment variables
 Environment="PYTHONUNBUFFERED=1"
+
+# Wait a few seconds after WiFi is ready to ensure DNS is stable
+ExecStartPre=/bin/sleep 5
 
 # Execute the launch script from the correct location
 ExecStart=/home/pi/launch_scoreboard.sh

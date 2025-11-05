@@ -8,6 +8,7 @@ import socket
 import glob
 import json
 import time
+import re
 
 app = Flask(__name__)
 
@@ -273,524 +274,322 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <div class="container">
-        <h1>Cubs Scoreboard Admin</h1>
-        <div class="subtitle">Device: {{ hostname }}.local</div>
-        
+        <h1>🐻 Cubs Scoreboard Admin</h1>
+        <div class="subtitle">Configuration & Management</div>
+
         <div class="info-box">
-            <div class="info-row"><strong>Current Network:</strong> {{ current_network }}</div>
-            <div class="info-row"><strong>IP Address:</strong> {{ ip_address }}</div>
-            <div class="info-row"><strong>Connection Mode:</strong> {{ mode }}</div>
+            <div class="info-row"><strong>Status:</strong> <span id="connection-mode">Loading...</span></div>
+            <div class="info-row"><strong>Hostname:</strong> {{ hostname }}</div>
+            <div class="info-row"><strong>Current Network:</strong> <span id="current-network">Loading...</span></div>
+            <div class="info-row"><strong>IP Address:</strong> <span id="ip-address">Loading...</span></div>
+            <div class="info-row"><strong>Access URL:</strong> http://{{ hostname }}.local/admin</div>
         </div>
-        
+
         <div class="nav-tabs">
-            <button class="nav-tab active" onclick="showTab('wifi')">WiFi</button>
-            <button class="nav-tab" onclick="showTab('display')">Display Settings</button>
-            <button class="nav-tab" onclick="showTab('system')">System</button>
+            <button class="nav-tab active" onclick="switchTab('wifi')">WiFi Setup</button>
+            <button class="nav-tab" onclick="switchTab('display')">Display Config</button>
+            <button class="nav-tab" onclick="switchTab('system')">System</button>
+            <button class="nav-tab" onclick="switchTab('logs')">Logs</button>
         </div>
-        
+
         <!-- WiFi Tab -->
         <div id="wifi-tab" class="tab-content active">
-            {% if 'Access Point' in mode %}
-            <div class="warning">
-                <strong>Access Point Mode Active</strong><br>
-                The scoreboard couldn't connect to a WiFi network and is running in hotspot mode.
-                Configure your WiFi credentials below to connect.
-            </div>
-            {% endif %}
-            
             <h2>WiFi Configuration</h2>
             
-            <div class="form-group">
-                <label>Available Networks:</label>
-                <div class="network-list" id="networkList">
-                    <div style="padding: 10px; text-align: center;">Click "Refresh Networks" to scan</div>
-                </div>
-                <button onclick="scanNetworks()" id="scanBtn">Refresh Networks</button>
+            <div class="warning">
+                <strong>⚠️ Important:</strong> After connecting to WiFi, the device will leave Access Point mode. 
+                Make sure to note the hostname above to access this page on your network.
             </div>
-            
-            <form id="wifiForm">
-                <div class="form-group">
-                    <label for="ssid">Network Name (SSID):</label>
-                    <input type="text" id="ssid" name="ssid" required placeholder="Enter network name">
+
+            <div class="form-group">
+                <label>Available Networks</label>
+                <button onclick="scanNetworks()" class="button-secondary">Scan for Networks</button>
+                <div id="network-list" class="network-list" style="display:none; margin-top: 10px;">
+                    <div style="padding: 20px; text-align: center; color: #666;">
+                        Click "Scan for Networks" to see available WiFi networks
+                    </div>
                 </div>
-                
-                <div class="form-group">
-                    <label for="password">Password:</label>
-                    <input type="password" id="password" name="password" required placeholder="Enter network password">
-                </div>
-                
-                <button type="submit" id="connectBtn">Connect to Network</button>
-            </form>
-            
-            <div id="wifiStatus" class="status"></div>
+            </div>
+
+            <div class="form-group">
+                <label for="wifi-ssid">Network Name (SSID)</label>
+                <input type="text" id="wifi-ssid" placeholder="Enter WiFi network name">
+            </div>
+
+            <div class="form-group">
+                <label for="wifi-password">Password</label>
+                <input type="password" id="wifi-password" placeholder="Enter WiFi password">
+                <div class="help-text">Your WiFi credentials are stored securely on the device</div>
+            </div>
+
+            <button onclick="connectWiFi()">Connect to WiFi</button>
+            <div id="wifi-status" class="status"></div>
         </div>
-        
-        <!-- Display Settings Tab -->
+
+        <!-- Display Config Tab -->
         <div id="display-tab" class="tab-content">
-            <h2>Off-Season Display Settings</h2>
-            
-            <form id="displayForm">
-                <div class="form-group">
-                    <label for="zip_code">Zip Code (for weather):</label>
-                    <input type="text" id="zip_code" name="zip_code" 
-                           value="{{ config.zip_code }}" 
-                           placeholder="60613" 
-                           maxlength="5" 
-                           pattern="[0-9]{5}">
-                    <div class="help-text">Enter your 5-digit US zip code for local weather</div>
-                </div>
-                
-                <div class="form-group">
-                    <label for="weather_api_key">OpenWeatherMap API Key:</label>
-                    <input type="text" id="weather_api_key" name="weather_api_key" 
-                           value="{{ config.weather_api_key }}" 
-                           placeholder="Enter your API key">
-                    <div class="help-text">
-                        Get a free API key at <a href="https://openweathermap.org/api" target="_blank">openweathermap.org/api</a>
-                    </div>
-                </div>
-                
-                <div class="form-group">
-                    <label for="custom_message">Custom Message:</label>
-                    <textarea id="custom_message" name="custom_message" 
-                              placeholder="GO CUBS GO! SEE YOU NEXT SEASON!">{{ config.custom_message }}</textarea>
-                    <div class="help-text">This message will scroll on the display during off-season</div>
-                </div>
-                
-                <div class="form-group">
-                    <label for="display_mode">Display Mode:</label>
-                    <select id="display_mode" name="display_mode">
-                        <option value="auto" {% if config.display_mode == 'auto' %}selected{% endif %}>
-                            Auto (Rotate between weather, Bears, Cubs trivia, and message)
-                        </option>
-                        <option value="weather_only" {% if config.display_mode == 'weather_only' %}selected{% endif %}>
-                            Weather Only
-                        </option>
-                        <option value="message_only" {% if config.display_mode == 'message_only' %}selected{% endif %}>
-                            Message Only
-                        </option>
-                    </select>
-                    <div class="help-text">Choose how content is displayed during off-season</div>
-                </div>
-                
-                <div class="form-group">
-                    <label>
-                        <input type="checkbox" 
-                               id="enable_bears" 
-                               name="enable_bears"
-                               {% if config.enable_bears %}checked{% endif %}>
-                        Enable Chicago Bears Display (Football Season)
-                    </label>
-                    <div class="help-text">
-                        Show Bears game info during football season (September - February).
-                        Uses free ESPN API - no additional setup required.
-                    </div>
-                </div>
-                
-                <button type="submit" id="saveDisplayBtn">Save Display Settings</button>
-            </form>
-            
-            <div id="displayStatus" class="status"></div>
+            <h2>Display Configuration</h2>
+
+            <div class="form-group">
+                <label for="zip-code">ZIP Code</label>
+                <input type="text" id="zip-code" placeholder="60613" value="{{ config.zip_code }}">
+                <div class="help-text">Used for weather information and local game times</div>
+            </div>
+
+            <div class="form-group">
+                <label for="weather-api-key">Weather API Key (OpenWeatherMap)</label>
+                <input type="text" id="weather-api-key" placeholder="Enter your API key" value="{{ config.weather_api_key }}">
+                <div class="help-text">Get a free API key at <a href="https://openweathermap.org/api" target="_blank">openweathermap.org/api</a></div>
+            </div>
+
+            <div class="form-group">
+                <label for="custom-message">Custom Message</label>
+                <textarea id="custom-message" rows="3">{{ config.custom_message }}</textarea>
+                <div class="help-text">Displayed during off-season or when no games are scheduled</div>
+            </div>
+
+            <div class="form-group">
+                <label for="display-mode">Display Mode</label>
+                <select id="display-mode">
+                    <option value="auto" {% if config.display_mode == 'auto' %}selected{% endif %}>Auto (Game schedule based)</option>
+                    <option value="always_on" {% if config.display_mode == 'always_on' %}selected{% endif %}>Always On</option>
+                    <option value="schedule" {% if config.display_mode == 'schedule' %}selected{% endif %}>Schedule Only</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="enable-bears" {% if config.enable_bears %}checked{% endif %}>
+                    Enable Chicago Bears Scores
+                </label>
+                <div class="help-text">Show Bears game information during NFL season</div>
+            </div>
+
+            <button onclick="saveConfig()">Save Configuration</button>
+            <div id="config-status" class="status"></div>
         </div>
-        
+
         <!-- System Tab -->
         <div id="system-tab" class="tab-content">
-            <h2>Display Service Control</h2>
-            
-            <div class="info-box">
-                <div class="info-row"><strong>Service Status:</strong> <span id="serviceStatus">Loading...</span></div>
-            </div>
-            
-            <button onclick="stopDisplay()" id="stopBtn" class="button-secondary">Stop Display Service</button>
-            <button onclick="startDisplay()" id="startBtn" class="button-secondary" style="margin-top: 10px;">Start Display Service</button>
-            <button onclick="restartDisplay()" id="restartBtn" class="button-secondary" style="margin-top: 10px;">Restart Display Service</button>
-            
-            <div class="warning" style="margin-top: 20px;">
-                <strong>Testing the Bears Display:</strong><br>
-                1. Click "Stop Display Service" above<br>
-                2. SSH into your Pi and run the demo commands from bears_display_demo.py<br>
-                3. When done testing, click "Start Display Service" to resume normal operation
-            </div>
-            
             <h2>System Control</h2>
-            
-            <button onclick="rebootDevice()" id="rebootBtn" class="button-secondary">Reboot Scoreboard</button>
-            
-            <h2>System Logs</h2>
-            
-            <button onclick="viewLogs('application')" class="button-secondary">View Application Logs</button>
-            <button onclick="viewLogs('error')" class="button-secondary" style="margin-top: 10px;">View Error Logs</button>
-            <button onclick="viewLogs('wifi')" class="button-secondary" style="margin-top: 10px;">View WiFi Manager Logs</button>
-            
-            <div id="logViewer" style="display: none; margin-top: 20px;">
-                <h3 id="logTitle" style="color: #0C2340;"></h3>
-                <div style="background: #f8f9fa; border: 2px solid #0C2340; border-radius: 5px; padding: 10px; max-height: 400px; overflow-y: auto;">
-                    <pre id="logContent" style="margin: 0; font-size: 11px; white-space: pre-wrap; word-wrap: break-word;"></pre>
+
+            <div class="info-box">
+                <div class="info-row">
+                    <strong>Scoreboard Service:</strong> <span id="service-status">Loading...</span>
                 </div>
-                <button onclick="closeLogViewer()" class="button-secondary" style="margin-top: 10px;">Close Logs</button>
             </div>
+
+            <button onclick="controlService('stop')" class="button-secondary">Stop Scoreboard</button>
+            <button onclick="controlService('start')" class="button-secondary">Start Scoreboard</button>
+            <button onclick="controlService('restart')" class="button-secondary">Restart Scoreboard</button>
             
-            <div id="systemStatus" class="status"></div>
+            <h2 style="margin-top: 30px;">System Actions</h2>
+            <div class="warning">
+                <strong>⚠️ Warning:</strong> Rebooting will temporarily disconnect the device
+            </div>
+            <button onclick="rebootDevice()" class="button-secondary">Reboot Device</button>
+            
+            <div id="system-status" class="status"></div>
         </div>
-        
+
+        <!-- Logs Tab -->
+        <div id="logs-tab" class="tab-content">
+            <h2>System Logs</h2>
+
+            <div class="form-group">
+                <button onclick="viewLogs('application')" class="button-secondary">View Application Logs</button>
+                <button onclick="viewLogs('error')" class="button-secondary">View Error Logs</button>
+                <button onclick="viewLogs('wifi')" class="button-secondary">View WiFi Manager Logs</button>
+            </div>
+
+            <div id="log-viewer" style="display:none; margin-top: 20px;">
+                <h3 id="log-title"></h3>
+                <textarea readonly style="width: 100%; height: 400px; font-family: monospace; font-size: 12px; background: #f5f5f5;" id="log-content"></textarea>
+            </div>
+        </div>
+
         <div class="footer">
-            Access this page anytime at: <strong>{{ hostname }}.local/admin</strong>
+            Cubs Scoreboard v1.0 | <a href="https://github.com/yourusername/cubs-scoreboard" target="_blank">Documentation</a>
         </div>
     </div>
 
     <script>
-        // Load service status on page load
-        window.addEventListener('DOMContentLoaded', function() {
-            checkServiceStatus();
-        });
-        
-        function checkServiceStatus() {
+        // Update status information on load
+        function updateStatus() {
             fetch('/service_status')
-                .then(response => response.json())
+                .then(r => r.json())
                 .then(data => {
-                    const statusSpan = document.getElementById('serviceStatus');
-                    if (data.running) {
-                        statusSpan.textContent = 'Running ✓';
-                        statusSpan.style.color = '#155724';
-                    } else {
-                        statusSpan.textContent = 'Stopped';
-                        statusSpan.style.color = '#721c24';
-                    }
-                })
-                .catch(error => {
-                    document.getElementById('serviceStatus').textContent = 'Unknown';
+                    document.getElementById('service-status').textContent = 
+                        data.running ? '✓ Running' : '✗ Stopped';
                 });
+
+            document.getElementById('connection-mode').textContent = '{{ mode }}';
+            document.getElementById('current-network').textContent = '{{ current_network }}';
+            document.getElementById('ip-address').textContent = '{{ ip }}';
         }
-        
-        function stopDisplay() {
-            if (!confirm('Stop the display service? The scoreboard will go blank until you start it again.')) {
-                return;
-            }
-            
-            const btn = document.getElementById('stopBtn');
-            const status = document.getElementById('systemStatus');
-            
-            btn.disabled = true;
-            btn.textContent = 'Stopping...';
-            
-            status.style.display = 'block';
-            status.className = 'status';
-            status.textContent = 'Stopping display service...';
-            
-            fetch('/control_service', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({action: 'stop'})
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    status.className = 'status success';
-                    status.textContent = 'Display service stopped. You can now run the Bears demo via SSH.';
-                    checkServiceStatus();
-                } else {
-                    status.className = 'status error';
-                    status.textContent = 'Error: ' + data.message;
-                }
-                btn.disabled = false;
-                btn.textContent = 'Stop Display Service';
-            })
-            .catch(error => {
-                status.className = 'status error';
-                status.textContent = 'Error: ' + error;
-                btn.disabled = false;
-                btn.textContent = 'Stop Display Service';
-            });
-        }
-        
-        function startDisplay() {
-            const btn = document.getElementById('startBtn');
-            const status = document.getElementById('systemStatus');
-            
-            btn.disabled = true;
-            btn.textContent = 'Starting...';
-            
-            status.style.display = 'block';
-            status.className = 'status';
-            status.textContent = 'Starting display service...';
-            
-            fetch('/control_service', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({action: 'start'})
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    status.className = 'status success';
-                    status.textContent = 'Display service started successfully.';
-                    checkServiceStatus();
-                } else {
-                    status.className = 'status error';
-                    status.textContent = 'Error: ' + data.message;
-                }
-                btn.disabled = false;
-                btn.textContent = 'Start Display Service';
-            })
-            .catch(error => {
-                status.className = 'status error';
-                status.textContent = 'Error: ' + error;
-                btn.disabled = false;
-                btn.textContent = 'Start Display Service';
-            });
-        }
-        
-        function restartDisplay() {
-            const btn = document.getElementById('restartBtn');
-            const status = document.getElementById('systemStatus');
-            
-            btn.disabled = true;
-            btn.textContent = 'Restarting...';
-            
-            status.style.display = 'block';
-            status.className = 'status';
-            status.textContent = 'Restarting display service...';
-            
-            fetch('/control_service', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({action: 'restart'})
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    status.className = 'status success';
-                    status.textContent = 'Display service restarted successfully.';
-                    checkServiceStatus();
-                } else {
-                    status.className = 'status error';
-                    status.textContent = 'Error: ' + data.message;
-                }
-                btn.disabled = false;
-                btn.textContent = 'Restart Display Service';
-            })
-            .catch(error => {
-                status.className = 'status error';
-                status.textContent = 'Error: ' + error;
-                btn.disabled = false;
-                btn.textContent = 'Restart Display Service';
-            });
-        }
-        
-        function showTab(tabName) {
-            // Hide all tabs
+
+        updateStatus();
+        setInterval(updateStatus, 5000);
+
+        function switchTab(tabName) {
             document.querySelectorAll('.tab-content').forEach(tab => {
                 tab.classList.remove('active');
             });
-            document.querySelectorAll('.nav-tab').forEach(tab => {
-                tab.classList.remove('active');
+            document.querySelectorAll('.nav-tab').forEach(btn => {
+                btn.classList.remove('active');
             });
-            
-            // Show selected tab
+
             document.getElementById(tabName + '-tab').classList.add('active');
             event.target.classList.add('active');
         }
-        
+
         function scanNetworks() {
-            const btn = document.getElementById('scanBtn');
-            const list = document.getElementById('networkList');
-            
-            btn.disabled = true;
-            btn.textContent = 'Scanning...';
-            list.innerHTML = '<div style="padding: 10px; text-align: center;">Scanning for networks...</div>';
-            
+            const listEl = document.getElementById('network-list');
+            listEl.style.display = 'block';
+            listEl.innerHTML = '<div style="padding: 20px; text-align: center;">Scanning...</div>';
+
             fetch('/scan')
-                .then(response => response.json())
+                .then(r => r.json())
                 .then(data => {
-                    if (data.networks.length === 0) {
-                        list.innerHTML = '<div style="padding: 10px; text-align: center;">No networks found</div>';
-                    } else {
-                        list.innerHTML = data.networks.map(network => 
-                            `<div class="network-item" onclick="selectNetwork('${escapeHtml(network.ssid)}')">
-                                ${escapeHtml(network.ssid)}
-                                <span class="signal">${network.signal}%</span>
+                    if (data.networks && data.networks.length > 0) {
+                        listEl.innerHTML = data.networks.map(net => 
+                            `<div class="network-item" onclick="selectNetwork('${net.ssid}')">
+                                ${net.ssid}
+                                <span class="signal">${net.signal}%</span>
                             </div>`
                         ).join('');
+                    } else {
+                        listEl.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">No networks found</div>';
                     }
-                })
-                .catch(error => {
-                    console.error('Error scanning networks:', error);
-                    list.innerHTML = '<div style="padding: 10px; text-align: center; color: #721c24;">Error scanning networks</div>';
-                })
-                .finally(() => {
-                    btn.disabled = false;
-                    btn.textContent = 'Refresh Networks';
                 });
         }
-        
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-        
+
         function selectNetwork(ssid) {
-            document.getElementById('ssid').value = ssid;
-            document.getElementById('password').focus();
+            document.getElementById('wifi-ssid').value = ssid;
+            document.getElementById('wifi-password').focus();
         }
-        
-        function rebootDevice() {
-            if (!confirm('Are you sure you want to reboot the scoreboard? This will interrupt any running display.')) {
+
+        function connectWiFi() {
+            const ssid = document.getElementById('wifi-ssid').value;
+            const password = document.getElementById('wifi-password').value;
+            const statusEl = document.getElementById('wifi-status');
+
+            if (!ssid || !password) {
+                showStatus(statusEl, 'Please enter both SSID and password', 'error');
                 return;
             }
-            
-            const btn = document.getElementById('rebootBtn');
-            const status = document.getElementById('systemStatus');
-            
-            btn.disabled = true;
-            btn.textContent = 'Rebooting...';
-            
-            status.style.display = 'block';
-            status.className = 'status';
-            status.textContent = 'Rebooting device... This will take about 30 seconds.';
-            
-            fetch('/reboot', {
-                method: 'POST'
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    status.className = 'status success';
-                    status.textContent = 'Reboot initiated. The scoreboard will be back online in about 30 seconds.';
-                } else {
-                    status.className = 'status error';
-                    status.textContent = 'Error: ' + data.message;
-                    btn.disabled = false;
-                    btn.textContent = 'Reboot Scoreboard';
-                }
-            })
-            .catch(error => {
-                status.className = 'status success';
-                status.textContent = 'Reboot in progress. The page will be unavailable until the device restarts (about 30 seconds).';
-            });
-        }
-        
-        function viewLogs(logType) {
-            const viewer = document.getElementById('logViewer');
-            const title = document.getElementById('logTitle');
-            const content = document.getElementById('logContent');
-            
-            viewer.style.display = 'block';
-            title.textContent = 'Loading logs...';
-            content.textContent = 'Please wait...';
-            viewer.scrollIntoView({ behavior: 'smooth' });
-            
-            fetch(`/logs/${logType}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        const logNames = {
-                            'application': 'Application Logs',
-                            'error': 'Error Logs',
-                            'wifi': 'WiFi Manager Logs'
-                        };
-                        title.textContent = logNames[logType] + (data.filename ? ` - ${data.filename}` : '');
-                        content.textContent = data.content || 'No logs available';
-                    } else {
-                        title.textContent = 'Error Loading Logs';
-                        content.textContent = data.message;
-                    }
-                })
-                .catch(error => {
-                    title.textContent = 'Error Loading Logs';
-                    content.textContent = 'Failed to fetch logs: ' + error;
-                });
-        }
-        
-        function closeLogViewer() {
-            document.getElementById('logViewer').style.display = 'none';
-        }
-        
-        document.getElementById('wifiForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const ssid = document.getElementById('ssid').value;
-            const password = document.getElementById('password').value;
-            const status = document.getElementById('wifiStatus');
-            const connectBtn = document.getElementById('connectBtn');
-            
-            status.style.display = 'block';
-            status.className = 'status';
-            status.textContent = 'Connecting to network... This may take up to 30 seconds.';
-            connectBtn.disabled = true;
-            connectBtn.textContent = 'Connecting...';
-            
+
+            showStatus(statusEl, 'Configuring WiFi...', 'success');
+
             fetch('/connect', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ssid: ssid, password: password})
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ssid, password})
             })
-            .then(response => response.json())
+            .then(r => r.json())
             .then(data => {
                 if (data.success) {
-                    status.className = 'status success';
-                    status.textContent = 'Success! The scoreboard is connecting to the network. The page will reload in 30 seconds to check the connection.';
-                    setTimeout(() => window.location.reload(), 30000);
+                    showStatus(statusEl, data.message + ' The device will exit AP mode if connection is successful. You may need to reconnect to your regular WiFi network to access the scoreboard again.', 'success');
                 } else {
-                    status.className = 'status error';
-                    status.textContent = 'Error: ' + data.message;
-                    connectBtn.disabled = false;
-                    connectBtn.textContent = 'Connect to Network';
+                    showStatus(statusEl, 'Error: ' + data.message, 'error');
                 }
             })
-            .catch(error => {
-                status.className = 'status error';
-                status.textContent = 'Error connecting to network: ' + error;
-                connectBtn.disabled = false;
-                connectBtn.textContent = 'Connect to Network';
+            .catch(err => {
+                showStatus(statusEl, 'Connection error: ' + err, 'error');
             });
-        });
-        
-        document.getElementById('displayForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const formData = {
-                zip_code: document.getElementById('zip_code').value,
-                weather_api_key: document.getElementById('weather_api_key').value,
-                custom_message: document.getElementById('custom_message').value,
-                display_mode: document.getElementById('display_mode').value,
-                enable_bears: document.getElementById('enable_bears').checked
+        }
+
+        function saveConfig() {
+            const statusEl = document.getElementById('config-status');
+            showStatus(statusEl, 'Saving configuration...', 'success');
+
+            const config = {
+                zip_code: document.getElementById('zip-code').value,
+                weather_api_key: document.getElementById('weather-api-key').value,
+                custom_message: document.getElementById('custom-message').value,
+                display_mode: document.getElementById('display-mode').value,
+                enable_bears: document.getElementById('enable-bears').checked
             };
-            
-            const status = document.getElementById('displayStatus');
-            const saveBtn = document.getElementById('saveDisplayBtn');
-            
-            status.style.display = 'block';
-            status.className = 'status';
-            status.textContent = 'Saving settings...';
-            saveBtn.disabled = true;
-            
+
             fetch('/save_config', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(formData)
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(config)
             })
-            .then(response => response.json())
+            .then(r => r.json())
             .then(data => {
                 if (data.success) {
-                    status.className = 'status success';
-                    status.textContent = 'Settings saved successfully! Changes will take effect during the next off-season display cycle.';
+                    showStatus(statusEl, 'Configuration saved successfully!', 'success');
                 } else {
-                    status.className = 'status error';
-                    status.textContent = 'Error: ' + data.message;
+                    showStatus(statusEl, 'Error: ' + data.message, 'error');
                 }
-                saveBtn.disabled = false;
-            })
-            .catch(error => {
-                status.className = 'status error';
-                status.textContent = 'Error saving settings: ' + error;
-                saveBtn.disabled = false;
             });
-        });
+        }
+
+        function controlService(action) {
+            const statusEl = document.getElementById('system-status');
+            showStatus(statusEl, `${action}ing service...`, 'success');
+
+            fetch('/control_service', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({action})
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showStatus(statusEl, data.message, 'success');
+                    setTimeout(updateStatus, 2000);
+                } else {
+                    showStatus(statusEl, 'Error: ' + data.message, 'error');
+                }
+            });
+        }
+
+        function rebootDevice() {
+            if (!confirm('Are you sure you want to reboot the device?')) return;
+
+            const statusEl = document.getElementById('system-status');
+            showStatus(statusEl, 'Rebooting device... Please wait about 30 seconds.', 'success');
+
+            fetch('/reboot', {method: 'POST'})
+                .then(r => r.json())
+                .then(data => {
+                    showStatus(statusEl, 'Device is rebooting. This page will become unavailable.', 'success');
+                });
+        }
+
+        function viewLogs(logType) {
+            const viewer = document.getElementById('log-viewer');
+            const title = document.getElementById('log-title');
+            const content = document.getElementById('log-content');
+
+            viewer.style.display = 'block';
+            title.textContent = 'Loading logs...';
+            content.value = '';
+
+            fetch(`/logs/${logType}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        title.textContent = data.filename;
+                        content.value = data.content;
+                    } else {
+                        title.textContent = 'Error';
+                        content.value = data.message;
+                    }
+                });
+        }
+
+        function showStatus(element, message, type) {
+            element.textContent = message;
+            element.className = 'status ' + type;
+            element.style.display = 'block';
+            
+            setTimeout(() => {
+                element.style.display = 'none';
+            }, 5000);
+        }
     </script>
 </body>
 </html>
@@ -798,26 +597,21 @@ HTML_TEMPLATE = """
 
 
 @app.route('/')
-def root():
+def index():
     """Redirect root to admin page"""
     return redirect('/admin')
 
 
 @app.route('/admin')
 def admin():
-    """Main admin page"""
-    mode = get_connection_mode()
-    hostname = get_hostname()
-    current_network = get_current_network()
-    ip_address = get_ip_address()
+    """Main admin interface"""
     config = load_config()
-
     return render_template_string(
         HTML_TEMPLATE,
-        mode=mode,
-        hostname=hostname,
-        current_network=current_network,
-        ip_address=ip_address,
+        hostname=get_hostname(),
+        mode=get_connection_mode(),
+        current_network=get_current_network(),
+        ip=get_ip_address(),
         config=config
     )
 
@@ -876,34 +670,97 @@ def connect_wifi():
         if not ssid or not password:
             return jsonify({'success': False, 'message': 'SSID and password required'})
 
-        wpa_config = f"""ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
+        # Read existing wpa_supplicant.conf to preserve header and other networks
+        existing_header = """ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
 update_config=1
 country=US
 
-network={{
+"""
+        existing_networks = []
+        
+        try:
+            with open('/etc/wpa_supplicant/wpa_supplicant.conf', 'r') as f:
+                content = f.read()
+                
+                # Extract header (everything before first network block)
+                if 'network=' in content:
+                    header_part = content.split('network=')[0]
+                    if 'ctrl_interface' in header_part:
+                        existing_header = header_part
+                
+                # Extract existing networks (except the one we're adding)
+                network_blocks = re.findall(r'network=\{[^}]+\}', content, re.DOTALL)
+                for block in network_blocks:
+                    # Check if this is a different SSID
+                    ssid_match = re.search(r'ssid="([^"]+)"', block)
+                    if ssid_match and ssid_match.group(1) != ssid:
+                        existing_networks.append(block)
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            print(f"Warning: Could not read existing config: {e}")
+
+        # Build new config with existing networks plus the new one (with highest priority)
+        wpa_config = existing_header
+
+        # Add existing networks first with lower priority
+        for network in existing_networks:
+            wpa_config += f"network={network[8:]}\n\n"  # Remove 'network=' prefix
+
+        # Add new network with highest priority
+        wpa_config += f"""network={{
     ssid="{ssid}"
     psk="{password}"
     key_mgmt=WPA-PSK
+    priority=10
 }}
 """
 
+        # Write to temp file first
         with open('/tmp/wpa_supplicant.conf', 'w') as f:
             f.write(wpa_config)
 
+        # Copy to proper location with correct permissions
         subprocess.run(
             ['sudo', 'cp', '/tmp/wpa_supplicant.conf',
              '/etc/wpa_supplicant/wpa_supplicant.conf'],
             check=True
         )
+        
+        subprocess.run(
+            ['sudo', 'chmod', '600', '/etc/wpa_supplicant/wpa_supplicant.conf'],
+            check=True
+        )
 
+        # Stop AP mode if running
+        subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'], check=False)
+        subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'], check=False)
+
+        # Restart networking services
         subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'], check=False)
-        subprocess.run(['sudo', 'wpa_cli', '-i', 'wlan0',
-                       'reconfigure'], check=False)
-
-        return jsonify({
-            'success': True,
-            'message': 'WiFi configured. Connecting to network...'
-        })
+        subprocess.run(['sudo', 'wpa_cli', '-i', 'wlan0', 'reconfigure'], check=False)
+        
+        # Give it a moment to start connecting
+        time.sleep(3)
+        
+        # Check if we got an IP (not the AP IP)
+        result = subprocess.run(
+            ['ip', 'addr', 'show', 'wlan0'],
+            capture_output=True,
+            text=True
+        )
+        
+        if 'inet ' in result.stdout and '10.0.0.1' not in result.stdout:
+            # We have a new IP, connection looks good
+            return jsonify({
+                'success': True,
+                'message': f'WiFi configured and connected to {ssid}. AP mode will stop automatically.'
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'message': f'WiFi configured. Attempting to connect to {ssid}...'
+            })
 
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
@@ -967,28 +824,23 @@ def control_service():
             return jsonify({'success': False, 'message': 'Invalid action'})
 
         if action == 'stop':
-            # First try to stop the service gracefully
             subprocess.run(['sudo', 'systemctl', 'stop',
-                           'cubs-scoreboard'], timeout=5)
-            # Then force kill any remaining Python processes to ensure scoreboard stops
+                           'cubs-scoreboard'], timeout=25)
             subprocess.run(
-                ['sudo', 'pkill', '-f', 'python.*main.py'], timeout=5)
+                ['sudo', 'pkill', '-f', 'python.*main.py'], timeout=25)
             return jsonify({'success': True, 'message': 'Service stopped'})
 
         elif action == 'restart':
-            # For restart, stop completely first, then start
             subprocess.run(['sudo', 'systemctl', 'stop',
-                           'cubs-scoreboard'], timeout=5)
+                           'cubs-scoreboard'], timeout=25)
             subprocess.run(
-                ['sudo', 'pkill', '-f', 'python.*main.py'], timeout=5)
-            # Wait a moment for cleanup
+                ['sudo', 'pkill', '-f', 'python.*main.py'], timeout=25)
             time.sleep(2)
-            # Now start the service
             result = subprocess.run(
                 ['sudo', 'systemctl', 'start', 'cubs-scoreboard'],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=20
             )
             if result.returncode == 0:
                 return jsonify({'success': True, 'message': 'Service restarted'})
@@ -1000,7 +852,7 @@ def control_service():
                 ['sudo', 'systemctl', 'start', 'cubs-scoreboard'],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=20
             )
             if result.returncode == 0:
                 return jsonify({'success': True, 'message': 'Service started'})

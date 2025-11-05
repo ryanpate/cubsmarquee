@@ -15,11 +15,35 @@ class BearsDisplay:
         self.bears_data = None
         self.last_update = None
         self.update_interval = 3600  # Update every hour
+        self.live_update_interval = 60  # Update live scores every minute
 
         # Classic Bears colors
         self.BEARS_NAVY = (11, 22, 42)      # Navy blue background
         self.BEARS_ORANGE = (200, 56, 3)    # Classic Bears orange
         self.BEARS_WHITE = (255, 255, 255)  # White text
+
+    def _fetch_live_scores(self, game_id):
+        """
+        Fetch live scores from the scoreboard endpoint
+        The schedule endpoint doesn't always have live scores immediately
+        """
+        try:
+            url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+
+            # Find the game by ID
+            for event in data.get('events', []):
+                if event.get('id') == game_id:
+                    return event
+
+            return None
+
+        except Exception as e:
+            print(f"Error fetching live scores: {e}")
+            return None
 
     def _fetch_bears_schedule(self):
         """
@@ -93,6 +117,97 @@ class BearsDisplay:
             print(f"Error parsing Bears game: {e}")
             return None
 
+    def _get_current_scores(self, game, game_id):
+        """
+        Get current scores for a game
+        Returns dict with: status, game_time, bears_score, opp_score, opponent_abbr, opponent_name
+        """
+        try:
+            # Parse game data
+            competition = game['competitions'][0]
+            home_team = competition['competitors'][0]
+            away_team = competition['competitors'][1]
+
+            # Determine if Bears are home or away
+            bears_home = home_team['team']['abbreviation'] == 'CHI'
+
+            if bears_home:
+                bears = home_team
+                opponent = away_team
+            else:
+                bears = away_team
+                opponent = home_team
+
+            opponent_name = opponent['team']['displayName']
+            opponent_abbr = opponent['team']['abbreviation']
+
+            # Get game status
+            status = competition['status']['type']['name']
+            game_time_raw = competition['status']['type']['shortDetail']
+
+            # Check if scores exist in schedule data
+            bears_has_score = 'score' in bears
+            opp_has_score = 'score' in opponent
+
+            # If scores don't exist and game is in progress, fetch from scoreboard
+            if (not bears_has_score or not opp_has_score) and status == 'STATUS_IN_PROGRESS':
+                print("Scores not in schedule data, fetching from scoreboard...")
+                live_game = self._fetch_live_scores(game_id)
+
+                if live_game:
+                    # Update game data with live scoreboard data
+                    competition = live_game['competitions'][0]
+                    home_team = competition['competitors'][0]
+                    away_team = competition['competitors'][1]
+
+                    # Re-determine Bears and opponent with fresh data
+                    if home_team['team']['abbreviation'] == 'CHI':
+                        bears = home_team
+                        opponent = away_team
+                    else:
+                        bears = away_team
+                        opponent = home_team
+
+                    # Update status from live data
+                    status = competition['status']['type']['name']
+                    game_time_raw = competition['status']['type']['shortDetail']
+                    print(f"Updated from scoreboard - Status: {status}")
+
+            # Extract scores - they're in format {"value": 24.0, "displayValue": "24"}
+            bears_score_obj = bears.get('score')
+            opp_score_obj = opponent.get('score')
+
+            # Parse Bears score
+            if isinstance(bears_score_obj, dict):
+                bears_score = bears_score_obj.get('displayValue', '0')
+            elif bears_score_obj is not None:
+                bears_score = str(int(float(bears_score_obj)))
+            else:
+                bears_score = '0'
+
+            # Parse opponent score
+            if isinstance(opp_score_obj, dict):
+                opp_score = opp_score_obj.get('displayValue', '0')
+            elif opp_score_obj is not None:
+                opp_score = str(int(float(opp_score_obj)))
+            else:
+                opp_score = '0'
+
+            return {
+                'status': status,
+                'game_time': game_time_raw,
+                'bears_score': bears_score,
+                'opp_score': opp_score,
+                'opponent_abbr': opponent_abbr,
+                'opponent_name': opponent_name
+            }
+
+        except Exception as e:
+            print(f"Error getting current scores: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
     def _draw_sweater_header(self):
         """Draw the classic Bears sweater header with orange stripes"""
         # Fill entire background with Bears navy
@@ -101,17 +216,17 @@ class BearsDisplay:
                 self.manager.draw_pixel(x, y, *self.BEARS_NAVY)
 
         # Top orange stripe (3 pixels tall)
-        for y in range(6, 9):
+        for y in range(4, 7):
             for x in range(96):
                 self.manager.draw_pixel(x, y, *self.BEARS_ORANGE)
 
         # Bottom orange stripe (3 pixels tall)
-        for y in range(24, 27):
+        for y in range(22, 25):
             for x in range(96):
                 self.manager.draw_pixel(x, y, *self.BEARS_ORANGE)
 
         # Draw "CHICAGO BEARS" text in white, centered between stripes
-        self.manager.draw_text('small_bold', 8, 21,
+        self.manager.draw_text('small_bold', 9, 19,
                                self.BEARS_WHITE, 'CHICAGO BEARS')
 
     def display_bears_info(self, duration=180):
@@ -135,55 +250,45 @@ class BearsDisplay:
                 self._display_next_game(next_game, duration)
 
     def _display_game_day(self, game, duration):
-        """Display today's Bears game"""
+        """Display today's Bears game with live score updates"""
         start_time = time.time()
+        last_score_update = 0
 
         try:
-            # Parse game data
-            competition = game['competitions'][0]
-            home_team = competition['competitors'][0]
-            away_team = competition['competitors'][1]
+            game_id = game.get('id')
 
-            # Determine if Bears are home or away
-            bears_home = home_team['team']['abbreviation'] == 'CHI'
+            # Get initial scores
+            score_data = self._get_current_scores(game, game_id)
+            if not score_data:
+                return
 
-            if bears_home:
-                bears = home_team
-                opponent = away_team
-            else:
-                bears = away_team
-                opponent = home_team
+            status = score_data['status']
+            game_time = score_data['game_time']
+            bears_score = score_data['bears_score']
+            opp_score = score_data['opp_score']
+            opponent_abbr = score_data['opponent_abbr']
+            opponent_name = score_data['opponent_name']
 
-            opponent_name = opponent['team']['displayName']
-            opponent_abbr = opponent['team']['abbreviation']
-
-            # Get scores from the API - score is an object with 'value' and 'displayValue'
-            # Example: {"value": 24.0, "displayValue": "24"}
-            bears_score_obj = bears.get('score', {})
-            opp_score_obj = opponent.get('score', {})
-
-            # Extract the actual score value safely
-            if isinstance(bears_score_obj, dict):
-                bears_score = str(int(bears_score_obj.get('value', 0)))
-            else:
-                bears_score = str(bears_score_obj) if bears_score_obj else '0'
-
-            if isinstance(opp_score_obj, dict):
-                opp_score = str(int(opp_score_obj.get('value', 0)))
-            else:
-                opp_score = str(opp_score_obj) if opp_score_obj else '0'
-
+            print(f"Game status: {status}, Detail: {game_time}")
             print(f"Bears score: {bears_score}, Opponent score: {opp_score}")
 
-            # Get game status
-            status = competition['status']['type']['name']
-            game_time_raw = competition['status']['type']['shortDetail']
-
-            # If game_time contains actual time info, convert to Central
-            # Otherwise just use as-is (for "Final", "Postponed", etc.)
-            game_time = game_time_raw
-
             while time.time() - start_time < duration:
+                # Check if we should update live scores (every 60 seconds for live games)
+                current_time = time.time()
+                if (status == 'STATUS_IN_PROGRESS' and
+                    current_time - last_score_update >= self.live_update_interval):
+
+                    print("Updating live scores...")
+                    updated_data = self._get_current_scores(game, game_id)
+
+                    if updated_data:
+                        status = updated_data['status']
+                        game_time = updated_data['game_time']
+                        bears_score = updated_data['bears_score']
+                        opp_score = updated_data['opp_score']
+                        print(f"Scores updated - Bears: {bears_score}, Opponent: {opp_score}")
+
+                    last_score_update = current_time
                 self.manager.clear_canvas()
 
                 # Draw sweater-style header
@@ -195,15 +300,15 @@ class BearsDisplay:
                                            self.BEARS_WHITE, 'LIVE GAME')
 
                     # Bears score
-                    self.manager.draw_text('small_bold', 20, 36,
+                    self.manager.draw_text('small_bold', 8, 39,
                                            self.BEARS_WHITE, f'CHI {bears_score}')
 
                     # Opponent score
-                    self.manager.draw_text('small_bold', 58, 36,
+                    self.manager.draw_text('small_bold', 52, 39,
                                            self.BEARS_WHITE, f'{opponent_abbr} {opp_score}')
 
                     # Quarter/Time info at bottom
-                    self.manager.draw_text('micro', 28, 44,
+                    self.manager.draw_text('micro', 28, 47,
                                            self.BEARS_ORANGE, game_time)
 
                 elif status == 'STATUS_FINAL':
@@ -220,17 +325,17 @@ class BearsDisplay:
                     result_color = (
                         0, 200, 0) if result == 'WIN' else (200, 0, 0)
 
-                    self.manager.draw_text('tiny_bold', 35, 28,
+                    self.manager.draw_text('tiny_bold', 37, 47,
                                            result_color, result)
 
                     # Final scores
-                    self.manager.draw_text('small_bold', 20, 36,
+                    self.manager.draw_text('small_bold', 8, 37,
                                            self.BEARS_WHITE, f'CHI {bears_score}')
-                    self.manager.draw_text('small_bold', 58, 36,
+                    self.manager.draw_text('small_bold', 52, 37,
                                            self.BEARS_WHITE, f'{opponent_abbr} {opp_score}')
 
-                    self.manager.draw_text('micro', 35, 44,
-                                           self.BEARS_ORANGE, 'FINAL')
+                    #self.manager.draw_text('micro', 35, 44,
+                    #                       self.BEARS_ORANGE, 'FINAL')
 
                 else:
                     # Game scheduled but not started

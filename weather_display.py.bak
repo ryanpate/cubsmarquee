@@ -70,10 +70,8 @@ class WeatherDisplay:
             self.forecast_data = forecast_response.json()
 
             self.last_update = time.time()
-            condition = self.weather_data['weather'][0]['main']
-            description = self.weather_data['weather'][0]['description']
             print(
-                f"Weather updated: {self.weather_data['name']}, {self.weather_data['main']['temp']}°F, Condition: {condition} ({description})")
+                f"Weather updated: {self.weather_data['name']}, {self.weather_data['main']['temp']}°F")
             return True
 
         except Exception as e:
@@ -604,7 +602,7 @@ class WeatherDisplay:
                                        f"{forecast['temp_high']}")
                 # Degree symbol positioned at top right
                 self.manager.draw_text(
-                    'micro', 42, y_pos - 2, temp_high_color, 'o')
+                    'micro', 42, y_pos - 1, temp_high_color, 'o')
 
                 # Low temp (light blue)
                 temp_low_color = (
@@ -613,12 +611,12 @@ class WeatherDisplay:
                                        f"{forecast['temp_low']}")
                 # Degree symbol positioned at top right
                 self.manager.draw_text(
-                    'micro', 66, y_pos - 2, temp_low_color, 'o')
+                    'micro', 66, y_pos - 1, temp_low_color, 'o')
 
                 # Condition text (abbreviated)
                 cond_text = self._get_condition_abbrev(forecast['condition'])
                 self.manager.draw_text(
-                    'micro', 72, y_pos, Colors.WHITE, cond_text)
+                    'micro', 72, y_pos + 1, Colors.WHITE, cond_text)
 
                 y_pos += 10
 

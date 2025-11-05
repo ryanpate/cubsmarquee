@@ -9,9 +9,27 @@ AP_PASSWORD="gocubsgo2024"
 AP_IP="10.0.0.1"
 MAX_WIFI_ATTEMPTS=60
 CHECK_INTERVAL=2
+WPA_SUPPLICANT_CONF="/etc/wpa_supplicant/wpa_supplicant.conf"
 
 log_message() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a /var/log/wifi_manager.log
+}
+
+has_configured_network() {
+    # Check if wpa_supplicant.conf has any configured network
+    if [ -f "$WPA_SUPPLICANT_CONF" ]; then
+        if grep -q "^network={" "$WPA_SUPPLICANT_CONF"; then
+            return 0  # Has configured network
+        fi
+    fi
+    return 1  # No configured network
+}
+
+restart_avahi() {
+    log_message "Restarting Avahi (mDNS) service..."
+    sudo systemctl restart avahi-daemon
+    sleep 2
+    log_message "Avahi restarted - hostname should now be reachable as ${HOSTNAME}.local"
 }
 
 check_wifi_connection() {
@@ -38,11 +56,17 @@ stop_access_point() {
     # Remove static IP configuration
     sudo ip addr flush dev wlan0 2>/dev/null
     
-    # Restart normal networking
+    # Restart networking services in proper order
+    log_message "Restarting network services..."
     sudo systemctl restart dhcpcd
+    sleep 2
     sudo wpa_cli -i wlan0 reconfigure 2>/dev/null
+    sleep 2
     
-    log_message "Access Point stopped, returning to client mode"
+    # Critical: Restart Avahi so hostname.local works on the new network
+    restart_avahi
+    
+    log_message "Access Point stopped, returned to client mode"
 }
 
 start_access_point() {
@@ -96,6 +120,9 @@ address=/${HOSTNAME}.local/${AP_IP}
 EOF
     
     sudo mv /tmp/dnsmasq.conf /etc/dnsmasq.conf
+    
+    # Restart Avahi for AP mode
+    restart_avahi
     
     # Start services
     sudo systemctl unmask hostapd
@@ -161,33 +188,60 @@ if check_wifi_connection; then
     if systemctl is-active --quiet hostapd || systemctl is-active --quiet dnsmasq; then
         log_message "Stopping leftover AP services..."
         stop_access_point
+    else
+        # Even if AP isn't running, restart Avahi to ensure hostname is advertised
+        restart_avahi
     fi
     log_message "WiFi connection verified, exiting normally"
     exit 0
 fi
 
-# Try to connect to configured WiFi
-log_message "Attempting to connect to configured WiFi network..."
+# Check if we have a configured network
+if has_configured_network; then
+    log_message "Found configured WiFi network in wpa_supplicant.conf"
+    log_message "Giving wpa_supplicant time to connect naturally (up to 3 minutes)..."
 
-attempt=0
-while [ $attempt -lt $MAX_WIFI_ATTEMPTS ]; do
-    if check_wifi_connection; then
-        log_message "Successfully connected to WiFi"
-        # Make sure AP services are stopped
-        if systemctl is-active --quiet hostapd || systemctl is-active --quiet dnsmasq; then
-            log_message "Stopping AP services after successful connection..."
-            stop_access_point
+    # For configured networks, wait longer with less frequent checks
+    # This allows wpa_supplicant to do its job without interference
+    MAX_ATTEMPTS=36  # 36 attempts * 5 seconds = 180 seconds = 3 minutes
+    CHECK_INTERVAL=5
+
+    attempt=0
+    while [ $attempt -lt $MAX_ATTEMPTS ]; do
+        if check_wifi_connection; then
+            log_message "Successfully connected to configured WiFi network"
+            # Make sure AP services are stopped
+            if systemctl is-active --quiet hostapd || systemctl is-active --quiet dnsmasq; then
+                log_message "Stopping AP services after successful connection..."
+                stop_access_point
+            else
+                # Ensure Avahi is restarted even if AP wasn't running
+                restart_avahi
+            fi
+            log_message "WiFi connection established, wifi_manager exiting"
+            exit 0
         fi
-        exit 0
-    fi
-    
-    log_message "WiFi connection attempt $((attempt + 1))/${MAX_WIFI_ATTEMPTS}..."
-    sleep $CHECK_INTERVAL
-    attempt=$((attempt + 1))
-done
 
-# If we get here, WiFi connection failed
-log_message "WiFi connection failed after ${MAX_WIFI_ATTEMPTS} attempts"
+        # Only log every 4th attempt to reduce log spam
+        if [ $((attempt % 4)) -eq 0 ]; then
+            elapsed_time=$((attempt * CHECK_INTERVAL))
+            max_time=$((MAX_ATTEMPTS * CHECK_INTERVAL))
+            log_message "Waiting for WiFi connection... (${elapsed_time}/${max_time} seconds)"
+        fi
+        sleep $CHECK_INTERVAL
+        attempt=$((attempt + 1))
+    done
+
+    log_message "WiFi connection failed after 3 minutes"
+    log_message "Configured network may be out of range or credentials incorrect"
+else
+    log_message "No configured WiFi network found in wpa_supplicant.conf"
+    log_message "Skipping connection attempts, going directly to AP mode"
+fi
+
+# If we get here, either:
+# 1. No network was configured, or
+# 2. Connection to configured network failed after 3 minutes
 log_message "Switching to Access Point mode for configuration..."
 
 start_access_point

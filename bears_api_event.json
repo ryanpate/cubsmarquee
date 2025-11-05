@@ -1,0 +1,1086 @@
+{
+  "id": "401772810",
+  "date": "2025-09-09T00:15Z",
+  "name": "Minnesota Vikings at Chicago Bears",
+  "shortName": "MIN @ CHI",
+  "season": {
+    "year": 2025,
+    "displayName": "2025"
+  },
+  "seasonType": {
+    "id": "2",
+    "type": 2,
+    "name": "Regular Season",
+    "abbreviation": "reg"
+  },
+  "week": {
+    "number": 1,
+    "text": "Week 1"
+  },
+  "timeValid": true,
+  "competitions": [
+    {
+      "id": "401772810",
+      "date": "2025-09-09T00:15Z",
+      "attendance": 58742,
+      "type": {
+        "id": "1",
+        "text": "Standard",
+        "abbreviation": "STD",
+        "slug": "standard",
+        "type": "standard"
+      },
+      "timeValid": true,
+      "neutralSite": false,
+      "boxscoreAvailable": true,
+      "ticketsAvailable": false,
+      "venue": {
+        "fullName": "Soldier Field",
+        "address": {
+          "city": "Chicago",
+          "state": "IL",
+          "zipCode": "60605",
+          "country": "USA"
+        }
+      },
+      "competitors": [
+        {
+          "id": "3",
+          "type": "team",
+          "order": 0,
+          "homeAway": "home",
+          "winner": false,
+          "team": {
+            "id": "3",
+            "location": "Chicago",
+            "nickname": "Bears",
+            "abbreviation": "CHI",
+            "displayName": "Chicago Bears",
+            "shortDisplayName": "Bears",
+            "logos": [
+              {
+                "href": "https://a.espncdn.com/i/teamlogos/nfl/500/chi.png",
+                "width": 500,
+                "height": 500,
+                "alt": "",
+                "rel": [
+                  "full",
+                  "default"
+                ],
+                "lastUpdated": "2024-06-25T18:46Z"
+              },
+              {
+                "href": "https://a.espncdn.com/i/teamlogos/nfl/500-dark/chi.png",
+                "width": 500,
+                "height": 500,
+                "alt": "",
+                "rel": [
+                  "full",
+                  "dark"
+                ],
+                "lastUpdated": "2024-06-25T18:46Z"
+              },
+              {
+                "href": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/chi.png",
+                "width": 500,
+                "height": 500,
+                "alt": "",
+                "rel": [
+                  "full",
+                  "scoreboard"
+                ],
+                "lastUpdated": "2024-06-25T18:46Z"
+              },
+              {
+                "href": "https://a.espncdn.com/i/teamlogos/nfl/500-dark/scoreboard/chi.png",
+                "width": 500,
+                "height": 500,
+                "alt": "",
+                "rel": [
+                  "full",
+                  "scoreboard",
+                  "dark"
+                ],
+                "lastUpdated": "2024-06-25T18:46Z"
+              },
+              {
+                "href": "https://a.espncdn.com/guid/19d73366-b5a5-cca2-a176-a2c024ce0bb3/logos/primary_logo_on_white_color.png",
+                "width": 4096,
+                "height": 4096,
+                "alt": "",
+                "rel": [
+                  "full",
+                  "primary_logo_on_white_color"
+                ],
+                "lastUpdated": "2024-12-03T20:48Z"
+              },
+              {
+                "href": "https://a.espncdn.com/guid/19d73366-b5a5-cca2-a176-a2c024ce0bb3/logos/primary_logo_on_black_color.png",
+                "width": 4096,
+                "height": 4096,
+                "alt": "",
+                "rel": [
+                  "full",
+                  "primary_logo_on_black_color"
+                ],
+                "lastUpdated": "2024-12-03T20:48Z"
+              },
+              {
+                "href": "https://a.espncdn.com/guid/19d73366-b5a5-cca2-a176-a2c024ce0bb3/logos/primary_logo_on_primary_color.png",
+                "width": 4096,
+                "height": 4096,
+                "alt": "",
+                "rel": [
+                  "full",
+                  "primary_logo_on_primary_color"
+                ],
+                "lastUpdated": "2024-12-03T20:48Z"
+              },
+              {
+                "href": "https://a.espncdn.com/guid/19d73366-b5a5-cca2-a176-a2c024ce0bb3/logos/primary_logo_on_secondary_color.png",
+                "width": 4096,
+                "height": 4096,
+                "alt": "",
+                "rel": [
+                  "full",
+                  "primary_logo_on_secondary_color"
+                ],
+                "lastUpdated": "2024-12-03T20:48Z"
+              },
+              {
+                "href": "https://a.espncdn.com/guid/19d73366-b5a5-cca2-a176-a2c024ce0bb3/logos/secondary_logo_on_white_color.png",
+                "width": 4096,
+                "height": 4096,
+                "alt": "",
+                "rel": [
+                  "full",
+                  "secondary_logo_on_white_color"
+                ],
+                "lastUpdated": "2024-12-03T20:48Z"
+              },
+              {
+                "href": "https://a.espncdn.com/guid/19d73366-b5a5-cca2-a176-a2c024ce0bb3/logos/secondary_logo_on_black_color.png",
+                "width": 4096,
+                "height": 4096,
+                "alt": "",
+                "rel": [
+                  "full",
+                  "secondary_logo_on_black_color"
+                ],
+                "lastUpdated": "2024-12-03T20:48Z"
+              },
+              {
+                "href": "https://a.espncdn.com/guid/19d73366-b5a5-cca2-a176-a2c024ce0bb3/logos/secondary_logo_on_primary_color.png",
+                "width": 4096,
+                "height": 4096,
+                "alt": "",
+                "rel": [
+                  "full",
+                  "secondary_logo_on_primary_color"
+                ],
+                "lastUpdated": "2024-12-03T20:48Z"
+              },
+              {
+                "href": "https://a.espncdn.com/guid/19d73366-b5a5-cca2-a176-a2c024ce0bb3/logos/secondary_logo_on_secondary_color.png",
+                "width": 4096,
+                "height": 4096,
+                "alt": "",
+                "rel": [
+                  "full",
+                  "secondary_logo_on_secondary_color"
+                ],
+                "lastUpdated": "2024-12-03T20:48Z"
+              }
+            ],
+            "links": [
+              {
+                "rel": [
+                  "clubhouse",
+                  "desktop",
+                  "team"
+                ],
+                "href": "https://www.espn.com/nfl/team/_/name/chi/chicago-bears",
+                "text": "Clubhouse"
+              },
+              {
+                "rel": [
+                  "roster",
+                  "desktop",
+                  "team"
+                ],
+                "href": "https://www.espn.com/nfl/team/roster/_/name/chi/chicago-bears",
+                "text": "Roster"
+              },
+              {
+                "rel": [
+                  "stats",
+                  "desktop",
+                  "team"
+                ],
+                "href": "https://www.espn.com/nfl/team/stats/_/name/chi/chicago-bears",
+                "text": "Statistics"
+              },
+              {
+                "rel": [
+                  "schedule",
+                  "desktop",
+                  "team"
+                ],
+                "href": "https://www.espn.com/nfl/team/schedule/_/name/chi",
+                "text": "Schedule"
+              },
+              {
+                "rel": [
+                  "photos",
+                  "desktop",
+                  "team"
+                ],
+                "href": "https://www.espn.com/nfl/team/photos/_/name/chi",
+                "text": "photos"
+              },
+              {
+                "rel": [
+                  "tickets",
+                  "desktop",
+                  "team"
+                ],
+                "href": "https://www.vividseats.com/chicago-bears-tickets--sports-nfl-football/performer/159?wsUser=717",
+                "text": "Tickets"
+              },
+              {
+                "rel": [
+                  "draftpicks",
+                  "desktop",
+                  "team"
+                ],
+                "href": "https://www.espn.com/nfl/draft/teams/_/name/chi/chicago-bears",
+                "text": "Draft Picks"
+              },
+              {
+                "rel": [
+                  "transactions",
+                  "desktop",
+                  "team"
+                ],
+                "href": "https://www.espn.com/nfl/team/transactions/_/name/chi",
+                "text": "Transactions"
+              },
+              {
+                "rel": [
+                  "injuries",
+                  "desktop",
+                  "team"
+                ],
+                "href": "https://www.espn.com/nfl/team/injuries/_/name/chi",
+                "text": "Injuries"
+              },
+              {
+                "rel": [
+                  "depthchart",
+                  "desktop",
+                  "team"
+                ],
+                "href": "https://www.espn.com/nfl/team/depth/_/name/chi",
+                "text": "Depth Chart"
+              }
+            ]
+          },
+          "score": {
+            "value": 24.0,
+            "displayValue": "24"
+          },
+          "leaders": [
+            {
+              "name": "passingLeader",
+              "displayName": "Passing Leader",
+              "abbreviation": "PYDS",
+              "leaders": [
+                {
+                  "displayValue": "21/35, 210 YDS, 1 TD",
+                  "value": 210.0,
+                  "athlete": {
+                    "id": "4431611",
+                    "lastName": "Williams",
+                    "displayName": "Caleb Williams",
+                    "shortName": "C. Williams",
+                    "links": [
+                      {
+                        "rel": [
+                          "playercard",
+                          "desktop",
+                          "athlete"
+                        ],
+                        "href": "https://www.espn.com/nfl/player/_/id/4431611/caleb-williams"
+                      },
+                      {
+                        "rel": [
+                          "stats",
+                          "desktop",
+                          "athlete"
+                        ],
+                        "href": "https://www.espn.com/nfl/player/stats/_/id/4431611/caleb-williams"
+                      },
+                      {
+                        "rel": [
+                          "splits",
+                          "desktop",
+                          "athlete"
+                        ],
+                        "href": "https://www.espn.com/nfl/player/splits/_/id/4431611/caleb-williams"
+                      },
+                      {
+                        "rel": [
+                          "gamelog",
+                          "desktop",
+                          "athlete"
+                        ],
+                        "href": "https://www.espn.com/nfl/player/gamelog/_/id/4431611/caleb-williams"
+                      },
+                      {
+                        "rel": [
+                          "news",
+                          "desktop",
+                          "athlete"
+                        ],
+                        "href": "https://www.espn.com/nfl/player/news/_/id/4431611/caleb-williams"
+                      },
+                      {
+                        "rel": [
+                          "bio",
+                          "desktop",
+                          "athlete"
+                        ],
+                        "href": "https://www.espn.com/nfl/player/bio/_/id/4431611/caleb-williams"
+                      },
+                      {
+                        "rel": [
+                          "overview",
+                          "desktop",
+                          "athlete"
+                        ],
+                        "href": "https://www.espn.com/nfl/player/_/id/4431611/caleb-williams"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "rushingLeader",
+              "displayName": "Rushing Leader",
+              "abbreviation": "RYDS",
+              "leaders": [
+                {
+                  "displayValue": "6 CAR, 58 YDS, 1 TD",
+                  "value": 58.0,
+                  "athlete": {
+                    "id": "4431611",
+                    "lastName": "Williams",
+                    "displayName": "Caleb Williams",
+                    "shortName": "C. Williams",
+                    "links": [
+                      {
+                        "rel": [
+                          "playercard",
+                          "desktop",
+                          "athlete"
+                        ],
+                        "href": "https://www.espn.com/nfl/player/_/id/4431611/caleb-williams"
+                      },
+                      {
+                        "rel": [
+                          "stats",
+                          "desktop",
+                          "athlete"
+                        ],
+                        "href": "https://www.espn.com/nfl/player/stats/_/id/4431611/caleb-williams"
+                      },
+                      {
+                        "rel": [
+                          "splits",
+                          "desktop",
+                          "athlete"
+                        ],
+                        "href": "https://www.espn.com/nfl/player/splits/_/id/4431611/caleb-williams"
+                      },
+                      {
+                        "rel": [
+                          "gamelog",
+                          "desktop",
+                          "athlete"
+                        ],
+                        "href": "https://www.espn.com/nfl/player/gamelog/_/id/4431611/caleb-williams"
+                      },
+                      {
+                        "rel": [
+                          "news",
+                          "desktop",
+                          "athlete"
+                        ],
+                        "href": "https://www.espn.com/nfl/player/news/_/id/4431611/caleb-williams"
+                      },
+                      {
+                        "rel": [
+                          "bio",
+                          "desktop",
+                          "athlete"
+                        ],
+                        "href": "https://www.espn.com/nfl/player/bio/_/id/4431611/caleb-williams"
+                      },
+                      {
+                        "rel": [
+                          "overview",
+                          "desktop",
+                          "athlete"
+                        ],
+                        "href": "https://www.espn.com/nfl/player/_/id/4431611/caleb-williams"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "receivingLeader",
+              "displayName": "Receiving Leader",
+              "abbreviation": "RECYDS",
+              "leaders": [
+                {
+                  "displayValue": "3 REC, 68 YDS",
+                  "value": 68.0,
+                  "athlete": {
+                    "id": "3915416",
+                    "lastName": "Moore",
+                    "displayName": "DJ Moore",
+                    "shortName": "D. Moore",
+                    "links": [
+                      {
+                        "rel": [
+                          "playercard",
+                          "desktop",
+                          "athlete"
+                        ],
+                        "href": "https://www.espn.com/nfl/player/_/id/3915416/dj-moore"
+                      },
+                      {
+                        "rel": [
+                          "stats",
+                          "desktop",
+                          "athlete"
+                        ],
+                        "href": "https://www.espn.com/nfl/player/stats/_/id/3915416/dj-moore"
+                      },
+                      {
+                        "rel": [
+                          "splits",
+                          "desktop",
+                          "athlete"
+                        ],
+                        "href": "https://www.espn.com/nfl/player/splits/_/id/3915416/dj-moore"
+                      },
+                      {
+                        "rel": [
+                          "gamelog",
+                          "desktop",
+                          "athlete"
+                        ],
+                        "href": "https://www.espn.com/nfl/player/gamelog/_/id/3915416/dj-moore"
+                      },
+                      {
+                        "rel": [
+                          "news",
+                          "desktop",
+                          "athlete"
+                        ],
+                        "href": "https://www.espn.com/nfl/player/news/_/id/3915416/dj-moore"
+                      },
+                      {
+                        "rel": [
+                          "bio",
+                          "desktop",
+                          "athlete"
+                        ],
+                        "href": "https://www.espn.com/nfl/player/bio/_/id/3915416/dj-moore"
+                      },
+                      {
+                        "rel": [
+                          "overview",
+                          "desktop",
+                          "athlete"
+                        ],
+                        "href": "https://www.espn.com/nfl/player/_/id/3915416/dj-moore"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "record": [
+            {
+              "id": "369",
+              "abbreviation": "Game",
+              "displayName": "Record Year To Date",
+              "shortDisplayName": "YTD",
+              "description": "Overall Record",
+              "type": "total",
+              "displayValue": "0-1"
+            },
+            {
+              "id": "13",
+              "displayName": "Home",
+              "shortDisplayName": "HOME",
+              "description": "Home Record",
+              "type": "home",
+              "displayValue": "0-1"
+            },
+            {
+              "id": "14",
+              "displayName": "Road",
+              "shortDisplayName": "AWAY",
+              "description": "Away Record",
+              "type": "road",
+              "displayValue": "0-0"
+            }
+          ]
+        },
+        {
+          "id": "16",
+          "type": "team",
+          "order": 1,
+          "homeAway": "away",
+          "winner": true,
+          "team": {
+            "id": "16",
+            "location": "Minnesota",
+            "nickname": "Vikings",
+            "abbreviation": "MIN",
+            "displayName": "Minnesota Vikings",
+            "shortDisplayName": "Vikings",
+            "logos": [
+              {
+                "href": "https://a.espncdn.com/i/teamlogos/nfl/500/min.png",
+                "width": 500,
+                "height": 500,
+                "alt": "",
+                "rel": [
+                  "full",
+                  "default"
+                ],
+                "lastUpdated": "2023-08-24T19:26Z"
+              },
+              {
+                "href": "https://a.espncdn.com/i/teamlogos/nfl/500-dark/min.png",
+                "width": 500,
+                "height": 500,
+                "alt": "",
+                "rel": [
+                  "full",
+                  "dark"
+                ],
+                "lastUpdated": "2024-06-25T18:53Z"
+              },
+              {
+                "href": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/min.png",
+                "width": 500,
+                "height": 500,
+                "alt": "",
+                "rel": [
+                  "full",
+                  "scoreboard"
+                ],
+                "lastUpdated": "2023-08-24T19:27Z"
+              },
+              {
+                "href": "https://a.espncdn.com/i/teamlogos/nfl/500-dark/scoreboard/min.png",
+                "width": 500,
+                "height": 500,
+                "alt": "",
+                "rel": [
+                  "full",
+                  "scoreboard",
+                  "dark"
+                ],
+                "lastUpdated": "2024-06-25T18:53Z"
+              },
+              {
+                "href": "https://a.espncdn.com/guid/3db556c9-ed76-a7a5-4ccb-a92fc6db4334/logos/primary_logo_on_white_color.png",
+                "width": 4096,
+                "height": 4096,
+                "alt": "",
+                "rel": [
+                  "full",
+                  "primary_logo_on_white_color"
+                ],
+                "lastUpdated": "2024-12-03T20:47Z"
+              },
+              {
+                "href": "https://a.espncdn.com/guid/3db556c9-ed76-a7a5-4ccb-a92fc6db4334/logos/primary_logo_on_black_color.png",
+                "width": 4096,
+                "height": 4096,
+                "alt": "",
+                "rel": [
+                  "full",
+                  "primary_logo_on_black_color"
+                ],
+                "lastUpdated": "2024-12-03T20:47Z"
+              },
+              {
+                "href": "https://a.espncdn.com/guid/3db556c9-ed76-a7a5-4ccb-a92fc6db4334/logos/primary_logo_on_primary_color.png",
+                "width": 4096,
+                "height": 4096,
+                "alt": "",
+                "rel": [
+                  "full",
+                  "primary_logo_on_primary_color"
+                ],
+                "lastUpdated": "2024-12-03T20:47Z"
+              },
+              {
+                "href": "https://a.espncdn.com/guid/3db556c9-ed76-a7a5-4ccb-a92fc6db4334/logos/primary_logo_on_secondary_color.png",
+                "width": 4096,
+                "height": 4096,
+                "alt": "",
+                "rel": [
+                  "full",
+                  "primary_logo_on_secondary_color"
+                ],
+                "lastUpdated": "2024-12-03T20:47Z"
+              },
+              {
+                "href": "https://a.espncdn.com/guid/3db556c9-ed76-a7a5-4ccb-a92fc6db4334/logos/secondary_logo_on_white_color.png",
+                "width": 4096,
+                "height": 4096,
+                "alt": "",
+                "rel": [
+                  "full",
+                  "secondary_logo_on_white_color"
+                ],
+                "lastUpdated": "2024-12-03T20:47Z"
+              },
+              {
+                "href": "https://a.espncdn.com/guid/3db556c9-ed76-a7a5-4ccb-a92fc6db4334/logos/secondary_logo_on_black_color.png",
+                "width": 4096,
+                "height": 4096,
+                "alt": "",
+                "rel": [
+                  "full",
+                  "secondary_logo_on_black_color"
+                ],
+                "lastUpdated": "2024-12-03T20:47Z"
+              },
+              {
+                "href": "https://a.espncdn.com/guid/3db556c9-ed76-a7a5-4ccb-a92fc6db4334/logos/secondary_logo_on_primary_color.png",
+                "width": 4096,
+                "height": 4096,
+                "alt": "",
+                "rel": [
+                  "full",
+                  "secondary_logo_on_primary_color"
+                ],
+                "lastUpdated": "2024-12-03T20:47Z"
+              },
+              {
+                "href": "https://a.espncdn.com/guid/3db556c9-ed76-a7a5-4ccb-a92fc6db4334/logos/secondary_logo_on_secondary_color.png",
+                "width": 4096,
+                "height": 4096,
+                "alt": "",
+                "rel": [
+                  "full",
+                  "secondary_logo_on_secondary_color"
+                ],
+                "lastUpdated": "2024-12-03T20:47Z"
+              }
+            ],
+            "links": [
+              {
+                "rel": [
+                  "clubhouse",
+                  "desktop",
+                  "team"
+                ],
+                "href": "https://www.espn.com/nfl/team/_/name/min/minnesota-vikings",
+                "text": "Clubhouse"
+              },
+              {
+                "rel": [
+                  "roster",
+                  "desktop",
+                  "team"
+                ],
+                "href": "https://www.espn.com/nfl/team/roster/_/name/min/minnesota-vikings",
+                "text": "Roster"
+              },
+              {
+                "rel": [
+                  "stats",
+                  "desktop",
+                  "team"
+                ],
+                "href": "https://www.espn.com/nfl/team/stats/_/name/min/minnesota-vikings",
+                "text": "Statistics"
+              },
+              {
+                "rel": [
+                  "schedule",
+                  "desktop",
+                  "team"
+                ],
+                "href": "https://www.espn.com/nfl/team/schedule/_/name/min",
+                "text": "Schedule"
+              },
+              {
+                "rel": [
+                  "photos",
+                  "desktop",
+                  "team"
+                ],
+                "href": "https://www.espn.com/nfl/team/photos/_/name/min",
+                "text": "photos"
+              },
+              {
+                "rel": [
+                  "tickets",
+                  "desktop",
+                  "team"
+                ],
+                "href": "https://www.vividseats.com/minnesota-vikings-tickets--sports-nfl-football/performer/555?wsUser=717",
+                "text": "Tickets"
+              },
+              {
+                "rel": [
+                  "draftpicks",
+                  "desktop",
+                  "team"
+                ],
+                "href": "https://www.espn.com/nfl/draft/teams/_/name/min/minnesota-vikings",
+                "text": "Draft Picks"
+              },
+              {
+                "rel": [
+                  "transactions",
+                  "desktop",
+                  "team"
+                ],
+                "href": "https://www.espn.com/nfl/team/transactions/_/name/min",
+                "text": "Transactions"
+              },
+              {
+                "rel": [
+                  "injuries",
+                  "desktop",
+                  "team"
+                ],
+                "href": "https://www.espn.com/nfl/team/injuries/_/name/min",
+                "text": "Injuries"
+              },
+              {
+                "rel": [
+                  "depthchart",
+                  "desktop",
+                  "team"
+                ],
+                "href": "https://www.espn.com/nfl/team/depth/_/name/min",
+                "text": "Depth Chart"
+              }
+            ]
+          },
+          "score": {
+            "value": 27.0,
+            "displayValue": "27"
+          },
+          "record": [
+            {
+              "id": "369",
+              "abbreviation": "Game",
+              "displayName": "Record Year To Date",
+              "shortDisplayName": "YTD",
+              "description": "Overall Record",
+              "type": "total",
+              "displayValue": "1-0"
+            },
+            {
+              "id": "13",
+              "displayName": "Home",
+              "shortDisplayName": "HOME",
+              "description": "Home Record",
+              "type": "home",
+              "displayValue": "0-0"
+            },
+            {
+              "id": "14",
+              "displayName": "Road",
+              "shortDisplayName": "AWAY",
+              "description": "Away Record",
+              "type": "road",
+              "displayValue": "1-0"
+            }
+          ]
+        }
+      ],
+      "notes": [],
+      "broadcasts": [
+        {
+          "type": {
+            "id": "1",
+            "shortName": "TV"
+          },
+          "market": {
+            "id": "1",
+            "type": "National"
+          },
+          "media": {
+            "shortName": "ABC"
+          },
+          "lang": "en",
+          "region": "us",
+          "partnered": false
+        },
+        {
+          "type": {
+            "id": "1",
+            "shortName": "TV"
+          },
+          "market": {
+            "id": "1",
+            "type": "National"
+          },
+          "media": {
+            "shortName": "ESPN"
+          },
+          "lang": "en",
+          "region": "us",
+          "partnered": false
+        }
+      ],
+      "status": {
+        "clock": 0.0,
+        "displayClock": "0:00",
+        "period": 4,
+        "type": {
+          "id": "3",
+          "name": "STATUS_FINAL",
+          "state": "post",
+          "completed": true,
+          "description": "Final",
+          "detail": "Final",
+          "shortDetail": "Final"
+        },
+        "isTBDFlex": false
+      }
+    }
+  ],
+  "links": [
+    {
+      "language": "en-US",
+      "rel": [
+        "summary",
+        "desktop",
+        "event"
+      ],
+      "href": "https://www.espn.com/nfl/game/_/gameId/401772810/vikings-bears",
+      "text": "Gamecast",
+      "shortText": "Summary",
+      "isExternal": false,
+      "isPremium": false
+    },
+    {
+      "language": "en-US",
+      "rel": [
+        "summary",
+        "sportscenter",
+        "app",
+        "event"
+      ],
+      "href": "sportscenter://x-callback-url/showGame?sportName=football&leagueAbbrev=nfl&gameId=401772810",
+      "text": "Gamecast",
+      "shortText": "Summary",
+      "isExternal": false,
+      "isPremium": false
+    },
+    {
+      "language": "en-US",
+      "rel": [
+        "now",
+        "desktop",
+        "event"
+      ],
+      "href": "https://www.espn.com/nfl/game/_/gameId/401772810",
+      "text": "Now",
+      "shortText": "Now",
+      "isExternal": false,
+      "isPremium": false
+    },
+    {
+      "language": "en-US",
+      "rel": [
+        "teamstats",
+        "desktop",
+        "event"
+      ],
+      "href": "https://www.espn.com/nfl/matchup?gameId=401772810",
+      "text": "Team Stats",
+      "shortText": "Team Stats",
+      "isExternal": false,
+      "isPremium": false
+    },
+    {
+      "language": "en-US",
+      "rel": [
+        "boxscore",
+        "desktop",
+        "event"
+      ],
+      "href": "https://www.espn.com/nfl/boxscore/_/gameId/401772810",
+      "text": "Box Score",
+      "shortText": "Box Score",
+      "isExternal": false,
+      "isPremium": false
+    },
+    {
+      "language": "en-US",
+      "rel": [
+        "boxscore",
+        "sportscenter",
+        "app",
+        "event"
+      ],
+      "href": "sportscenter://x-callback-url/showGame?sportName=football&leagueAbbrev=nfl&gameId=401772810",
+      "text": "Box Score",
+      "shortText": "Box Score",
+      "isExternal": false,
+      "isPremium": false
+    },
+    {
+      "language": "en-US",
+      "rel": [
+        "gamecast",
+        "desktop",
+        "event"
+      ],
+      "href": "https://www.espn.com/nfl/game/_/gameId/401772810",
+      "text": "Gamecast",
+      "shortText": "Gamecast",
+      "isExternal": false,
+      "isPremium": false
+    },
+    {
+      "language": "en-US",
+      "rel": [
+        "gamecast",
+        "mobile",
+        "event"
+      ],
+      "href": "http://m.espn.com/nfl/gamecast?gameId=401772810&action=summary",
+      "text": "Gamecast",
+      "shortText": "Gamecast",
+      "isExternal": false,
+      "isPremium": false
+    },
+    {
+      "language": "en-US",
+      "rel": [
+        "gamecast",
+        "sportscenter",
+        "app",
+        "event"
+      ],
+      "href": "sportscenter://x-callback-url/showGame?sportName=football&leagueAbbrev=nfl&gameId=401772810",
+      "text": "Gamecast",
+      "shortText": "Gamecast",
+      "isExternal": false,
+      "isPremium": false
+    },
+    {
+      "language": "en-US",
+      "rel": [
+        "recap",
+        "desktop",
+        "event"
+      ],
+      "href": "https://www.espn.com/nfl/recap?gameId=401772810",
+      "text": "Recap",
+      "shortText": "Recap",
+      "isExternal": false,
+      "isPremium": false
+    },
+    {
+      "language": "en-US",
+      "rel": [
+        "pbp",
+        "desktop",
+        "event"
+      ],
+      "href": "https://www.espn.com/nfl/playbyplay/_/gameId/401772810",
+      "text": "Play-by-Play",
+      "shortText": "Play-by-Play",
+      "isExternal": false,
+      "isPremium": false
+    },
+    {
+      "language": "en-US",
+      "rel": [
+        "videos",
+        "desktop",
+        "event"
+      ],
+      "href": "https://www.espn.com/nfl/video?gameId=401772810",
+      "text": "Videos",
+      "shortText": "Videos",
+      "isExternal": false,
+      "isPremium": false
+    },
+    {
+      "language": "en-US",
+      "rel": [
+        "watchespn",
+        "desktop",
+        "event"
+      ],
+      "href": "https://www.espn.com/watchespn/index?gameId=401772810&sourceLang=en",
+      "text": "WatchESPN",
+      "shortText": "WatchESPN",
+      "isExternal": false,
+      "isPremium": false
+    },
+    {
+      "language": "en-US",
+      "rel": [
+        "watchespn",
+        "app",
+        "event"
+      ],
+      "href": "watchespn://showEvent?gameId=401772810&sourceLang=en",
+      "text": "WatchESPN",
+      "shortText": "WatchESPN",
+      "isExternal": false,
+      "isPremium": false
+    },
+    {
+      "language": "en-US",
+      "rel": [
+        "odds",
+        "desktop",
+        "event"
+      ],
+      "href": "https://www.espn.com/nfl/odds/_/gameId/401772810",
+      "text": "Odds",
+      "shortText": "Odds",
+      "isExternal": false,
+      "isPremium": false
+    },
+    {
+      "language": "en-US",
+      "rel": [
+        "odds",
+        "mobile",
+        "event"
+      ],
+      "href": "https://m.espn.com/nfl/odds/_/gameId/401772810",
+      "text": "Odds",
+      "shortText": "Odds",
+      "isExternal": false,
+      "isPremium": false
+    }
+  ]
+}
