@@ -424,18 +424,6 @@ class OffSeasonHandler:
         """Rotate between different content types"""
         print("=== Starting rotation cycle ===")
 
-        # Display weather
-        print("Displaying weather...")
-        try:
-            self.weather_display.display_weather_screen(
-                duration=self.rotation_schedule['weather'] * 60
-            )
-            print("Weather display finished")
-        except Exception as e:
-            print(f"Error in weather display: {e}")
-            import traceback
-            traceback.print_exc()
-
         # Display Bears info if it's football season and enabled
         bears_enabled = self.config.get('enable_bears', True)
         if self._is_football_season() and bears_enabled:
@@ -454,6 +442,18 @@ class OffSeasonHandler:
                 print("Skipping Bears display (not football season)")
             else:
                 print("Skipping Bears display (disabled in config)")
+
+        # Display weather (between Bears schedule and Bears news)
+        print("Displaying weather...")
+        try:
+            self.weather_display.display_weather_screen(
+                duration=self.rotation_schedule['weather'] * 60
+            )
+            print("Weather display finished")
+        except Exception as e:
+            print(f"Error in weather display: {e}")
+            import traceback
+            traceback.print_exc()
 
         # Display Bears breaking news if enabled
         bears_news_enabled = self.config.get('enable_bears_news', True)
@@ -509,6 +509,30 @@ class OffSeasonHandler:
             else:
                 print("Skipping PGA facts (disabled in config)")
 
+        # Display custom message with Cubs facts
+        print("Displaying custom message and Cubs facts...")
+        try:
+            self._display_custom_message(
+                duration=self.rotation_schedule['message'] * 60
+            )
+            print("Custom message finished")
+        except Exception as e:
+            print(f"Error in custom message: {e}")
+            import traceback
+            traceback.print_exc()
+
+        # Display weather (between Cubs facts and Cubs news)
+        print("Displaying weather...")
+        try:
+            self.weather_display.display_weather_screen(
+                duration=self.rotation_schedule['weather'] * 60
+            )
+            print("Weather display finished")
+        except Exception as e:
+            print(f"Error in weather display: {e}")
+            import traceback
+            traceback.print_exc()
+
         # Display Cubs breaking news if enabled
         cubs_news_enabled = self.config.get('enable_cubs_news', True)
         if cubs_news_enabled:
@@ -524,18 +548,6 @@ class OffSeasonHandler:
                 traceback.print_exc()
         else:
             print("Skipping Cubs news (disabled in config)")
-
-        # Display custom message with Cubs facts
-        print("Displaying custom message and Cubs facts...")
-        try:
-            self._display_custom_message(
-                duration=self.rotation_schedule['message'] * 60
-            )
-            print("Custom message finished")
-        except Exception as e:
-            print(f"Error in custom message: {e}")
-            import traceback
-            traceback.print_exc()
 
         print("=== Rotation cycle complete ===")
 
