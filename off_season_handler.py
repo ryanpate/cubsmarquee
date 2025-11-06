@@ -5,6 +5,7 @@ import json
 import os
 import random
 import pendulum
+import feedparser
 from PIL import Image
 from scoreboard_config import Colors, GameConfig
 from weather_display import WeatherDisplay
@@ -29,12 +30,29 @@ class OffSeasonHandler:
         # Load Cubs facts
         self.cubs_facts = self._load_cubs_facts()
 
+        # RSS news caching for Cubs
+        self.cubs_news = None
+        self.last_cubs_news_update = None
+        self.cubs_news_update_interval = 1800  # Update news every 30 minutes
+
+        # RSS news caching for Bears
+        self.bears_news = None
+        self.last_bears_news_update = None
+        self.bears_news_update_interval = 1800  # Update news every 30 minutes
+
+        # Classic Bears colors for news display
+        self.BEARS_NAVY = (11, 22, 42)      # Navy blue background
+        self.BEARS_ORANGE = (200, 56, 3)    # Classic Bears orange
+        self.BEARS_WHITE = (255, 255, 255)  # White text
+
         # Content rotation schedule (in minutes)
         self.rotation_schedule = {
             'weather': 2,      # Show weather for 2 minutes
             'bears': 3,        # Show Bears info for 3 minutes (if football season)
+            'bears_news': 2,   # Show Bears breaking news for 2 minutes
             'pga': 3,          # Show PGA Tour info for 3 minutes (if golf season)
             'pga_facts': 2,    # Show PGA Tour facts/news for 2 minutes (if golf season)
+            'cubs_news': 2,    # Show Cubs breaking news for 2 minutes
             'message': 4       # Custom message + Cubs facts for 4 minutes
         }
 
@@ -52,8 +70,10 @@ class OffSeasonHandler:
             'custom_message': 'GO CUBS GO! SEE YOU NEXT SEASON!',
             'display_mode': 'auto',  # auto, weather_only, message_only
             'enable_bears': True,    # Enable/disable Bears display
+            'enable_bears_news': True, # Enable/disable Bears breaking news
             'enable_pga': True,      # Enable/disable PGA Tour leaderboard
-            'enable_pga_facts': True # Enable/disable PGA Tour facts/news
+            'enable_pga_facts': True, # Enable/disable PGA Tour facts/news
+            'enable_cubs_news': True # Enable/disable Cubs breaking news
         }
 
         try:
@@ -94,6 +114,162 @@ class OffSeasonHandler:
         except Exception as e:
             print(f"Error loading Cubs facts: {e}")
             return default_facts
+
+    def _fetch_cubs_news_rss(self):
+        """
+        Fetch latest Cubs/MLB news from RSS feeds
+        Uses multiple sources for comprehensive coverage
+        """
+        news_headlines = []
+
+        # List of RSS feed URLs for Cubs/MLB news
+        rss_feeds = [
+            'https://www.espn.com/espn/rss/mlb/news',
+            'https://www.mlb.com/cubs/feeds/news/rss.xml',
+            'https://www.chicagotribune.com/sports/cubs/rss2.0.xml'
+        ]
+
+        for feed_url in rss_feeds:
+            try:
+                print(f"Fetching Cubs news from {feed_url}")
+                feed = feedparser.parse(feed_url)
+
+                # Check if feed was successfully parsed
+                if feed.bozo:
+                    print(f"Warning: Feed parsing issue for {feed_url}")
+                    continue
+
+                # Extract headlines from entries
+                for entry in feed.entries[:5]:  # Get top 5 from each feed
+                    try:
+                        # Get title and format it
+                        headline = entry.title.strip().upper()
+
+                        # Filter for Cubs-related content
+                        cubs_keywords = ['CUBS', 'CHICAGO', 'WRIGLEY', 'BRYANT', 'RIZZO',
+                                       'CONTRERAS', 'HOERNER', 'HAPP', 'BELLINGER', 'SWANSON']
+
+                        # Check if headline mentions Cubs
+                        is_cubs_related = any(keyword in headline for keyword in cubs_keywords)
+
+                        if is_cubs_related or 'cubs' in feed_url.lower():
+                            # Add "CUBS NEWS:" prefix
+                            formatted_headline = f"CUBS NEWS: {headline}"
+
+                            # Avoid duplicates
+                            if formatted_headline not in news_headlines:
+                                news_headlines.append(formatted_headline)
+
+                    except AttributeError:
+                        continue
+
+                # If we got news from first feed, that's enough
+                if news_headlines:
+                    print(f"Successfully fetched {len(news_headlines)} Cubs news headlines")
+                    break
+
+            except Exception as e:
+                print(f"Error fetching from {feed_url}: {e}")
+                continue
+
+        return news_headlines[:8]  # Return max 8 breaking news items
+
+    def _should_update_cubs_news(self):
+        """Check if Cubs news needs updating"""
+        if not self.cubs_news or not self.last_cubs_news_update:
+            return True
+        return (time.time() - self.last_cubs_news_update) > self.cubs_news_update_interval
+
+    def _get_live_cubs_news(self):
+        """
+        Get cached or fetch fresh Cubs news headlines
+        Returns list of formatted news headlines
+        """
+        # Update news if needed
+        if self._should_update_cubs_news():
+            print("Fetching fresh Cubs news from RSS feeds...")
+            self.cubs_news = self._fetch_cubs_news_rss()
+            self.last_cubs_news_update = time.time()
+
+        return self.cubs_news if self.cubs_news else []
+
+    def _fetch_bears_news_rss(self):
+        """
+        Fetch latest Bears/NFL news from RSS feeds
+        Uses multiple sources for comprehensive coverage
+        """
+        news_headlines = []
+
+        # List of RSS feed URLs for Bears/NFL news
+        rss_feeds = [
+            'https://www.espn.com/espn/rss/nfl/news',
+            'https://www.chicagobears.com/feeds/news',
+            'https://www.chicagotribune.com/sports/bears/rss2.0.xml'
+        ]
+
+        for feed_url in rss_feeds:
+            try:
+                print(f"Fetching Bears news from {feed_url}")
+                feed = feedparser.parse(feed_url)
+
+                # Check if feed was successfully parsed
+                if feed.bozo:
+                    print(f"Warning: Feed parsing issue for {feed_url}")
+                    continue
+
+                # Extract headlines from entries
+                for entry in feed.entries[:5]:  # Get top 5 from each feed
+                    try:
+                        # Get title and format it
+                        headline = entry.title.strip().upper()
+
+                        # Filter for Bears-related content
+                        bears_keywords = ['BEARS', 'CHICAGO', 'FIELDS', 'WILLIAMS', 'CALEB',
+                                        'SOLDIER FIELD', 'EBERFLUS', 'MOORE', 'ALLEN', 'SWEAT']
+
+                        # Check if headline mentions Bears
+                        is_bears_related = any(keyword in headline for keyword in bears_keywords)
+
+                        if is_bears_related or 'bears' in feed_url.lower():
+                            # Add "BREAKING NEWS - " prefix as requested
+                            formatted_headline = f"BREAKING NEWS - {headline}"
+
+                            # Avoid duplicates
+                            if formatted_headline not in news_headlines:
+                                news_headlines.append(formatted_headline)
+
+                    except AttributeError:
+                        continue
+
+                # If we got news from first feed, that's enough
+                if news_headlines:
+                    print(f"Successfully fetched {len(news_headlines)} Bears news headlines")
+                    break
+
+            except Exception as e:
+                print(f"Error fetching from {feed_url}: {e}")
+                continue
+
+        return news_headlines[:8]  # Return max 8 breaking news items
+
+    def _should_update_bears_news(self):
+        """Check if Bears news needs updating"""
+        if not self.bears_news or not self.last_bears_news_update:
+            return True
+        return (time.time() - self.last_bears_news_update) > self.bears_news_update_interval
+
+    def _get_live_bears_news(self):
+        """
+        Get cached or fetch fresh Bears news headlines
+        Returns list of formatted news headlines
+        """
+        # Update news if needed
+        if self._should_update_bears_news():
+            print("Fetching fresh Bears news from RSS feeds...")
+            self.bears_news = self._fetch_bears_news_rss()
+            self.last_bears_news_update = time.time()
+
+        return self.bears_news if self.bears_news else []
 
     def _is_football_season(self):
         """
@@ -243,6 +419,22 @@ class OffSeasonHandler:
             else:
                 print("Skipping Bears display (disabled in config)")
 
+        # Display Bears breaking news if enabled
+        bears_news_enabled = self.config.get('enable_bears_news', True)
+        if bears_news_enabled:
+            print("Displaying Bears breaking news...")
+            try:
+                self.display_bears_news(
+                    duration=self.rotation_schedule['bears_news'] * 60
+                )
+                print("Bears news display finished")
+            except Exception as e:
+                print(f"Error in Bears news display: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("Skipping Bears news (disabled in config)")
+
         # Display PGA Tour info if it's golf season and enabled
         pga_enabled = self.config.get('enable_pga', True)
         if self._is_golf_season() and pga_enabled:
@@ -281,6 +473,22 @@ class OffSeasonHandler:
             else:
                 print("Skipping PGA facts (disabled in config)")
 
+        # Display Cubs breaking news if enabled
+        cubs_news_enabled = self.config.get('enable_cubs_news', True)
+        if cubs_news_enabled:
+            print("Displaying Cubs breaking news...")
+            try:
+                self.display_cubs_news(
+                    duration=self.rotation_schedule['cubs_news'] * 60
+                )
+                print("Cubs news display finished")
+            except Exception as e:
+                print(f"Error in Cubs news display: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("Skipping Cubs news (disabled in config)")
+
         # Display custom message with Cubs facts
         print("Displaying custom message and Cubs facts...")
         try:
@@ -302,6 +510,151 @@ class OffSeasonHandler:
     def _display_message_cycle(self):
         """Display message for extended period"""
         self._display_custom_message(duration=300)  # 5 minutes
+
+    def _draw_sweater_header(self):
+        """Draw the classic Bears sweater header with orange stripes"""
+        # Fill entire background with Bears navy
+        for y in range(48):
+            for x in range(96):
+                self.manager.draw_pixel(x, y, *self.BEARS_NAVY)
+
+        # Top orange stripe (3 pixels tall)
+        for y in range(4, 7):
+            for x in range(96):
+                self.manager.draw_pixel(x, y, *self.BEARS_ORANGE)
+
+        # Bottom orange stripe (3 pixels tall)
+        for y in range(22, 25):
+            for x in range(96):
+                self.manager.draw_pixel(x, y, *self.BEARS_ORANGE)
+
+        # Draw "CHICAGO BEARS" text in white, centered between stripes
+        self.manager.draw_text('small_bold', 9, 19,
+                               self.BEARS_WHITE, 'CHICAGO BEARS')
+
+    def display_bears_news(self, duration=180):
+        """Display scrolling Bears breaking news with sweater header"""
+        # Fetch live Bears news headlines
+        live_news = self._get_live_bears_news()
+
+        # If no news available, show message
+        if not live_news:
+            live_news = ["BREAKING NEWS - STAY TUNED FOR THE LATEST BEARS UPDATES!"]
+
+        start_time = time.time()
+        message_index = 0
+        self.scroll_position = 96
+
+        while time.time() - start_time < duration:
+            try:
+                self.manager.clear_canvas()
+
+                # Draw the classic Bears sweater header
+                self._draw_sweater_header()
+
+                # Get current news headline
+                current_headline = live_news[message_index]
+
+                # Scroll the message
+                scroll_increment = getattr(GameConfig, 'SCROLL_PIXELS', 2)
+                self.scroll_position -= scroll_increment
+                text_length = len(current_headline) * 9
+
+                if self.scroll_position + text_length < 0:
+                    self.scroll_position = 96
+                    # Move to next headline
+                    message_index = (message_index + 1) % len(live_news)
+
+                    # Refresh news when we've gone through all headlines
+                    if message_index == 0:
+                        print("Refreshing Bears news")
+                        # Fetch fresh news (checks cache internally)
+                        fresh_news = self._get_live_bears_news()
+                        if fresh_news:
+                            live_news = fresh_news
+
+                # Draw scrolling Bears news below the sweater header in white
+                self.manager.draw_text(
+                    'medium_bold', int(self.scroll_position), 35,
+                    self.BEARS_WHITE, current_headline
+                )
+
+                self.manager.swap_canvas()
+
+                # Use GameConfig SCROLL_SPEED for consistent timing
+                time.sleep(GameConfig.SCROLL_SPEED)
+
+            except KeyboardInterrupt:
+                raise
+            except Exception as e:
+                print(f"Error in Bears news display: {e}")
+                import traceback
+                traceback.print_exc()
+                time.sleep(1)
+
+    def display_cubs_news(self, duration=180):
+        """Display scrolling Cubs breaking news"""
+        # Fetch live Cubs news headlines
+        live_news = self._get_live_cubs_news()
+
+        # If no news available, show message
+        if not live_news:
+            live_news = ["CUBS NEWS: STAY TUNED FOR THE LATEST CUBS UPDATES!"]
+
+        start_time = time.time()
+        message_index = 0
+        self.scroll_position = 96
+
+        while time.time() - start_time < duration:
+            try:
+                self.manager.clear_canvas()
+
+                # Create gradient background (Cubs blue gradient)
+                for y in range(48):
+                    for x in range(96):
+                        # Cubs blue gradient
+                        blue_intensity = int(102 + (y * 0.5))
+                        self.manager.draw_pixel(x, y, 12, 35, blue_intensity)
+
+                # Get current news headline
+                current_headline = live_news[message_index]
+
+                # Scroll the message
+                scroll_increment = getattr(GameConfig, 'SCROLL_PIXELS', 2)
+                self.scroll_position -= scroll_increment
+                text_length = len(current_headline) * 9
+
+                if self.scroll_position + text_length < 0:
+                    self.scroll_position = 96
+                    # Move to next headline
+                    message_index = (message_index + 1) % len(live_news)
+
+                    # Refresh news when we've gone through all headlines
+                    if message_index == 0:
+                        print("Refreshing Cubs news")
+                        # Fetch fresh news (checks cache internally)
+                        fresh_news = self._get_live_cubs_news()
+                        if fresh_news:
+                            live_news = fresh_news
+
+                # Draw scrolling Cubs news
+                self.manager.draw_text(
+                    'medium_bold', int(self.scroll_position), 25,
+                    Colors.YELLOW, current_headline
+                )
+
+                self.manager.swap_canvas()
+
+                # Use GameConfig SCROLL_SPEED for consistent timing
+                time.sleep(GameConfig.SCROLL_SPEED)
+
+            except KeyboardInterrupt:
+                raise
+            except Exception as e:
+                print(f"Error in Cubs news display: {e}")
+                import traceback
+                traceback.print_exc()
+                time.sleep(1)
 
     def _display_custom_message(self, duration=180):
         """Display custom scrolling message combined with random Cubs facts"""
