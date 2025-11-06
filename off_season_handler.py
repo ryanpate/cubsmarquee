@@ -34,6 +34,7 @@ class OffSeasonHandler:
             'weather': 2,      # Show weather for 2 minutes
             'bears': 3,        # Show Bears info for 3 minutes (if football season)
             'pga': 3,          # Show PGA Tour info for 3 minutes (if golf season)
+            'pga_facts': 2,    # Show PGA Tour facts/news for 2 minutes (if golf season)
             'message': 4       # Custom message + Cubs facts for 4 minutes
         }
 
@@ -51,7 +52,8 @@ class OffSeasonHandler:
             'custom_message': 'GO CUBS GO! SEE YOU NEXT SEASON!',
             'display_mode': 'auto',  # auto, weather_only, message_only
             'enable_bears': True,    # Enable/disable Bears display
-            'enable_pga': True       # Enable/disable PGA Tour display
+            'enable_pga': True,      # Enable/disable PGA Tour leaderboard
+            'enable_pga_facts': True # Enable/disable PGA Tour facts/news
         }
 
         try:
@@ -259,6 +261,25 @@ class OffSeasonHandler:
                 print("Skipping PGA display (not golf season)")
             else:
                 print("Skipping PGA display (disabled in config)")
+
+        # Display PGA Tour facts/news if it's golf season and enabled
+        pga_facts_enabled = self.config.get('enable_pga_facts', True)
+        if self._is_golf_season() and pga_facts_enabled:
+            print("Displaying PGA Tour facts/news (golf season)...")
+            try:
+                self.pga_display.display_pga_facts(
+                    duration=self.rotation_schedule['pga_facts'] * 60
+                )
+                print("PGA facts display finished")
+            except Exception as e:
+                print(f"Error in PGA facts display: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            if not self._is_golf_season():
+                print("Skipping PGA facts (not golf season)")
+            else:
+                print("Skipping PGA facts (disabled in config)")
 
         # Display custom message with Cubs facts
         print("Displaying custom message and Cubs facts...")

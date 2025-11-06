@@ -3,6 +3,11 @@
 import time
 import requests
 import pendulum
+import json
+import os
+import random
+import feedparser
+from PIL import Image
 from scoreboard_config import Colors, GameConfig
 
 
@@ -16,6 +21,15 @@ class PGADisplay:
         self.last_update = None
         self.update_interval = 3600  # Update every hour
         self.live_update_interval = 300  # Update live scores every 5 minutes
+        self.scroll_position = 96  # For scrolling text
+
+        # Load PGA facts
+        self.pga_facts = self._load_pga_facts()
+
+        # RSS news caching
+        self.pga_news = None
+        self.last_news_update = None
+        self.news_update_interval = 1800  # Update news every 30 minutes
 
         # PGA Tour colors
         self.PGA_BLUE = (0, 51, 153)        # PGA Tour blue
@@ -54,6 +68,112 @@ class PGADisplay:
         if not self.pga_data or not self.last_update:
             return True
         return (time.time() - self.last_update) > self.update_interval
+
+    def _load_pga_facts(self):
+        """Load PGA facts from JSON file"""
+        facts_path = '/home/pi/pga_facts.json'
+        alt_facts_path = './pga_facts.json'
+
+        # Default facts in case file doesn't exist
+        default_facts = [
+            "TIGER WOODS HAS WON 82 PGA TOUR EVENTS!",
+            "THE MASTERS AT AUGUSTA NATIONAL - GOLF'S GREATEST TOURNAMENT!",
+            "JACK NICKLAUS - 18 MAJOR CHAMPIONSHIPS!",
+            "RORY MCILROY - 4 MAJORS BEFORE AGE 26!",
+            "THE PGA TOUR - WHERE LEGENDS ARE MADE!"
+        ]
+
+        try:
+            # Try primary path first
+            if os.path.exists(facts_path):
+                with open(facts_path, 'r') as f:
+                    data = json.load(f)
+                    facts = data.get('facts', default_facts)
+                    print(f"Loaded {len(facts)} PGA facts from {facts_path}")
+                    return facts
+            # Try alternate path
+            elif os.path.exists(alt_facts_path):
+                with open(alt_facts_path, 'r') as f:
+                    data = json.load(f)
+                    facts = data.get('facts', default_facts)
+                    print(f"Loaded {len(facts)} PGA facts from {alt_facts_path}")
+                    return facts
+            else:
+                print(f"PGA facts file not found, using defaults")
+                return default_facts
+        except Exception as e:
+            print(f"Error loading PGA facts: {e}")
+            return default_facts
+
+    def _fetch_pga_news_rss(self):
+        """
+        Fetch latest PGA news from RSS feeds
+        Uses multiple sources for comprehensive coverage
+        """
+        news_headlines = []
+
+        # List of RSS feed URLs to try
+        rss_feeds = [
+            'https://golf.com/feed/',
+            'https://www.golfdigest.com/feed/news',
+            'https://www.pgatour.com/feeds/news.xml'
+        ]
+
+        for feed_url in rss_feeds:
+            try:
+                print(f"Fetching PGA news from {feed_url}")
+                feed = feedparser.parse(feed_url)
+
+                # Check if feed was successfully parsed
+                if feed.bozo:
+                    print(f"Warning: Feed parsing issue for {feed_url}")
+                    continue
+
+                # Extract headlines from entries
+                for entry in feed.entries[:5]:  # Get top 5 from each feed
+                    try:
+                        # Get title and format it
+                        headline = entry.title.strip().upper()
+
+                        # Add "BREAKING NEWS:" prefix
+                        formatted_headline = f"BREAKING: {headline}"
+
+                        # Avoid duplicates
+                        if formatted_headline not in news_headlines:
+                            news_headlines.append(formatted_headline)
+
+                    except AttributeError:
+                        continue
+
+                # If we got news from first feed, that's enough
+                if news_headlines:
+                    print(f"Successfully fetched {len(news_headlines)} PGA news headlines")
+                    break
+
+            except Exception as e:
+                print(f"Error fetching from {feed_url}: {e}")
+                continue
+
+        return news_headlines[:8]  # Return max 8 breaking news items
+
+    def _should_update_news(self):
+        """Check if news needs updating"""
+        if not self.pga_news or not self.last_news_update:
+            return True
+        return (time.time() - self.last_news_update) > self.news_update_interval
+
+    def _get_live_pga_news(self):
+        """
+        Get cached or fetch fresh PGA news headlines
+        Returns list of formatted news headlines
+        """
+        # Update news if needed
+        if self._should_update_news():
+            print("Fetching fresh PGA news from RSS feeds...")
+            self.pga_news = self._fetch_pga_news_rss()
+            self.last_news_update = time.time()
+
+        return self.pga_news if self.pga_news else []
 
     def _get_active_tournament(self):
         """Get currently active tournament if there is one"""
@@ -291,3 +411,77 @@ class PGADisplay:
 
             self.manager.swap_canvas()
             time.sleep(1)
+
+    def display_pga_facts(self, duration=180):
+        """Display scrolling PGA Tour facts and live news"""
+        # Fetch live news headlines
+        live_news = self._get_live_pga_news()
+
+        # Create a shuffled list of PGA facts
+        shuffled_facts = self.pga_facts.copy()
+        random.shuffle(shuffled_facts)
+
+        # Combine live news at the beginning with facts
+        # News headlines shown first, then facts
+        all_messages = live_news + shuffled_facts
+
+        start_time = time.time()
+        message_index = 0
+        self.scroll_position = 96
+
+        while time.time() - start_time < duration:
+            try:
+                self.manager.clear_canvas()
+
+                # Create gradient background (green to darker green for golf course theme)
+                for y in range(48):
+                    # Gradient from golf green to darker green
+                    green_intensity = int(139 - (y * 1.5))
+                    for x in range(96):
+                        self.manager.draw_pixel(x, y, 34, green_intensity, 34)
+
+                # Get current message (news or fact)
+                current_message = all_messages[message_index]
+
+                # Scroll the message
+                scroll_increment = getattr(GameConfig, 'SCROLL_PIXELS', 2)
+                self.scroll_position -= scroll_increment
+                text_length = len(current_message) * 9
+
+                if self.scroll_position + text_length < 0:
+                    self.scroll_position = 96
+                    # Move to next message
+                    message_index = (message_index + 1) % len(all_messages)
+
+                    # Re-shuffle and refresh when we've gone through all messages
+                    if message_index == 0:
+                        print("Re-shuffling PGA facts and refreshing news")
+
+                        # Fetch fresh news (checks cache internally)
+                        live_news = self._get_live_pga_news()
+
+                        # Re-shuffle facts
+                        shuffled_facts = self.pga_facts.copy()
+                        random.shuffle(shuffled_facts)
+
+                        # Rebuild message list
+                        all_messages = live_news + shuffled_facts
+
+                # Draw scrolling PGA news or facts
+                self.manager.draw_text(
+                    'small_bold', int(self.scroll_position), 25,
+                    self.PGA_GOLD, current_message
+                )
+
+                self.manager.swap_canvas()
+
+                # Use GameConfig SCROLL_SPEED for consistent timing
+                time.sleep(GameConfig.SCROLL_SPEED)
+
+            except KeyboardInterrupt:
+                raise
+            except Exception as e:
+                print(f"Error in PGA facts display: {e}")
+                import traceback
+                traceback.print_exc()
+                time.sleep(1)

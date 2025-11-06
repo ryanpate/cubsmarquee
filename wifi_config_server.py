@@ -112,7 +112,8 @@ def load_config():
         'custom_message': 'GO CUBS GO! SEE YOU NEXT SEASON!',
         'display_mode': 'auto',
         'enable_bears': True,
-        'enable_pga': True
+        'enable_pga': True,
+        'enable_pga_facts': True
     }
 
     try:
@@ -419,7 +420,14 @@ HTML_TEMPLATE = """
             <div class="form-group">
                 <label>
                     <input type="checkbox" id="enable_pga">
-                    Enable PGA Tour display (golf season)
+                    Enable PGA Tour leaderboard display (golf season)
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="enable_pga_facts">
+                    Enable PGA Tour facts/news display (golf season)
                 </label>
             </div>
 
@@ -523,6 +531,7 @@ HTML_TEMPLATE = """
             document.getElementById('display_mode').value = config.display_mode || 'auto';
             document.getElementById('enable_bears').checked = config.enable_bears !== false;
             document.getElementById('enable_pga').checked = config.enable_pga !== false;
+            document.getElementById('enable_pga_facts').checked = config.enable_pga_facts !== false;
             updateServiceStatus();
         };
 
@@ -632,7 +641,8 @@ HTML_TEMPLATE = """
                 custom_message: document.getElementById('custom_message').value,
                 display_mode: document.getElementById('display_mode').value,
                 enable_bears: document.getElementById('enable_bears').checked,
-                enable_pga: document.getElementById('enable_pga').checked
+                enable_pga: document.getElementById('enable_pga').checked,
+                enable_pga_facts: document.getElementById('enable_pga_facts').checked
             };
 
             const button = event.target;
@@ -1023,7 +1033,8 @@ def save_config_route():
             'custom_message': data.get('custom_message', 'GO CUBS GO!'),
             'display_mode': data.get('display_mode', 'auto'),
             'enable_bears': data.get('enable_bears', True),
-            'enable_pga': data.get('enable_pga', True)
+            'enable_pga': data.get('enable_pga', True),
+            'enable_pga_facts': data.get('enable_pga_facts', True)
         })
 
         if save_config(current_config):
