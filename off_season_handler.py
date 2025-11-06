@@ -619,7 +619,7 @@ class OffSeasonHandler:
                 time.sleep(1)
 
     def display_cubs_news(self, duration=180):
-        """Display scrolling Cubs breaking news"""
+        """Display scrolling Cubs breaking news with Cubs logo"""
         # Fetch live Cubs news headlines
         live_news = self._get_live_cubs_news()
 
@@ -635,12 +635,23 @@ class OffSeasonHandler:
             try:
                 self.manager.clear_canvas()
 
-                # Create gradient background (Cubs blue gradient)
+                # Create gradient background (same as Cubs facts display)
                 for y in range(48):
+                    # Gradient from Cubs blue to slightly lighter blue
+                    blue_intensity = int(102 + (y * 0.5))
                     for x in range(96):
-                        # Cubs blue gradient
-                        blue_intensity = int(102 + (y * 0.5))
-                        self.manager.draw_pixel(x, y, 12, 35, blue_intensity)
+                        self.manager.draw_pixel(x, y, 0, 51, blue_intensity)
+
+                # Display marquee image (Cubs logo) at the top
+                try:
+                    marquee = Image.open('./marquee.png')
+                    output_image = Image.new("RGB", (96, 48))
+                    output_image.paste(marquee, (0, 0))
+                    self.manager.canvas.SetImage(
+                        output_image.convert("RGB"), 0, 0)
+                except Exception as e:
+                    # Continue without marquee image
+                    pass
 
                 # Get current news headline
                 current_headline = live_news[message_index]
@@ -663,9 +674,9 @@ class OffSeasonHandler:
                         if fresh_news:
                             live_news = fresh_news
 
-                # Draw scrolling Cubs news
+                # Draw scrolling Cubs news at the bottom (same as Cubs facts)
                 self.manager.draw_text(
-                    'medium_bold', int(self.scroll_position), 25,
+                    'medium_bold', int(self.scroll_position), 48,
                     Colors.YELLOW, current_headline
                 )
 
