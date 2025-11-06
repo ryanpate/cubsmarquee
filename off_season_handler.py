@@ -201,6 +201,11 @@ class OffSeasonHandler:
         # Update news if needed
         if self._should_update_cubs_news():
             print("Fetching fresh Cubs news from RSS feeds...")
+
+            # Display loading message while fetching
+            self._display_cubs_loading("FETCHING CUBS NEWS...")
+            time.sleep(0.5)  # Show loading message briefly
+
             self.cubs_news = self._fetch_cubs_news_rss()
             self.last_cubs_news_update = time.time()
 
@@ -292,6 +297,11 @@ class OffSeasonHandler:
         # Update news if needed
         if self._should_update_bears_news():
             print("Fetching fresh Bears news from RSS feeds...")
+
+            # Display loading message while fetching
+            self._display_bears_loading("FETCHING BEARS NEWS...")
+            time.sleep(0.5)  # Show loading message briefly
+
             self.bears_news = self._fetch_bears_news_rss()
             self.last_bears_news_update = time.time()
 
@@ -537,6 +547,68 @@ class OffSeasonHandler:
         """Display message for extended period"""
         self._display_custom_message(duration=300)  # 5 minutes
 
+    def _display_bears_loading(self, message="FETCHING BEARS NEWS..."):
+        """Display loading message with Bears sweater header"""
+        self.manager.clear_canvas()
+
+        # Draw the classic Bears sweater header
+        # Fill entire background with Bears navy
+        for y in range(48):
+            for x in range(96):
+                self.manager.draw_pixel(x, y, *self.BEARS_NAVY)
+
+        # Top orange stripe (3 pixels tall)
+        for y in range(4, 7):
+            for x in range(96):
+                self.manager.draw_pixel(x, y, *self.BEARS_ORANGE)
+
+        # Bottom orange stripe (3 pixels tall)
+        for y in range(22, 25):
+            for x in range(96):
+                self.manager.draw_pixel(x, y, *self.BEARS_ORANGE)
+
+        # Draw "CHICAGO BEARS" text in white, centered between stripes
+        self.manager.draw_text('small_bold', 9, 19,
+                               self.BEARS_WHITE, 'CHICAGO BEARS')
+
+        # Display loading message centered
+        message_width = len(message) * 5
+        x_pos = max(0, (96 - message_width) // 2)
+        self.manager.draw_text('small_bold', x_pos, 42,
+                               self.BEARS_WHITE, message)
+
+        self.manager.swap_canvas()
+
+    def _display_cubs_loading(self, message="FETCHING CUBS NEWS..."):
+        """Display loading message with Cubs logo"""
+        self.manager.clear_canvas()
+
+        # Create gradient background (same as Cubs facts display)
+        for y in range(48):
+            # Gradient from Cubs blue to slightly lighter blue
+            blue_intensity = int(102 + (y * 0.5))
+            for x in range(96):
+                self.manager.draw_pixel(x, y, 0, 51, blue_intensity)
+
+        # Display marquee image (Cubs logo) at the top
+        try:
+            marquee = Image.open('./marquee.png')
+            output_image = Image.new("RGB", (96, 48))
+            output_image.paste(marquee, (0, 0))
+            self.manager.canvas.SetImage(
+                output_image.convert("RGB"), 0, 0)
+        except Exception as e:
+            # Continue without marquee image
+            pass
+
+        # Display loading message centered at bottom
+        message_width = len(message) * 5
+        x_pos = max(0, (96 - message_width) // 2)
+        self.manager.draw_text('small_bold', x_pos, 48,
+                               Colors.YELLOW, message)
+
+        self.manager.swap_canvas()
+
     def _draw_sweater_header(self):
         """Draw the classic Bears sweater header with orange stripes"""
         # Fill entire background with Bears navy
@@ -601,7 +673,7 @@ class OffSeasonHandler:
 
                 # Draw scrolling Bears news below the sweater header in white
                 self.manager.draw_text(
-                    'medium_bold', int(self.scroll_position), 35,
+                    'medium_bold', int(self.scroll_position), 42,
                     self.BEARS_WHITE, current_headline
                 )
 
