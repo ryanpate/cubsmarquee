@@ -1,0 +1,22 @@
+# Cubs Scoreboard Dependencies
+
+# LED Matrix Display
+rgbmatrix
+
+# MLB Stats API
+MLB-StatsAPI
+
+# HTTP Requests
+requests
+
+# Date/Time Handling
+pendulum
+
+# Image Processing
+Pillow
+
+# Flask Web Server for Admin Panel
+Flask
+
+# RSS Feed Parsing for PGA News
+feedparser

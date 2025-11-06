@@ -6,6 +6,7 @@ import pendulum
 import json
 import os
 import random
+import feedparser
 from PIL import Image
 from scoreboard_config import Colors, GameConfig
 
@@ -24,6 +25,11 @@ class PGADisplay:
 
         # Load PGA facts
         self.pga_facts = self._load_pga_facts()
+
+        # RSS news caching
+        self.pga_news = None
+        self.last_news_update = None
+        self.news_update_interval = 1800  # Update news every 30 minutes
 
         # PGA Tour colors
         self.PGA_BLUE = (0, 51, 153)        # PGA Tour blue
@@ -98,6 +104,76 @@ class PGADisplay:
         except Exception as e:
             print(f"Error loading PGA facts: {e}")
             return default_facts
+
+    def _fetch_pga_news_rss(self):
+        """
+        Fetch latest PGA news from RSS feeds
+        Uses multiple sources for comprehensive coverage
+        """
+        news_headlines = []
+
+        # List of RSS feed URLs to try
+        rss_feeds = [
+            'https://golf.com/feed/',
+            'https://www.golfdigest.com/feed/news',
+            'https://www.pgatour.com/feeds/news.xml'
+        ]
+
+        for feed_url in rss_feeds:
+            try:
+                print(f"Fetching PGA news from {feed_url}")
+                feed = feedparser.parse(feed_url)
+
+                # Check if feed was successfully parsed
+                if feed.bozo:
+                    print(f"Warning: Feed parsing issue for {feed_url}")
+                    continue
+
+                # Extract headlines from entries
+                for entry in feed.entries[:5]:  # Get top 5 from each feed
+                    try:
+                        # Get title and format it
+                        headline = entry.title.strip().upper()
+
+                        # Add "BREAKING NEWS:" prefix
+                        formatted_headline = f"BREAKING: {headline}"
+
+                        # Avoid duplicates
+                        if formatted_headline not in news_headlines:
+                            news_headlines.append(formatted_headline)
+
+                    except AttributeError:
+                        continue
+
+                # If we got news from first feed, that's enough
+                if news_headlines:
+                    print(f"Successfully fetched {len(news_headlines)} PGA news headlines")
+                    break
+
+            except Exception as e:
+                print(f"Error fetching from {feed_url}: {e}")
+                continue
+
+        return news_headlines[:8]  # Return max 8 breaking news items
+
+    def _should_update_news(self):
+        """Check if news needs updating"""
+        if not self.pga_news or not self.last_news_update:
+            return True
+        return (time.time() - self.last_news_update) > self.news_update_interval
+
+    def _get_live_pga_news(self):
+        """
+        Get cached or fetch fresh PGA news headlines
+        Returns list of formatted news headlines
+        """
+        # Update news if needed
+        if self._should_update_news():
+            print("Fetching fresh PGA news from RSS feeds...")
+            self.pga_news = self._fetch_pga_news_rss()
+            self.last_news_update = time.time()
+
+        return self.pga_news if self.pga_news else []
 
     def _get_active_tournament(self):
         """Get currently active tournament if there is one"""
@@ -337,10 +413,17 @@ class PGADisplay:
             time.sleep(1)
 
     def display_pga_facts(self, duration=180):
-        """Display scrolling PGA Tour facts and news"""
+        """Display scrolling PGA Tour facts and live news"""
+        # Fetch live news headlines
+        live_news = self._get_live_pga_news()
+
         # Create a shuffled list of PGA facts
         shuffled_facts = self.pga_facts.copy()
         random.shuffle(shuffled_facts)
+
+        # Combine live news at the beginning with facts
+        # News headlines shown first, then facts
+        all_messages = live_news + shuffled_facts
 
         start_time = time.time()
         message_index = 0
@@ -357,29 +440,37 @@ class PGADisplay:
                     for x in range(96):
                         self.manager.draw_pixel(x, y, 34, green_intensity, 34)
 
-                # Get current fact
-                current_fact = shuffled_facts[message_index]
+                # Get current message (news or fact)
+                current_message = all_messages[message_index]
 
                 # Scroll the message
                 scroll_increment = getattr(GameConfig, 'SCROLL_PIXELS', 2)
                 self.scroll_position -= scroll_increment
-                text_length = len(current_fact) * 9
+                text_length = len(current_message) * 9
 
                 if self.scroll_position + text_length < 0:
                     self.scroll_position = 96
-                    # Move to next fact
-                    message_index = (message_index + 1) % len(shuffled_facts)
+                    # Move to next message
+                    message_index = (message_index + 1) % len(all_messages)
 
-                    # Re-shuffle facts when we've gone through all of them
+                    # Re-shuffle and refresh when we've gone through all messages
                     if message_index == 0:
-                        print("Re-shuffling PGA facts for variety")
+                        print("Re-shuffling PGA facts and refreshing news")
+
+                        # Fetch fresh news (checks cache internally)
+                        live_news = self._get_live_pga_news()
+
+                        # Re-shuffle facts
                         shuffled_facts = self.pga_facts.copy()
                         random.shuffle(shuffled_facts)
 
-                # Draw "PGA TOUR NEWS" header at top
+                        # Rebuild message list
+                        all_messages = live_news + shuffled_facts
+
+                # Draw scrolling PGA news or facts
                 self.manager.draw_text(
                     'small_bold', int(self.scroll_position), 25,
-                    self.PGA_GOLD, current_fact
+                    self.PGA_GOLD, current_message
                 )
 
                 self.manager.swap_canvas()
