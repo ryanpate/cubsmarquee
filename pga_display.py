@@ -3,6 +3,10 @@
 import time
 import requests
 import pendulum
+import json
+import os
+import random
+from PIL import Image
 from scoreboard_config import Colors, GameConfig
 
 
@@ -16,6 +20,10 @@ class PGADisplay:
         self.last_update = None
         self.update_interval = 3600  # Update every hour
         self.live_update_interval = 300  # Update live scores every 5 minutes
+        self.scroll_position = 96  # For scrolling text
+
+        # Load PGA facts
+        self.pga_facts = self._load_pga_facts()
 
         # PGA Tour colors
         self.PGA_BLUE = (0, 51, 153)        # PGA Tour blue
@@ -54,6 +62,42 @@ class PGADisplay:
         if not self.pga_data or not self.last_update:
             return True
         return (time.time() - self.last_update) > self.update_interval
+
+    def _load_pga_facts(self):
+        """Load PGA facts from JSON file"""
+        facts_path = '/home/pi/pga_facts.json'
+        alt_facts_path = './pga_facts.json'
+
+        # Default facts in case file doesn't exist
+        default_facts = [
+            "TIGER WOODS HAS WON 82 PGA TOUR EVENTS!",
+            "THE MASTERS AT AUGUSTA NATIONAL - GOLF'S GREATEST TOURNAMENT!",
+            "JACK NICKLAUS - 18 MAJOR CHAMPIONSHIPS!",
+            "RORY MCILROY - 4 MAJORS BEFORE AGE 26!",
+            "THE PGA TOUR - WHERE LEGENDS ARE MADE!"
+        ]
+
+        try:
+            # Try primary path first
+            if os.path.exists(facts_path):
+                with open(facts_path, 'r') as f:
+                    data = json.load(f)
+                    facts = data.get('facts', default_facts)
+                    print(f"Loaded {len(facts)} PGA facts from {facts_path}")
+                    return facts
+            # Try alternate path
+            elif os.path.exists(alt_facts_path):
+                with open(alt_facts_path, 'r') as f:
+                    data = json.load(f)
+                    facts = data.get('facts', default_facts)
+                    print(f"Loaded {len(facts)} PGA facts from {alt_facts_path}")
+                    return facts
+            else:
+                print(f"PGA facts file not found, using defaults")
+                return default_facts
+        except Exception as e:
+            print(f"Error loading PGA facts: {e}")
+            return default_facts
 
     def _get_active_tournament(self):
         """Get currently active tournament if there is one"""
@@ -291,3 +335,62 @@ class PGADisplay:
 
             self.manager.swap_canvas()
             time.sleep(1)
+
+    def display_pga_facts(self, duration=180):
+        """Display scrolling PGA Tour facts and news"""
+        # Create a shuffled list of PGA facts
+        shuffled_facts = self.pga_facts.copy()
+        random.shuffle(shuffled_facts)
+
+        start_time = time.time()
+        message_index = 0
+        self.scroll_position = 96
+
+        while time.time() - start_time < duration:
+            try:
+                self.manager.clear_canvas()
+
+                # Create gradient background (green to darker green for golf course theme)
+                for y in range(48):
+                    # Gradient from golf green to darker green
+                    green_intensity = int(139 - (y * 1.5))
+                    for x in range(96):
+                        self.manager.draw_pixel(x, y, 34, green_intensity, 34)
+
+                # Get current fact
+                current_fact = shuffled_facts[message_index]
+
+                # Scroll the message
+                scroll_increment = getattr(GameConfig, 'SCROLL_PIXELS', 2)
+                self.scroll_position -= scroll_increment
+                text_length = len(current_fact) * 9
+
+                if self.scroll_position + text_length < 0:
+                    self.scroll_position = 96
+                    # Move to next fact
+                    message_index = (message_index + 1) % len(shuffled_facts)
+
+                    # Re-shuffle facts when we've gone through all of them
+                    if message_index == 0:
+                        print("Re-shuffling PGA facts for variety")
+                        shuffled_facts = self.pga_facts.copy()
+                        random.shuffle(shuffled_facts)
+
+                # Draw "PGA TOUR NEWS" header at top
+                self.manager.draw_text(
+                    'small_bold', int(self.scroll_position), 25,
+                    self.PGA_GOLD, current_fact
+                )
+
+                self.manager.swap_canvas()
+
+                # Use GameConfig SCROLL_SPEED for consistent timing
+                time.sleep(GameConfig.SCROLL_SPEED)
+
+            except KeyboardInterrupt:
+                raise
+            except Exception as e:
+                print(f"Error in PGA facts display: {e}")
+                import traceback
+                traceback.print_exc()
+                time.sleep(1)
