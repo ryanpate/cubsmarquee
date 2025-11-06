@@ -126,7 +126,7 @@ class OffSeasonHandler:
         rss_feeds = [
             'https://www.espn.com/espn/rss/mlb/news',
             'https://www.mlb.com/cubs/feeds/news/rss.xml',
-            'https://www.chicagotribune.com/sports/cubs/rss2.0.xml'
+            'https://www.cbssports.com/rss/headlines/mlb/'
         ]
 
         for feed_url in rss_feeds:
@@ -134,20 +134,26 @@ class OffSeasonHandler:
                 print(f"Fetching Cubs news from {feed_url}")
                 feed = feedparser.parse(feed_url)
 
-                # Check if feed was successfully parsed
-                if feed.bozo:
-                    print(f"Warning: Feed parsing issue for {feed_url}")
+                # Check if feed has entries even if bozo flag is set
+                # Some feeds work fine despite bozo being True
+                if not feed.entries:
+                    print(f"No entries found in feed: {feed_url}")
+                    if feed.bozo:
+                        print(f"Feed error: {feed.get('bozo_exception', 'Unknown error')}")
                     continue
 
+                print(f"Found {len(feed.entries)} entries in {feed_url}")
+
                 # Extract headlines from entries
-                for entry in feed.entries[:5]:  # Get top 5 from each feed
+                for entry in feed.entries[:10]:  # Get top 10 from each feed
                     try:
                         # Get title and format it
                         headline = entry.title.strip().upper()
 
                         # Filter for Cubs-related content
                         cubs_keywords = ['CUBS', 'CHICAGO', 'WRIGLEY', 'BRYANT', 'RIZZO',
-                                       'CONTRERAS', 'HOERNER', 'HAPP', 'BELLINGER', 'SWANSON']
+                                       'CONTRERAS', 'HOERNER', 'HAPP', 'BELLINGER', 'SWANSON',
+                                       'CHI CUBS', 'CHICAGO CUBS']
 
                         # Check if headline mentions Cubs
                         is_cubs_related = any(keyword in headline for keyword in cubs_keywords)
@@ -159,18 +165,25 @@ class OffSeasonHandler:
                             # Avoid duplicates
                             if formatted_headline not in news_headlines:
                                 news_headlines.append(formatted_headline)
+                                print(f"Added Cubs headline: {headline[:50]}...")
 
-                    except AttributeError:
+                    except AttributeError as e:
+                        print(f"Error parsing entry: {e}")
                         continue
 
-                # If we got news from first feed, that's enough
-                if news_headlines:
-                    print(f"Successfully fetched {len(news_headlines)} Cubs news headlines")
+                # Continue trying all feeds to get more Cubs-specific news
+                if len(news_headlines) >= 8:
+                    print(f"Successfully collected {len(news_headlines)} Cubs news headlines")
                     break
 
             except Exception as e:
                 print(f"Error fetching from {feed_url}: {e}")
                 continue
+
+        if not news_headlines:
+            print("No Cubs news found, using fallback message")
+        else:
+            print(f"Total Cubs headlines collected: {len(news_headlines)}")
 
         return news_headlines[:8]  # Return max 8 breaking news items
 
@@ -203,8 +216,8 @@ class OffSeasonHandler:
         # List of RSS feed URLs for Bears/NFL news
         rss_feeds = [
             'https://www.espn.com/espn/rss/nfl/news',
-            'https://www.chicagobears.com/feeds/news',
-            'https://www.chicagotribune.com/sports/bears/rss2.0.xml'
+            'https://www.si.com/rss/si_nfl.rss',
+            'https://www.cbssports.com/rss/headlines/nfl/'
         ]
 
         for feed_url in rss_feeds:
@@ -212,43 +225,56 @@ class OffSeasonHandler:
                 print(f"Fetching Bears news from {feed_url}")
                 feed = feedparser.parse(feed_url)
 
-                # Check if feed was successfully parsed
-                if feed.bozo:
-                    print(f"Warning: Feed parsing issue for {feed_url}")
+                # Check if feed has entries even if bozo flag is set
+                # Some feeds work fine despite bozo being True
+                if not feed.entries:
+                    print(f"No entries found in feed: {feed_url}")
+                    if feed.bozo:
+                        print(f"Feed error: {feed.get('bozo_exception', 'Unknown error')}")
                     continue
 
+                print(f"Found {len(feed.entries)} entries in {feed_url}")
+
                 # Extract headlines from entries
-                for entry in feed.entries[:5]:  # Get top 5 from each feed
+                for entry in feed.entries[:10]:  # Get top 10 from each feed
                     try:
                         # Get title and format it
                         headline = entry.title.strip().upper()
 
                         # Filter for Bears-related content
                         bears_keywords = ['BEARS', 'CHICAGO', 'FIELDS', 'WILLIAMS', 'CALEB',
-                                        'SOLDIER FIELD', 'EBERFLUS', 'MOORE', 'ALLEN', 'SWEAT']
+                                        'SOLDIER FIELD', 'EBERFLUS', 'MOORE', 'ALLEN', 'SWEAT',
+                                        'CHI BEARS', 'CHICAGO BEARS']
 
                         # Check if headline mentions Bears
                         is_bears_related = any(keyword in headline for keyword in bears_keywords)
 
-                        if is_bears_related or 'bears' in feed_url.lower():
+                        if is_bears_related:
                             # Add "BREAKING NEWS - " prefix as requested
                             formatted_headline = f"BREAKING NEWS - {headline}"
 
                             # Avoid duplicates
                             if formatted_headline not in news_headlines:
                                 news_headlines.append(formatted_headline)
+                                print(f"Added Bears headline: {headline[:50]}...")
 
-                    except AttributeError:
+                    except AttributeError as e:
+                        print(f"Error parsing entry: {e}")
                         continue
 
-                # If we got news from first feed, that's enough
-                if news_headlines:
-                    print(f"Successfully fetched {len(news_headlines)} Bears news headlines")
+                # Continue trying all feeds to get more Bears-specific news
+                if len(news_headlines) >= 8:
+                    print(f"Successfully collected {len(news_headlines)} Bears news headlines")
                     break
 
             except Exception as e:
                 print(f"Error fetching from {feed_url}: {e}")
                 continue
+
+        if not news_headlines:
+            print("No Bears news found, using fallback message")
+        else:
+            print(f"Total Bears headlines collected: {len(news_headlines)}")
 
         return news_headlines[:8]  # Return max 8 breaking news items
 
