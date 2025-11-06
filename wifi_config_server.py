@@ -111,7 +111,8 @@ def load_config():
         'weather_api_key': '',
         'custom_message': 'GO CUBS GO! SEE YOU NEXT SEASON!',
         'display_mode': 'auto',
-        'enable_bears': True
+        'enable_bears': True,
+        'enable_pga': True
     }
 
     try:
@@ -416,6 +417,13 @@ HTML_TEMPLATE = """
             </div>
 
             <div class="form-group">
+                <label>
+                    <input type="checkbox" id="enable_pga">
+                    Enable PGA Tour display (golf season)
+                </label>
+            </div>
+
+            <div class="form-group">
                 <label for="zip_code">ZIP Code (for weather):</label>
                 <input type="text" id="zip_code" placeholder="e.g., 60613" value="{{ config.zip_code }}">
             </div>
@@ -514,6 +522,7 @@ HTML_TEMPLATE = """
             const config = {{ config | tojson }};
             document.getElementById('display_mode').value = config.display_mode || 'auto';
             document.getElementById('enable_bears').checked = config.enable_bears !== false;
+            document.getElementById('enable_pga').checked = config.enable_pga !== false;
             updateServiceStatus();
         };
 
@@ -622,7 +631,8 @@ HTML_TEMPLATE = """
                 weather_api_key: document.getElementById('weather_api_key').value,
                 custom_message: document.getElementById('custom_message').value,
                 display_mode: document.getElementById('display_mode').value,
-                enable_bears: document.getElementById('enable_bears').checked
+                enable_bears: document.getElementById('enable_bears').checked,
+                enable_pga: document.getElementById('enable_pga').checked
             };
 
             const button = event.target;
@@ -1012,7 +1022,8 @@ def save_config_route():
             'weather_api_key': data.get('weather_api_key', ''),
             'custom_message': data.get('custom_message', 'GO CUBS GO!'),
             'display_mode': data.get('display_mode', 'auto'),
-            'enable_bears': data.get('enable_bears', True)
+            'enable_bears': data.get('enable_bears', True),
+            'enable_pga': data.get('enable_pga', True)
         })
 
         if save_config(current_config):

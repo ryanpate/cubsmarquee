@@ -9,6 +9,7 @@ from PIL import Image
 from scoreboard_config import Colors, GameConfig
 from weather_display import WeatherDisplay
 from bears_display import BearsDisplay
+from pga_display import PGADisplay
 
 
 class OffSeasonHandler:
@@ -19,6 +20,7 @@ class OffSeasonHandler:
         self.manager = scoreboard_manager
         self.weather_display = WeatherDisplay(scoreboard_manager)
         self.bears_display = BearsDisplay(scoreboard_manager)
+        self.pga_display = PGADisplay(scoreboard_manager)
         self.scroll_position = 96
 
         # Load configuration
@@ -30,8 +32,8 @@ class OffSeasonHandler:
         # Content rotation schedule (in minutes)
         self.rotation_schedule = {
             'weather': 2,      # Show weather for 2 minutes
-            # Show Bears info for 3 minutes (if football season)
-            'bears': 3,
+            'bears': 3,        # Show Bears info for 3 minutes (if football season)
+            'pga': 3,          # Show PGA Tour info for 3 minutes (if golf season)
             'message': 4       # Custom message + Cubs facts for 4 minutes
         }
 
@@ -48,7 +50,8 @@ class OffSeasonHandler:
             'weather_api_key': '',
             'custom_message': 'GO CUBS GO! SEE YOU NEXT SEASON!',
             'display_mode': 'auto',  # auto, weather_only, message_only
-            'enable_bears': True     # Enable/disable Bears display
+            'enable_bears': True,    # Enable/disable Bears display
+            'enable_pga': True       # Enable/disable PGA Tour display
         }
 
         try:
@@ -97,6 +100,15 @@ class OffSeasonHandler:
         """
         month = pendulum.now().month
         return month >= 9 or month <= 2  # Sept through Feb
+
+    def _is_golf_season(self):
+        """
+        Determine if it's currently golf season
+        PGA Tour season typically runs January through September
+        (FedEx Cup Playoffs end in late August/early September)
+        """
+        month = pendulum.now().month
+        return 1 <= month <= 9  # Jan through Sept
 
     def display_off_season_content(self):
         """Main loop for off-season content rotation"""
@@ -228,6 +240,25 @@ class OffSeasonHandler:
                 print("Skipping Bears display (not football season)")
             else:
                 print("Skipping Bears display (disabled in config)")
+
+        # Display PGA Tour info if it's golf season and enabled
+        pga_enabled = self.config.get('enable_pga', True)
+        if self._is_golf_season() and pga_enabled:
+            print("Displaying PGA Tour info (golf season)...")
+            try:
+                self.pga_display.display_pga_info(
+                    duration=self.rotation_schedule['pga'] * 60
+                )
+                print("PGA display finished")
+            except Exception as e:
+                print(f"Error in PGA display: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            if not self._is_golf_season():
+                print("Skipping PGA display (not golf season)")
+            else:
+                print("Skipping PGA display (disabled in config)")
 
         # Display custom message with Cubs facts
         print("Displaying custom message and Cubs facts...")
