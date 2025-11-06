@@ -52,7 +52,8 @@ class OffSeasonHandler:
             'custom_message': 'GO CUBS GO! SEE YOU NEXT SEASON!',
             'display_mode': 'auto',  # auto, weather_only, message_only
             'enable_bears': True,    # Enable/disable Bears display
-            'enable_pga': True       # Enable/disable PGA Tour display
+            'enable_pga': True,      # Enable/disable PGA Tour leaderboard
+            'enable_pga_facts': True # Enable/disable PGA Tour facts/news
         }
 
         try:
@@ -262,7 +263,8 @@ class OffSeasonHandler:
                 print("Skipping PGA display (disabled in config)")
 
         # Display PGA Tour facts/news if it's golf season and enabled
-        if self._is_golf_season() and pga_enabled:
+        pga_facts_enabled = self.config.get('enable_pga_facts', True)
+        if self._is_golf_season() and pga_facts_enabled:
             print("Displaying PGA Tour facts/news (golf season)...")
             try:
                 self.pga_display.display_pga_facts(
