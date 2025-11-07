@@ -246,7 +246,7 @@ class OffSeasonHandler:
             print("Fetching fresh Cubs news from RSS feeds...")
 
             # Display loading message while fetching
-            self._display_cubs_loading("FETCHING CUBS NEWS...")
+            self._display_cubs_loading("FETCHING NEWS...")
             time.sleep(0.5)  # Show loading message briefly
 
             self.cubs_news = self._fetch_cubs_news_rss()
@@ -781,7 +781,7 @@ class OffSeasonHandler:
 
                 # Draw scrolling Bears news below the sweater header in white
                 self.manager.draw_text(
-                    'medium_bold', int(self.scroll_position), 46,
+                    'medium_bold', int(self.scroll_position), 44,
                     self.BEARS_WHITE, current_headline
                 )
 
