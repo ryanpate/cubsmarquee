@@ -145,15 +145,62 @@ class OffSeasonHandler:
                 print(f"Found {len(feed.entries)} entries in {feed_url}")
 
                 # Extract headlines from entries
-                for entry in feed.entries[:10]:  # Get top 10 from each feed
+                for entry in feed.entries[:20]:  # Check top 20 from each feed for more coverage
                     try:
                         # Get title and format it
                         headline = entry.title.strip().upper()
 
-                        # Filter for Cubs-related content
-                        cubs_keywords = ['CUBS', 'CHICAGO', 'WRIGLEY', 'BRYANT', 'RIZZO',
-                                       'CONTRERAS', 'HOERNER', 'HAPP', 'BELLINGER', 'SWANSON',
-                                       'CHI CUBS', 'CHICAGO CUBS']
+                        # Comprehensive Cubs keyword filtering
+                        # Current players (2025-2026 season) and retired Cubs legends only
+                        cubs_keywords = [
+                            # Team names and variations
+                            'CUBS', 'CHICAGO CUBS', 'CHI CUBS', 'CUBBIES',
+                            'NORTH SIDERS',
+
+                            # Current players (2025-2026 season)
+                            'CODY BELLINGER', 'BELLINGER',
+                            'DANSBY SWANSON', 'SWANSON',
+                            'IAN HAPP', 'HAPP',
+                            'NICO HOERNER', 'HOERNER',
+                            'SEIYA SUZUKI', 'SUZUKI',
+                            'JUSTIN STEELE', 'STEELE',
+                            'SHOTA IMANAGA', 'IMANAGA',
+                            'MICHAEL BUSCH', 'BUSCH',
+                            'PETE CROW-ARMSTRONG', 'PCA',
+                            'MIGUEL AMAYA', 'AMAYA',
+                            'ISAAC PAREDES', 'PAREDES',
+                            'PATRICK WISDOM', 'WISDOM',
+                            'JAMESON TAILLON', 'TAILLON',
+                            'KYLE HENDRICKS', 'HENDRICKS',
+                            'JAVIER ASSAD', 'ASSAD',
+                            'HAYDEN WESNESKI', 'WESNESKI',
+                            'PORTER HODGE', 'HODGE',
+
+                            # Retired Cubs legends (who retired as Cubs only)
+                            'ERNIE BANKS', 'BANKS', 'MR. CUB',
+                            'RYNE SANDBERG', 'SANDBERG', 'RYNO',
+                            'BILLY WILLIAMS', 'WILLIAMS',
+                            'RON SANTO', 'SANTO',
+                            'KERRY WOOD', 'WOOD',
+                            'MORDECAI BROWN', 'THREE FINGER BROWN',
+                            'HACK WILSON', 'WILSON',
+                            'GABBY HARTNETT', 'HARTNETT',
+                            'PHIL CAVARRETTA', 'CAVARRETTA',
+
+                            # Current coaches and front office
+                            'CRAIG COUNSELL', 'COUNSELL',
+                            'JED HOYER', 'HOYER',
+
+                            # Stadium and facilities
+                            'WRIGLEY FIELD', 'WRIGLEY',
+                            'FRIENDLY CONFINES',
+                            'CLARK AND ADDISON',
+                            'WAVELAND',
+                            'SHEFFIELD',
+
+                            # Division
+                            'NL CENTRAL', 'NATIONAL LEAGUE'
+                        ]
 
                         # Check if headline mentions Cubs
                         is_cubs_related = any(keyword in headline for keyword in cubs_keywords)
@@ -171,11 +218,6 @@ class OffSeasonHandler:
                         print(f"Error parsing entry: {e}")
                         continue
 
-                # Continue trying all feeds to get more Cubs-specific news
-                if len(news_headlines) >= 8:
-                    print(f"Successfully collected {len(news_headlines)} Cubs news headlines")
-                    break
-
             except Exception as e:
                 print(f"Error fetching from {feed_url}: {e}")
                 continue
@@ -185,7 +227,8 @@ class OffSeasonHandler:
         else:
             print(f"Total Cubs headlines collected: {len(news_headlines)}")
 
-        return news_headlines[:8]  # Return max 8 breaking news items
+        # Return up to 12 news items (increased from 8 for more variety)
+        return news_headlines[:12]
 
     def _should_update_cubs_news(self):
         """Check if Cubs news needs updating"""
@@ -241,15 +284,72 @@ class OffSeasonHandler:
                 print(f"Found {len(feed.entries)} entries in {feed_url}")
 
                 # Extract headlines from entries
-                for entry in feed.entries[:10]:  # Get top 10 from each feed
+                for entry in feed.entries[:20]:  # Check top 20 from each feed for more coverage
                     try:
                         # Get title and format it
                         headline = entry.title.strip().upper()
 
-                        # Filter for Bears-related content
-                        bears_keywords = ['BEARS', 'CHICAGO', 'FIELDS', 'WILLIAMS', 'CALEB',
-                                        'SOLDIER FIELD', 'EBERFLUS', 'MOORE', 'ALLEN', 'SWEAT',
-                                        'CHI BEARS', 'CHICAGO BEARS']
+                        # Comprehensive Bears keyword filtering
+                        # Current players (2025-2026 season) and retired Bears legends only
+                        bears_keywords = [
+                            # Team names and abbreviations
+                            'BEARS', 'CHICAGO BEARS', 'CHI BEARS', 'DA BEARS',
+                            'MONSTERS OF THE MIDWAY',
+
+                            # Current players (2025-2026 season)
+                            'CALEB WILLIAMS', 'WILLIAMS',
+                            'DJ MOORE', 'D.J. MOORE', 'MOORE',
+                            'KEENAN ALLEN', 'ALLEN',
+                            'ROME ODUNZE', 'ODUNZE',
+                            'COLE KMET', 'KMET',
+                            'DARNELL WRIGHT', 'WRIGHT',
+                            'TEVEN JENKINS', 'JENKINS',
+                            'BRAXTON JONES', 'JONES',
+                            'MONTEZ SWEAT', 'SWEAT',
+                            'TREMAINE EDMUNDS', 'EDMUNDS',
+                            'JAYLON JOHNSON', 'JOHNSON',
+                            'T.J. EDWARDS', 'EDWARDS',
+                            'KYLER GORDON', 'GORDON',
+                            'JAQUAN BRISKER', 'BRISKER',
+                            'TYRIQUE STEVENSON', 'STEVENSON',
+                            'KHALIL HERBERT', 'HERBERT',
+                            'D\'ANDRE SWIFT', 'SWIFT',
+                            'ROSCHON JOHNSON',
+                            'GERVON DEXTER', 'DEXTER',
+                            'ANDREW BILLINGS', 'BILLINGS',
+                            'NATE DAVIS', 'DAVIS',
+
+                            # Retired Bears legends (who retired as Bears only)
+                            'WALTER PAYTON', 'PAYTON', 'SWEETNESS',
+                            'DICK BUTKUS', 'BUTKUS',
+                            'MIKE DITKA', 'DITKA',
+                            'BRIAN URLACHER', 'URLACHER',
+                            'GALE SAYERS', 'SAYERS',
+                            'SID LUCKMAN', 'LUCKMAN',
+                            'MIKE SINGLETARY', 'SINGLETARY',
+                            'DAN HAMPTON', 'HAMPTON',
+                            'RICHARD DENT', 'DENT',
+                            'BILL GEORGE', 'GEORGE',
+                            'STEVE MCMICHAEL', 'MONGO',
+                            'RED GRANGE', 'GRANGE',
+                            'BULLDOG TURNER', 'TURNER',
+                            'BRONKO NAGURSKI', 'NAGURSKI',
+
+                            # Current coaches and front office
+                            'MATT EBERFLUS', 'EBERFLUS',
+                            'RYAN POLES', 'POLES',
+                            'SHANE WALDRON', 'WALDRON',
+                            'GEORGE HALAS', 'HALAS',
+                            'VIRGINIA MCCASKEY', 'MCCASKEY',
+
+                            # Stadium and facilities
+                            'SOLDIER FIELD', 'SOLDIER',
+                            'HALAS HALL',
+                            'LAKE FOREST',
+
+                            # Division and conference
+                            'NFC NORTH', 'NFC'
+                        ]
 
                         # Check if headline mentions Bears
                         is_bears_related = any(keyword in headline for keyword in bears_keywords)
@@ -267,11 +367,6 @@ class OffSeasonHandler:
                         print(f"Error parsing entry: {e}")
                         continue
 
-                # Continue trying all feeds to get more Bears-specific news
-                if len(news_headlines) >= 8:
-                    print(f"Successfully collected {len(news_headlines)} Bears news headlines")
-                    break
-
             except Exception as e:
                 print(f"Error fetching from {feed_url}: {e}")
                 continue
@@ -281,7 +376,8 @@ class OffSeasonHandler:
         else:
             print(f"Total Bears headlines collected: {len(news_headlines)}")
 
-        return news_headlines[:8]  # Return max 8 breaking news items
+        # Return up to 12 news items (increased from 8 for more variety)
+        return news_headlines[:12]
 
     def _should_update_bears_news(self):
         """Check if Bears news needs updating"""
