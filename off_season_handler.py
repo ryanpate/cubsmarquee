@@ -94,7 +94,7 @@ class OffSeasonHandler:
 
     def _load_cubs_facts(self):
         """Load Cubs facts from JSON file"""
-        facts_path = './cubs_facts.json'
+        facts_path = '/home/pi/cubs_facts.json'
 
         # Default facts in case file doesn't exist
         default_facts = [
