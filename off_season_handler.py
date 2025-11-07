@@ -30,6 +30,11 @@ class OffSeasonHandler:
         # Load Cubs facts
         self.cubs_facts = self._load_cubs_facts()
 
+        # Initialize shuffled facts list and index for persistent rotation
+        self.shuffled_cubs_facts = self.cubs_facts.copy()
+        random.shuffle(self.shuffled_cubs_facts)
+        self.cubs_facts_index = 0  # Track position in shuffled list
+
         # RSS news caching for Cubs
         self.cubs_news = None
         self.last_cubs_news_update = None
@@ -878,16 +883,11 @@ class OffSeasonHandler:
         # Get custom message from config
         custom_message = self.config.get('custom_message', 'GO CUBS GO!')
 
-        # Create a shuffled list of Cubs facts
-        shuffled_facts = self.cubs_facts.copy()
-        random.shuffle(shuffled_facts)
-
-        # Combine custom message with shuffled Cubs facts
-        all_messages = [custom_message] + shuffled_facts
-
         start_time = time.time()
-        message_index = 0
         self.scroll_position = 96
+
+        # Start with custom message, then show current fact from persistent list
+        show_custom = True
 
         while time.time() - start_time < duration:
             try:
@@ -911,8 +911,11 @@ class OffSeasonHandler:
                     # Continue without marquee image
                     pass
 
-                # Get current message
-                current_message = all_messages[message_index]
+                # Get current message - alternate between custom message and facts
+                if show_custom:
+                    current_message = custom_message
+                else:
+                    current_message = self.shuffled_cubs_facts[self.cubs_facts_index]
 
                 # Scroll the message (move multiple pixels for smoother motion)
                 scroll_increment = getattr(GameConfig, 'SCROLL_PIXELS', 2)
@@ -921,15 +924,23 @@ class OffSeasonHandler:
 
                 if self.scroll_position + text_length < 0:
                     self.scroll_position = 96
-                    # Move to next message
-                    message_index = (message_index + 1) % len(all_messages)
 
-                    # Re-shuffle facts when we've gone through all of them
-                    if message_index == 0:
-                        print("Re-shuffling Cubs facts for variety")
-                        shuffled_facts = self.cubs_facts.copy()
-                        random.shuffle(shuffled_facts)
-                        all_messages = [custom_message] + shuffled_facts
+                    # Alternate between custom message and facts
+                    if show_custom:
+                        show_custom = False
+                    else:
+                        # Move to next fact
+                        self.cubs_facts_index += 1
+
+                        # Check if we've shown all facts
+                        if self.cubs_facts_index >= len(self.shuffled_cubs_facts):
+                            print(f"Completed full cycle of {len(self.shuffled_cubs_facts)} Cubs facts - re-shuffling")
+                            # Re-shuffle for next cycle
+                            self.shuffled_cubs_facts = self.cubs_facts.copy()
+                            random.shuffle(self.shuffled_cubs_facts)
+                            self.cubs_facts_index = 0
+
+                        show_custom = True
 
                 self.manager.draw_text(
                     'medium_bold', int(
