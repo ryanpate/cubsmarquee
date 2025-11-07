@@ -256,7 +256,7 @@ class OffSeasonHandler:
 
                         if is_bears_related:
                             # Add "BREAKING NEWS - " prefix as requested
-                            formatted_headline = f"BREAKING NEWS - {headline}"
+                            formatted_headline = f"BEARS NEWS - {headline}"
 
                             # Avoid duplicates
                             if formatted_headline not in news_headlines:
@@ -299,7 +299,7 @@ class OffSeasonHandler:
             print("Fetching fresh Bears news from RSS feeds...")
 
             # Display loading message while fetching
-            self._display_bears_loading("FETCHING BEARS NEWS...")
+            self._display_bears_loading("FETCHING NEWS...")
             time.sleep(0.5)  # Show loading message briefly
 
             self.bears_news = self._fetch_bears_news_rss()
@@ -559,7 +559,7 @@ class OffSeasonHandler:
         """Display message for extended period"""
         self._display_custom_message(duration=300)  # 5 minutes
 
-    def _display_bears_loading(self, message="FETCHING BEARS NEWS..."):
+    def _display_bears_loading(self, message="FETCHING NEWS..."):
         """Display loading message with Bears sweater header"""
         self.manager.clear_canvas()
 
@@ -591,7 +591,7 @@ class OffSeasonHandler:
 
         self.manager.swap_canvas()
 
-    def _display_cubs_loading(self, message="FETCHING CUBS NEWS..."):
+    def _display_cubs_loading(self, message="FETCHING NEWS..."):
         """Display loading message with Cubs logo"""
         self.manager.clear_canvas()
 
@@ -685,7 +685,7 @@ class OffSeasonHandler:
 
                 # Draw scrolling Bears news below the sweater header in white
                 self.manager.draw_text(
-                    'medium_bold', int(self.scroll_position), 42,
+                    'medium_bold', int(self.scroll_position), 46,
                     self.BEARS_WHITE, current_headline
                 )
 
