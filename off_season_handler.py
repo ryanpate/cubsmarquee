@@ -151,45 +151,52 @@ class OffSeasonHandler:
                         headline = entry.title.strip().upper()
 
                         # Comprehensive Cubs keyword filtering
-                        # Includes current players, past legends, and team references
+                        # Current players (2025-2026 season) and retired Cubs legends only
                         cubs_keywords = [
                             # Team names and variations
                             'CUBS', 'CHICAGO CUBS', 'CHI CUBS', 'CUBBIES',
                             'NORTH SIDERS',
 
-                            # Current players (2023-2024)
-                            'CODY BELLINGER', 'BELLINGER', 'DANSBY SWANSON', 'SWANSON',
-                            'IAN HAPP', 'HAPP', 'NICO HOERNER', 'HOERNER',
-                            'SEIYA SUZUKI', 'SUZUKI', 'CHRISTOPHER MOREL', 'MOREL',
-                            'JUSTIN STEELE', 'STEELE', 'MARCUS STROMAN', 'STROMAN',
-                            'JAMESON TAILLON', 'TAILLON', 'SHOTA IMANAGA', 'IMANAGA',
-                            'MICHAEL BUSCH', 'BUSCH', 'PETE CROW-ARMSTRONG', 'PCA',
-                            'MIGUEL AMAYA', 'AMAYA', 'MIKE TAUCHMAN', 'TAUCHMAN',
-                            'PATRICK WISDOM', 'WISDOM', 'NICK MADRIGAL', 'MADRIGAL',
+                            # Current players (2025-2026 season)
+                            'CODY BELLINGER', 'BELLINGER',
+                            'DANSBY SWANSON', 'SWANSON',
+                            'IAN HAPP', 'HAPP',
+                            'NICO HOERNER', 'HOERNER',
+                            'SEIYA SUZUKI', 'SUZUKI',
+                            'JUSTIN STEELE', 'STEELE',
+                            'SHOTA IMANAGA', 'IMANAGA',
+                            'MICHAEL BUSCH', 'BUSCH',
+                            'PETE CROW-ARMSTRONG', 'PCA',
+                            'MIGUEL AMAYA', 'AMAYA',
+                            'ISAAC PAREDES', 'PAREDES',
+                            'PATRICK WISDOM', 'WISDOM',
+                            'JAMESON TAILLON', 'TAILLON',
+                            'KYLE HENDRICKS', 'HENDRICKS',
+                            'JAVIER ASSAD', 'ASSAD',
+                            'HAYDEN WESNESKI', 'WESNESKI',
+                            'PORTER HODGE', 'HODGE',
 
-                            # Recent players
-                            'KRIS BRYANT', 'BRYANT', 'ANTHONY RIZZO', 'RIZZO',
-                            'JAVIER BAEZ', 'BAEZ', 'EL MAGO', 'JAVY',
-                            'WILLSON CONTRERAS', 'CONTRERAS',
-                            'KYLE SCHWARBER', 'SCHWARBER', 'KYLE HENDRICKS', 'HENDRICKS',
-                            'MARCUS STROMAN', 'YU DARVISH', 'DARVISH',
-
-                            # Cubs legends
+                            # Retired Cubs legends (who retired as Cubs only)
                             'ERNIE BANKS', 'BANKS', 'MR. CUB',
                             'RYNE SANDBERG', 'SANDBERG', 'RYNO',
-                            'FERGIE JENKINS', 'JENKINS', 'BILLY WILLIAMS', 'WILLIAMS',
-                            'RON SANTO', 'SANTO', 'ANDRE DAWSON', 'DAWSON',
-                            'SAMMY SOSA', 'SOSA', 'KERRY WOOD', 'WOOD',
-                            'MARK GRACE', 'GRACE', 'GREG MADDUX', 'MADDUX',
+                            'BILLY WILLIAMS', 'WILLIAMS',
+                            'RON SANTO', 'SANTO',
+                            'KERRY WOOD', 'WOOD',
+                            'MORDECAI BROWN', 'THREE FINGER BROWN',
+                            'HACK WILSON', 'WILSON',
+                            'GABBY HARTNETT', 'HARTNETT',
+                            'PHIL CAVARRETTA', 'CAVARRETTA',
 
-                            # Coaches and front office
-                            'CRAIG COUNSELL', 'COUNSELL', 'DAVID ROSS', 'ROSSY',
-                            'JED HOYER', 'HOYER', 'THEO EPSTEIN', 'EPSTEIN',
-                            'JOE MADDON', 'MADDON',
+                            # Current coaches and front office
+                            'CRAIG COUNSELL', 'COUNSELL',
+                            'JED HOYER', 'HOYER',
 
                             # Stadium and facilities
-                            'WRIGLEY FIELD', 'WRIGLEY', 'FRIENDLY CONFINES',
-                            'CLARK AND ADDISON', 'WAVELAND', 'SHEFFIELD',
+                            'WRIGLEY FIELD', 'WRIGLEY',
+                            'FRIENDLY CONFINES',
+                            'CLARK AND ADDISON',
+                            'WAVELAND',
+                            'SHEFFIELD',
 
                             # Division
                             'NL CENTRAL', 'NATIONAL LEAGUE'
@@ -283,54 +290,65 @@ class OffSeasonHandler:
                         headline = entry.title.strip().upper()
 
                         # Comprehensive Bears keyword filtering
-                        # Includes current players, past legends, coaches, and team references
+                        # Current players (2025-2026 season) and retired Bears legends only
                         bears_keywords = [
                             # Team names and abbreviations
                             'BEARS', 'CHICAGO BEARS', 'CHI BEARS', 'DA BEARS',
                             'MONSTERS OF THE MIDWAY',
 
-                            # Current key players (2023-2024)
-                            'JUSTIN FIELDS', 'FIELDS', 'CALEB WILLIAMS', 'WILLIAMS',
+                            # Current players (2025-2026 season)
+                            'CALEB WILLIAMS', 'WILLIAMS',
                             'DJ MOORE', 'D.J. MOORE', 'MOORE',
-                            'MONTEZ SWEAT', 'SWEAT', 'TREMAINE EDMUNDS', 'EDMUNDS',
-                            'JAYLON JOHNSON', 'KEENAN ALLEN', 'ALLEN',
-                            'COLE KMET', 'KMET', 'DARNELL MOONEY', 'MOONEY',
-                            'T.J. EDWARDS', 'KHALIL HERBERT', 'HERBERT',
-                            'D\'ONTA FOREMAN', 'FOREMAN', 'ROME ODUNZE', 'ODUNZE',
-                            'KYLER GORDON', 'JAQUAN BRISKER', 'BRISKER',
-                            'TEVEN JENKINS', 'JENKINS', 'BRAXTON JONES', 'JONES',
-                            'ROSCHON JOHNSON', 'GERVON DEXTER', 'DEXTER',
-                            'TYRIQUE STEVENSON', 'TYLER SCOTT', 'SCOTT',
+                            'KEENAN ALLEN', 'ALLEN',
+                            'ROME ODUNZE', 'ODUNZE',
+                            'COLE KMET', 'KMET',
+                            'DARNELL WRIGHT', 'WRIGHT',
+                            'TEVEN JENKINS', 'JENKINS',
+                            'BRAXTON JONES', 'JONES',
+                            'MONTEZ SWEAT', 'SWEAT',
+                            'TREMAINE EDMUNDS', 'EDMUNDS',
+                            'JAYLON JOHNSON', 'JOHNSON',
+                            'T.J. EDWARDS', 'EDWARDS',
+                            'KYLER GORDON', 'GORDON',
+                            'JAQUAN BRISKER', 'BRISKER',
+                            'TYRIQUE STEVENSON', 'STEVENSON',
+                            'KHALIL HERBERT', 'HERBERT',
+                            'D\'ANDRE SWIFT', 'SWIFT',
+                            'ROSCHON JOHNSON',
+                            'GERVON DEXTER', 'DEXTER',
+                            'ANDREW BILLINGS', 'BILLINGS',
+                            'NATE DAVIS', 'DAVIS',
 
-                            # Recent players (2020-2023)
-                            'ROQUAN SMITH', 'ROQUAN', 'ROBERT QUINN', 'QUINN',
-                            'EDDIE JACKSON', 'EDDIE', 'AKIEM HICKS', 'HICKS',
-                            'DAVID MONTGOMERY', 'MONTY', 'MONTGOMERY',
-                            'ALLEN ROBINSON', 'ROBINSON', 'TARIK COHEN', 'COHEN',
-                            'MITCHELL TRUBISKY', 'TRUBISKY', 'MITCH',
-                            'KHALIL MACK', 'MACK', 'NICK FOLES', 'FOLES',
-
-                            # Bears legends
+                            # Retired Bears legends (who retired as Bears only)
                             'WALTER PAYTON', 'PAYTON', 'SWEETNESS',
-                            'MIKE DITKA', 'DITKA', 'BRIAN URLACHER', 'URLACHER',
-                            'DICK BUTKUS', 'BUTKUS', 'GALE SAYERS', 'SAYERS',
-                            'DEVIN HESTER', 'HESTER', 'MATT FORTE', 'FORTE',
-                            'JAY CUTLER', 'CUTLER', 'SID LUCKMAN', 'LUCKMAN',
-                            'BILL GEORGE', 'RICHARD DENT', 'DENT',
-                            'DAN HAMPTON', 'HAMPTON', 'MIKE SINGLETARY', 'SINGLETARY',
-                            'JIMBO COVERT', 'STEVE MCMICHAEL', 'MONGO',
+                            'DICK BUTKUS', 'BUTKUS',
+                            'MIKE DITKA', 'DITKA',
+                            'BRIAN URLACHER', 'URLACHER',
+                            'GALE SAYERS', 'SAYERS',
+                            'SID LUCKMAN', 'LUCKMAN',
+                            'MIKE SINGLETARY', 'SINGLETARY',
+                            'DAN HAMPTON', 'HAMPTON',
+                            'RICHARD DENT', 'DENT',
+                            'BILL GEORGE', 'GEORGE',
+                            'STEVE MCMICHAEL', 'MONGO',
+                            'RED GRANGE', 'GRANGE',
+                            'BULLDOG TURNER', 'TURNER',
+                            'BRONKO NAGURSKI', 'NAGURSKI',
 
-                            # Coaches and front office
-                            'MATT EBERFLUS', 'EBERFLUS', 'RYAN POLES', 'POLES',
-                            'SHANE WALDRON', 'WALDRON', 'ERIC WASHINGTON',
-                            'LOVIE SMITH', 'MARC TRESTMAN', 'JOHN FOX',
-                            'GEORGE HALAS', 'HALAS', 'VIRGINIA MCCASKEY', 'MCCASKEY',
+                            # Current coaches and front office
+                            'MATT EBERFLUS', 'EBERFLUS',
+                            'RYAN POLES', 'POLES',
+                            'SHANE WALDRON', 'WALDRON',
+                            'GEORGE HALAS', 'HALAS',
+                            'VIRGINIA MCCASKEY', 'MCCASKEY',
 
                             # Stadium and facilities
-                            'SOLDIER FIELD', 'SOLDIER', 'HALAS HALL', 'LAKE FOREST',
+                            'SOLDIER FIELD', 'SOLDIER',
+                            'HALAS HALL',
+                            'LAKE FOREST',
 
                             # Division and conference
-                            'NFC NORTH', 'NFC', 'DIVISION'
+                            'NFC NORTH', 'NFC'
                         ]
 
                         # Check if headline mentions Bears
