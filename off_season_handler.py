@@ -886,8 +886,9 @@ class OffSeasonHandler:
         start_time = time.time()
         self.scroll_position = 96
 
-        # Start with custom message, then show current fact from persistent list
-        show_custom = True
+        # Show custom message only once at the beginning of this display cycle
+        showing_custom = True
+        custom_shown = False
 
         while time.time() - start_time < duration:
             try:
@@ -911,11 +912,12 @@ class OffSeasonHandler:
                     # Continue without marquee image
                     pass
 
-                # Get current message - alternate between custom message and facts
-                if show_custom:
+                # Get current message - custom message once, then facts continuously
+                if showing_custom and not custom_shown:
                     current_message = custom_message
                 else:
                     current_message = self.shuffled_cubs_facts[self.cubs_facts_index]
+                    showing_custom = False
 
                 # Scroll the message (move multiple pixels for smoother motion)
                 scroll_increment = getattr(GameConfig, 'SCROLL_PIXELS', 2)
@@ -925,9 +927,10 @@ class OffSeasonHandler:
                 if self.scroll_position + text_length < 0:
                     self.scroll_position = 96
 
-                    # Alternate between custom message and facts
-                    if show_custom:
-                        show_custom = False
+                    # If we just finished showing the custom message
+                    if showing_custom and not custom_shown:
+                        custom_shown = True
+                        showing_custom = False
                     else:
                         # Move to next fact
                         self.cubs_facts_index += 1
@@ -939,8 +942,6 @@ class OffSeasonHandler:
                             self.shuffled_cubs_facts = self.cubs_facts.copy()
                             random.shuffle(self.shuffled_cubs_facts)
                             self.cubs_facts_index = 0
-
-                        show_custom = True
 
                 self.manager.draw_text(
                     'medium_bold', int(
