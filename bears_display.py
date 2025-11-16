@@ -149,9 +149,10 @@ class BearsDisplay:
             bears_has_score = 'score' in bears
             opp_has_score = 'score' in opponent
 
-            # If scores don't exist and game is in progress, fetch from scoreboard
-            if (not bears_has_score or not opp_has_score) and status == 'STATUS_IN_PROGRESS':
-                print("Scores not in schedule data, fetching from scoreboard...")
+            # For today's games, always fetch from scoreboard to get most current status
+            # This ensures we get final scores and status updates immediately
+            if not bears_has_score or not opp_has_score or status in ['STATUS_IN_PROGRESS', 'STATUS_SCHEDULED']:
+                print("Fetching from scoreboard for current status...")
                 live_game = self._fetch_live_scores(game_id)
 
                 if live_game:
