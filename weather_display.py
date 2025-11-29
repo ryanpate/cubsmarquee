@@ -340,14 +340,15 @@ class WeatherDisplay:
             else:
                 return ((30, 30, 45), (15, 15, 30))
         elif condition == 'Snow':
+            # Darker backgrounds so white text and snowflakes are visible
             if time_period == 'dawn':
-                return ((220, 210, 220), (240, 230, 240))
+                return ((80, 90, 110), (100, 110, 130))
             elif time_period == 'day':
-                return ((230, 235, 245), (245, 250, 255))
+                return ((60, 80, 120), (80, 100, 140))
             elif time_period == 'dusk':
-                return ((160, 165, 180), (180, 185, 200))
+                return ((50, 55, 80), (70, 75, 100))
             else:
-                return ((70, 75, 90), (55, 60, 75))
+                return ((25, 30, 50), (40, 45, 65))
         elif condition in ['Mist', 'Fog', 'Haze', 'Smoke']:
             if time_period == 'dawn':
                 return ((190, 190, 190), (210, 210, 210))
