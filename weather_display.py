@@ -532,9 +532,14 @@ class WeatherDisplay:
                     if forecast['condition'] == 'Rain' or forecast['condition'] == 'Clear':
                         icon_y -= 1
 
-                    # Adjust rain icon position up by 1 pixel for better centering
+                    # Adjust clouds icon position up by 1 pixel for better centering
                     if forecast['condition'] == 'Clouds':
                         icon_y += 2
+
+                    # Adjust snow icon position up by 1 pixel for better centering
+                    if forecast['condition'] == 'Snow':
+                        icon_x += 1
+                        icon_y -= 1
 
                     # Resize icon if it's too large (max 10x10 for the forecast display)
                     icon_width, icon_height = weather_icon.size

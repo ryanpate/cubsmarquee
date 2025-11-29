@@ -341,8 +341,7 @@ class OffSeasonHandler:
                             'BRONKO NAGURSKI', 'NAGURSKI',
 
                             # Current coaches and front office
-                            'MATT EBERFLUS', 'EBERFLUS',
-                            'RYAN POLES', 'POLES',
+                            'RYAN POLES', 'POLES', 'BEN JOHNSON', 'JOHNSON',
                             'SHANE WALDRON', 'WALDRON',
                             'GEORGE HALAS', 'HALAS',
                             'VIRGINIA MCCASKEY', 'MCCASKEY',
@@ -350,7 +349,6 @@ class OffSeasonHandler:
                             # Stadium and facilities
                             'SOLDIER FIELD', 'SOLDIER',
                             'HALAS HALL',
-                            'LAKE FOREST',
 
                             # Division and conference
                             'NFC NORTH', 'NFC'
