@@ -72,6 +72,22 @@ class OffSeasonHandler:
         self.last_season_check: float | None = None
         self.season_check_interval: int = GameConfig.SEASON_CHECK_INTERVAL
 
+        # Cache marquee image to avoid loading every frame
+        self._marquee_image: Image.Image | None = self._load_marquee_image()
+
+    def _load_marquee_image(self) -> Image.Image | None:
+        """Load and cache the marquee image"""
+        try:
+            marquee = Image.open('./marquee.png')
+            print("Marquee image loaded and cached")
+            return marquee
+        except FileNotFoundError:
+            print("Warning: marquee.png not found")
+            return None
+        except Exception as e:
+            print(f"Error loading marquee image: {e}")
+            return None
+
     def _load_config(self) -> dict[str, Any]:
         """Load configuration from JSON file"""
         config_path: str = '/home/pi/config.json'
@@ -675,16 +691,12 @@ class OffSeasonHandler:
             for x in range(96):
                 self.manager.draw_pixel(x, y, 0, 51, blue_intensity)
 
-        # Display marquee image (Cubs logo) at the top
-        try:
-            marquee = Image.open('./marquee.png')
+        # Display cached marquee image (Cubs logo) at the top
+        if self._marquee_image is not None:
             output_image = Image.new("RGB", (96, 48))
-            output_image.paste(marquee, (0, 0))
+            output_image.paste(self._marquee_image, (0, 0))
             self.manager.canvas.SetImage(
                 output_image.convert("RGB"), 0, 0)
-        except Exception as e:
-            # Continue without marquee image
-            pass
 
         # Display loading message centered at bottom
         message_width = len(message) * 5
@@ -799,16 +811,12 @@ class OffSeasonHandler:
                     for x in range(96):
                         self.manager.draw_pixel(x, y, 0, 51, blue_intensity)
 
-                # Display marquee image (Cubs logo) at the top
-                try:
-                    marquee = Image.open('./marquee.png')
+                # Display cached marquee image (Cubs logo) at the top
+                if self._marquee_image is not None:
                     output_image = Image.new("RGB", (96, 48))
-                    output_image.paste(marquee, (0, 0))
+                    output_image.paste(self._marquee_image, (0, 0))
                     self.manager.canvas.SetImage(
                         output_image.convert("RGB"), 0, 0)
-                except Exception as e:
-                    # Continue without marquee image
-                    pass
 
                 # Get current news headline
                 current_headline = live_news[message_index]
@@ -873,16 +881,12 @@ class OffSeasonHandler:
                     for x in range(96):
                         self.manager.draw_pixel(x, y, 0, 51, blue_intensity)
 
-                # Display marquee image if available
-                try:
-                    marquee = Image.open('./marquee.png')
+                # Display cached marquee image if available
+                if self._marquee_image is not None:
                     output_image = Image.new("RGB", (96, 48))
-                    output_image.paste(marquee, (0, 0))
+                    output_image.paste(self._marquee_image, (0, 0))
                     self.manager.canvas.SetImage(
                         output_image.convert("RGB"), 0, 0)
-                except Exception as e:
-                    # Continue without marquee image
-                    pass
 
                 # Get current message - custom message once, then facts continuously
                 if showing_custom and not custom_shown:

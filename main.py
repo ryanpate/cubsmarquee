@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import signal
 import time
 import sys
 import pendulum
@@ -13,6 +15,27 @@ from game_state_handler import GameStateHandler
 from live_game_handler import LiveGameHandler
 from off_season_handler import OffSeasonHandler
 from scoreboard_config import GameConfig, TeamConfig
+from logger import setup_logging, get_logger
+
+
+# Global flag for graceful shutdown
+_shutdown_requested: bool = False
+
+# Module logger
+logger = get_logger("main")
+
+
+def _signal_handler(signum: int, frame: Any) -> None:
+    """Handle shutdown signals gracefully"""
+    global _shutdown_requested
+    signal_name = signal.Signals(signum).name
+    logger.info(f"Received {signal_name} - initiating graceful shutdown...")
+    _shutdown_requested = True
+
+
+def is_shutdown_requested() -> bool:
+    """Check if shutdown has been requested"""
+    return _shutdown_requested
 
 
 class CubsScoreboard:
@@ -20,53 +43,59 @@ class CubsScoreboard:
 
     def __init__(self) -> None:
         """Initialize the scoreboard application"""
-        print("Initializing Cubs LED Scoreboard...")
+        logger.info("Initializing Cubs LED Scoreboard...")
 
         try:
             self.manager: ScoreboardManager = ScoreboardManager()
-            print("✓ Scoreboard manager initialized")
+            logger.info("Scoreboard manager initialized")
 
             self.state_handler: GameStateHandler = GameStateHandler(self.manager)
-            print("✓ State handler initialized")
+            logger.info("State handler initialized")
 
             self.live_handler: LiveGameHandler = LiveGameHandler(self.manager)
-            print("✓ Live handler initialized")
+            logger.info("Live handler initialized")
 
             self.off_season_handler: OffSeasonHandler = OffSeasonHandler(self.manager)
-            print("✓ Off-season handler initialized")
+            logger.info("Off-season handler initialized")
 
             self.current_game_index: int = 0
-            print("✓ All components initialized successfully")
+            logger.info("All components initialized successfully")
 
         except Exception as e:
-            print(f"ERROR during initialization: {e}")
-            print(traceback.format_exc())
+            logger.error(f"ERROR during initialization: {e}")
+            logger.debug(traceback.format_exc())
             raise
 
     def run(self) -> NoReturn:
         """Main application loop"""
-        print("Starting Cubs LED Scoreboard main loop...")
+        logger.info("Starting Cubs LED Scoreboard main loop...")
 
         # Clear display at startup
         try:
             self.manager.clear_canvas()
             self.manager.swap_canvas()
-            print("✓ Display cleared and ready")
+            logger.info("Display cleared and ready")
         except Exception as e:
-            print(f"Warning: Could not clear display at startup: {e}")
+            logger.warning(f"Could not clear display at startup: {e}")
 
         # Wait a moment for system to stabilize
         time.sleep(2)
 
         try:
-            while True:
+            while not is_shutdown_requested():
                 try:
+                    # Check for shutdown between operations
+                    if is_shutdown_requested():
+                        break
+
                     # Check if it's off-season
                     if self.is_off_season():
-                        print(
+                        logger.info(
                             "Off-season detected - entering off-season display mode")
                         self.off_season_handler.display_off_season_content()
                         # After off-season handler exits (season started), continue with game cycle
+                        if is_shutdown_requested():
+                            break
 
                     self.process_game_cycle()
 
@@ -74,18 +103,19 @@ class CubsScoreboard:
                     raise  # Re-raise to exit cleanly
 
                 except Exception as e:
-                    print(f"Error in main loop iteration: {e}")
-                    print(traceback.format_exc())
+                    logger.error(f"Error in main loop iteration: {e}")
+                    logger.debug(traceback.format_exc())
                     self.handle_error()
 
+            # Graceful shutdown path
+            logger.info("Shutdown requested - exiting main loop...")
+
         except KeyboardInterrupt:
-            print("\nShutting down Cubs LED Scoreboard...")
-            self.manager.clear_canvas()
-            sys.exit(0)
+            logger.info("Shutting down Cubs LED Scoreboard...")
 
         except Exception as e:
-            print(f"Fatal error in main loop: {e}")
-            print(traceback.format_exc())
+            logger.critical(f"Fatal error in main loop: {e}")
+            logger.debug(traceback.format_exc())
             self.handle_error()
 
     def is_off_season(self) -> bool:
@@ -97,7 +127,7 @@ class CubsScoreboard:
             game_data: list[dict[str, Any]] = self.manager.get_schedule()
 
             if not game_data:
-                print("No games scheduled in the next 14 days - off-season mode")
+                logger.info("No games scheduled in the next 14 days - off-season mode")
                 return True
 
             # Check if the game is far in the future (more than 30 days)
@@ -108,15 +138,15 @@ class CubsScoreboard:
                 days_until_game: int = (game_date - pendulum.now()).days
 
                 if days_until_game > GameConfig.OFF_SEASON_DAYS_THRESHOLD:
-                    print(
+                    logger.info(
                         f"Next game is {days_until_game} days away - off-season mode")
                     return True
 
             return False
 
         except Exception as e:
-            print(f"Error checking off-season status: {e}")
-            print(traceback.format_exc())
+            logger.error(f"Error checking off-season status: {e}")
+            logger.debug(traceback.format_exc())
             # Default to regular season if there's an error
             return False
 
@@ -127,7 +157,7 @@ class CubsScoreboard:
             game_data: list[dict[str, Any]] = self.manager.get_schedule()
 
             if not game_data:
-                print("No games found in schedule - entering off-season mode")
+                logger.info("No games found in schedule - entering off-season mode")
                 # Enter off-season display
                 self.off_season_handler.display_off_season_content()
                 return
@@ -142,14 +172,14 @@ class CubsScoreboard:
             gameid: int = game_data[self.current_game_index]['game_id']
             status: str = game_data[self.current_game_index]['status']
 
-            print(f"Game Status: {status}")
+            logger.info(f"Game Status: {status}")
 
             # Route to appropriate handler based on status
             self.route_by_status(game_data, gameid, status)
 
         except Exception as e:
-            print(f"Error in game cycle: {e}")
-            print(traceback.format_exc())
+            logger.error(f"Error in game cycle: {e}")
+            logger.debug(traceback.format_exc())
             self.handle_error()
 
     def determine_game_index(self, game_data: list[dict[str, Any]]) -> int:
@@ -210,12 +240,12 @@ class CubsScoreboard:
             self.process_game_cycle()
 
         else:
-            print(f"Unknown game status: {status}")
+            logger.warning(f"Unknown game status: {status}")
             time.sleep(GameConfig.ERROR_RETRY_DELAY)
 
     def handle_error(self) -> None:
         """Handle errors gracefully"""
-        print("Attempting to recover from error...")
+        logger.info("Attempting to recover from error...")
         time.sleep(GameConfig.ERROR_RETRY_DELAY)
 
         # Clear canvas and restart
@@ -224,26 +254,49 @@ class CubsScoreboard:
             self.manager.swap_canvas()
             time.sleep(1)
         except Exception as e:
-            print(f"Could not clear canvas during error recovery: {e}")
+            logger.warning(f"Could not clear canvas during error recovery: {e}")
 
         # Don't call run() here - just let the main loop continue
 
 
 def main() -> None:
     """Main entry point"""
-    print("=" * 60)
-    print("Cubs LED Scoreboard Starting...")
-    print("=" * 60)
+    # Initialize logging first
+    setup_logging()
+
+    logger.info("=" * 60)
+    logger.info("Cubs LED Scoreboard Starting...")
+    logger.info("=" * 60)
+
+    # Register signal handlers for graceful shutdown
+    signal.signal(signal.SIGTERM, _signal_handler)
+    signal.signal(signal.SIGINT, _signal_handler)
+    logger.info("Signal handlers registered (SIGTERM, SIGINT)")
+
+    scoreboard: CubsScoreboard | None = None
 
     try:
         scoreboard = CubsScoreboard()
         scoreboard.run()
+    except KeyboardInterrupt:
+        logger.info("Keyboard interrupt received")
     except Exception as e:
-        print(f"FATAL ERROR: {e}")
-        print(traceback.format_exc())
-        print("Scoreboard will retry in 30 seconds...")
+        logger.critical(f"FATAL ERROR: {e}")
+        logger.debug(traceback.format_exc())
+        logger.info("Scoreboard will retry in 30 seconds...")
         time.sleep(30)
         # System service will restart the application
+    finally:
+        # Ensure display is cleared on exit
+        if scoreboard is not None:
+            try:
+                logger.info("Clearing display before exit...")
+                scoreboard.manager.clear_canvas()
+                scoreboard.manager.swap_canvas()
+                logger.info("Display cleared. Goodbye!")
+            except Exception as e:
+                logger.warning(f"Could not clear display on exit: {e}")
+        sys.exit(0)
 
 
 if __name__ == "__main__":

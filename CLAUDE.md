@@ -109,6 +109,20 @@ feedparser      # RSS feed parsing
 
 **Abstract Base Class**: `DisplayHandler` in `scoreboard_config.py` provides a base class for display handlers with common utility methods like `_draw_header_stripes()` and `_center_text_x()`.
 
+**Logging**: Centralized logging via `logger.py` with:
+- Rotating file handler (5MB max, 3 backups)
+- Console output for debugging
+- Module-specific loggers via `get_logger("module_name")`
+- Log location: `/var/log/cubs-scoreboard/scoreboard.log` (or `./scoreboard.log` fallback)
+
+**Graceful Shutdown**: Signal handlers for SIGTERM and SIGINT ensure display is cleared on exit:
+```python
+from main import is_shutdown_requested
+# Check in loops: if is_shutdown_requested(): break
+```
+
+**Image Caching**: Large images (marquee.png) are cached in memory at startup via `_load_marquee_image()` to avoid repeated file I/O.
+
 ### Key Patterns
 - **Manager Pattern**: `ScoreboardManager` provides central LED matrix control
 - **Handler Pattern**: Specialized handlers (Game, OffSeason, Weather) contain domain logic
@@ -177,7 +191,20 @@ sudo journalctl -u cubs-scoreboard -f
 
 ## Testing
 
-No formal test suite. Manual testing on Raspberry Pi hardware required.
+Run unit tests with pytest (mocks rgbmatrix for non-Pi environments):
+```bash
+pytest tests/ -v
+```
+
+Test coverage includes:
+- Schedule parsing and doubleheader detection
+- Score calculations and win/loss detection
+- Time formatting and timezone handling
+- Bears ESPN API parsing
+- Configuration validation
+- Off-season detection logic
+
+Manual testing on Raspberry Pi hardware required for display verification.
 
 ## Build/Deploy
 
