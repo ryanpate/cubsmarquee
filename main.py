@@ -1,9 +1,13 @@
 """Main application file for Cubs LED Scoreboard"""
 
+from __future__ import annotations
+
 import time
 import sys
 import pendulum
 import traceback
+from typing import Any, NoReturn
+
 from scoreboard_manager import ScoreboardManager
 from game_state_handler import GameStateHandler
 from live_game_handler import LiveGameHandler
@@ -14,24 +18,24 @@ from scoreboard_config import GameConfig, TeamConfig
 class CubsScoreboard:
     """Main Cubs Scoreboard Application"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the scoreboard application"""
         print("Initializing Cubs LED Scoreboard...")
 
         try:
-            self.manager = ScoreboardManager()
+            self.manager: ScoreboardManager = ScoreboardManager()
             print("✓ Scoreboard manager initialized")
 
-            self.state_handler = GameStateHandler(self.manager)
+            self.state_handler: GameStateHandler = GameStateHandler(self.manager)
             print("✓ State handler initialized")
 
-            self.live_handler = LiveGameHandler(self.manager)
+            self.live_handler: LiveGameHandler = LiveGameHandler(self.manager)
             print("✓ Live handler initialized")
 
-            self.off_season_handler = OffSeasonHandler(self.manager)
+            self.off_season_handler: OffSeasonHandler = OffSeasonHandler(self.manager)
             print("✓ Off-season handler initialized")
 
-            self.current_game_index = 0
+            self.current_game_index: int = 0
             print("✓ All components initialized successfully")
 
         except Exception as e:
@@ -39,7 +43,7 @@ class CubsScoreboard:
             print(traceback.format_exc())
             raise
 
-    def run(self):
+    def run(self) -> NoReturn:
         """Main application loop"""
         print("Starting Cubs LED Scoreboard main loop...")
 
@@ -84,13 +88,13 @@ class CubsScoreboard:
             print(traceback.format_exc())
             self.handle_error()
 
-    def is_off_season(self):
+    def is_off_season(self) -> bool:
         """
         Determine if it's currently the off-season.
         Returns True if no games are found in the next 14 days.
         """
         try:
-            game_data = self.manager.get_schedule()
+            game_data: list[dict[str, Any]] = self.manager.get_schedule()
 
             if not game_data:
                 print("No games scheduled in the next 14 days - off-season mode")
@@ -99,11 +103,11 @@ class CubsScoreboard:
             # Check if the game is far in the future (more than 30 days)
             # This handles the gap between end of regular season and playoffs
             if game_data:
-                game_date_str = game_data[0]['game_date']
+                game_date_str: str = game_data[0]['game_date']
                 game_date = pendulum.parse(game_date_str)
-                days_until_game = (game_date - pendulum.now()).days
+                days_until_game: int = (game_date - pendulum.now()).days
 
-                if days_until_game > 30:
+                if days_until_game > GameConfig.OFF_SEASON_DAYS_THRESHOLD:
                     print(
                         f"Next game is {days_until_game} days away - off-season mode")
                     return True
@@ -116,11 +120,11 @@ class CubsScoreboard:
             # Default to regular season if there's an error
             return False
 
-    def process_game_cycle(self):
+    def process_game_cycle(self) -> None:
         """Process one complete game cycle"""
         try:
             # Get current schedule
-            game_data = self.manager.get_schedule()
+            game_data: list[dict[str, Any]] = self.manager.get_schedule()
 
             if not game_data:
                 print("No games found in schedule - entering off-season mode")
@@ -135,8 +139,8 @@ class CubsScoreboard:
             self.manager.load_game_images(game_data, self.current_game_index)
 
             # Get game info
-            gameid = game_data[self.current_game_index]['game_id']
-            status = game_data[self.current_game_index]['status']
+            gameid: int = game_data[self.current_game_index]['game_id']
+            status: str = game_data[self.current_game_index]['status']
 
             print(f"Game Status: {status}")
 
@@ -148,7 +152,7 @@ class CubsScoreboard:
             print(traceback.format_exc())
             self.handle_error()
 
-    def determine_game_index(self, game_data):
+    def determine_game_index(self, game_data: list[dict[str, Any]]) -> int:
         """Determine which game to display (handles doubleheaders)"""
         if len(game_data) > 1:
             # Doubleheader - check if first game is over
@@ -156,10 +160,12 @@ class CubsScoreboard:
                 return 1
         return 0
 
-    def route_by_status(self, game_data, gameid, status):
+    def route_by_status(
+        self, game_data: list[dict[str, Any]], gameid: int, status: str
+    ) -> None:
         """Route to appropriate display based on game status"""
         # Get lineup if needed
-        lineup = None
+        lineup: str | None = None
         if status in ['Warmup', 'Pre-Game', 'In Progress', 'Delayed', 'Postponed']:
             lineup = self.manager.get_lineup(gameid)
 
@@ -207,7 +213,7 @@ class CubsScoreboard:
             print(f"Unknown game status: {status}")
             time.sleep(GameConfig.ERROR_RETRY_DELAY)
 
-    def handle_error(self):
+    def handle_error(self) -> None:
         """Handle errors gracefully"""
         print("Attempting to recover from error...")
         time.sleep(GameConfig.ERROR_RETRY_DELAY)
@@ -223,7 +229,7 @@ class CubsScoreboard:
         # Don't call run() here - just let the main loop continue
 
 
-def main():
+def main() -> None:
     """Main entry point"""
     print("=" * 60)
     print("Cubs LED Scoreboard Starting...")

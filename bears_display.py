@@ -1,26 +1,33 @@
 """Chicago Bears game display - Classic Bears Sweater Style"""
 
+from __future__ import annotations
+
 import time
 import requests
 import pendulum
-from scoreboard_config import Colors, GameConfig
+from typing import TYPE_CHECKING, Any
+
+from scoreboard_config import Colors, GameConfig, RGBColor
+
+if TYPE_CHECKING:
+    from scoreboard_manager import ScoreboardManager
 
 
 class BearsDisplay:
     """Handles Chicago Bears game information display"""
 
-    def __init__(self, scoreboard_manager):
+    def __init__(self, scoreboard_manager: ScoreboardManager) -> None:
         """Initialize Bears display"""
         self.manager = scoreboard_manager
-        self.bears_data = None
-        self.last_update = None
-        self.update_interval = 3600  # Update every hour
-        self.live_update_interval = 60  # Update live scores every minute
+        self.bears_data: dict[str, Any] | None = None
+        self.last_update: float | None = None
+        self.update_interval: int = GameConfig.SCHEDULE_UPDATE_INTERVAL
+        self.live_update_interval: int = GameConfig.LIVE_SCORE_UPDATE_INTERVAL
 
-        # Classic Bears colors
-        self.BEARS_NAVY = (11, 22, 42)      # Navy blue background
-        self.BEARS_ORANGE = (200, 56, 3)    # Classic Bears orange
-        self.BEARS_WHITE = (255, 255, 255)  # White text
+        # Classic Bears colors (using centralized config)
+        self.BEARS_NAVY: RGBColor = Colors.BEARS_NAVY
+        self.BEARS_ORANGE: RGBColor = Colors.BEARS_ORANGE
+        self.BEARS_WHITE: RGBColor = Colors.WHITE
 
     def _fetch_live_scores(self, game_id):
         """

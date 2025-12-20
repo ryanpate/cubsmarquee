@@ -1,41 +1,48 @@
 """Weather display handler using OpenWeatherMap API"""
 
+from __future__ import annotations
+
 import time
 import json
 import os
 import requests
 import pendulum
 from PIL import Image
-from scoreboard_config import Colors, GameConfig
+from typing import TYPE_CHECKING, Any
+
+from scoreboard_config import Colors, GameConfig, RGBColor
+
+if TYPE_CHECKING:
+    from scoreboard_manager import ScoreboardManager
 
 
 class WeatherDisplay:
     """Handles weather data fetching and display"""
 
-    def __init__(self, scoreboard_manager):
+    def __init__(self, scoreboard_manager: ScoreboardManager) -> None:
         """Initialize weather display"""
         self.manager = scoreboard_manager
-        self.weather_data = None
-        self.forecast_data = None
-        self.last_update = None
-        self.update_interval = 1800  # 30 minutes in seconds
+        self.weather_data: dict[str, Any] | None = None
+        self.forecast_data: dict[str, Any] | None = None
+        self.last_update: float | None = None
+        self.update_interval: int = GameConfig.WEATHER_UPDATE_INTERVAL
 
         # Animation state variables
-        self.animation_frame = 0
-        self.rain_drops = []
-        self.snow_flakes = []
-        self.cloud_positions = []
-        self.star_twinkle = []
-        self.lightning_flash = 0
+        self.animation_frame: int = 0
+        self.rain_drops: list[dict[str, Any]] = []
+        self.snow_flakes: list[dict[str, Any]] = []
+        self.cloud_positions: list[dict[str, Any]] = []
+        self.star_twinkle: list[dict[str, Any]] = []
+        self.lightning_flash: int = 0
 
         # Track when background was last drawn
-        self._last_hour = None
-        self._last_condition = None
-        self._last_mode = None  # Track which display mode we're in
-        self._last_time_period = None  # NEW: Track time period for animation resets
+        self._last_hour: int | None = None
+        self._last_condition: str | None = None
+        self._last_mode: str | None = None  # Track which display mode we're in
+        self._last_time_period: str | None = None  # Track time period for animation resets
 
         # Cache the current background for efficient redraws
-        self._background_cache = None
+        self._background_cache: list[list[tuple[int, int, int]]] | None = None
 
     def _load_config(self):
         """Load configuration"""

@@ -1,5 +1,7 @@
 """PGA Tour display - Tournament leaderboard and scores"""
 
+from __future__ import annotations
+
 import time
 import requests
 import pendulum
@@ -8,35 +10,40 @@ import os
 import random
 import feedparser
 from PIL import Image
-from scoreboard_config import Colors, GameConfig
+from typing import TYPE_CHECKING, Any
+
+from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor
+
+if TYPE_CHECKING:
+    from scoreboard_manager import ScoreboardManager
 
 
 class PGADisplay:
     """Handles PGA Tour tournament information display"""
 
-    def __init__(self, scoreboard_manager):
+    def __init__(self, scoreboard_manager: ScoreboardManager) -> None:
         """Initialize PGA display"""
         self.manager = scoreboard_manager
-        self.pga_data = None
-        self.last_update = None
-        self.update_interval = 3600  # Update every hour
-        self.live_update_interval = 300  # Update live scores every 5 minutes
-        self.scroll_position = 96  # For scrolling text
+        self.pga_data: dict[str, Any] | None = None
+        self.last_update: float | None = None
+        self.update_interval: int = GameConfig.SCHEDULE_UPDATE_INTERVAL
+        self.live_update_interval: int = 300  # Update live scores every 5 minutes
+        self.scroll_position: int = DisplayConfig.MATRIX_COLS  # For scrolling text
 
         # Load PGA facts
-        self.pga_facts = self._load_pga_facts()
+        self.pga_facts: list[str] = self._load_pga_facts()
 
         # RSS news caching
-        self.pga_news = None
-        self.last_news_update = None
-        self.news_update_interval = 1800  # Update news every 30 minutes
+        self.pga_news: list[str] | None = None
+        self.last_news_update: float | None = None
+        self.news_update_interval: int = GameConfig.NEWS_UPDATE_INTERVAL
 
-        # PGA Tour colors
-        self.PGA_BLUE = (0, 51, 153)        # PGA Tour blue
-        self.PGA_NAVY = (13, 30, 63)        # Dark navy background
-        self.PGA_GOLD = (255, 215, 0)       # Gold accents
-        self.PGA_WHITE = (255, 255, 255)    # White text
-        self.PGA_GREEN = (34, 139, 34)      # Golf course green
+        # PGA Tour colors (using centralized config)
+        self.PGA_BLUE: RGBColor = Colors.PGA_BLUE
+        self.PGA_NAVY: RGBColor = Colors.PGA_NAVY
+        self.PGA_GOLD: RGBColor = Colors.PGA_GOLD
+        self.PGA_WHITE: RGBColor = Colors.WHITE
+        self.PGA_GREEN: RGBColor = Colors.PGA_GREEN
 
     def _fetch_pga_data(self):
         """

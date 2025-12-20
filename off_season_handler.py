@@ -1,5 +1,7 @@
 """Handler for off-season content display"""
 
+from __future__ import annotations
+
 import time
 import json
 import os
@@ -7,84 +9,89 @@ import random
 import pendulum
 import feedparser
 from PIL import Image
-from scoreboard_config import Colors, GameConfig
+from typing import TYPE_CHECKING, Any
+
+from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor
 from weather_display import WeatherDisplay
 from bears_display import BearsDisplay
 from pga_display import PGADisplay
+
+if TYPE_CHECKING:
+    from scoreboard_manager import ScoreboardManager
 
 
 class OffSeasonHandler:
     """Manages off-season content rotation"""
 
-    def __init__(self, scoreboard_manager):
+    def __init__(self, scoreboard_manager: ScoreboardManager) -> None:
         """Initialize with reference to main scoreboard manager"""
         self.manager = scoreboard_manager
-        self.weather_display = WeatherDisplay(scoreboard_manager)
-        self.bears_display = BearsDisplay(scoreboard_manager)
-        self.pga_display = PGADisplay(scoreboard_manager)
-        self.scroll_position = 96
+        self.weather_display: WeatherDisplay = WeatherDisplay(scoreboard_manager)
+        self.bears_display: BearsDisplay = BearsDisplay(scoreboard_manager)
+        self.pga_display: PGADisplay = PGADisplay(scoreboard_manager)
+        self.scroll_position: int = DisplayConfig.MATRIX_COLS
 
         # Load configuration
-        self.config = self._load_config()
+        self.config: dict[str, Any] = self._load_config()
 
         # Load Cubs facts
-        self.cubs_facts = self._load_cubs_facts()
+        self.cubs_facts: list[str] = self._load_cubs_facts()
 
         # Initialize shuffled facts list and index for persistent rotation
-        self.shuffled_cubs_facts = self.cubs_facts.copy()
+        self.shuffled_cubs_facts: list[str] = self.cubs_facts.copy()
         random.shuffle(self.shuffled_cubs_facts)
-        self.cubs_facts_index = 0  # Track position in shuffled list
+        self.cubs_facts_index: int = 0  # Track position in shuffled list
 
         # RSS news caching for Cubs
-        self.cubs_news = None
-        self.last_cubs_news_update = None
-        self.cubs_news_update_interval = 1800  # Update news every 30 minutes
+        self.cubs_news: list[str] | None = None
+        self.last_cubs_news_update: float | None = None
+        self.cubs_news_update_interval: int = GameConfig.NEWS_UPDATE_INTERVAL
 
         # RSS news caching for Bears
-        self.bears_news = None
-        self.last_bears_news_update = None
-        self.bears_news_update_interval = 1800  # Update news every 30 minutes
+        self.bears_news: list[str] | None = None
+        self.last_bears_news_update: float | None = None
+        self.bears_news_update_interval: int = GameConfig.NEWS_UPDATE_INTERVAL
 
-        # Classic Bears colors for news display
-        self.BEARS_NAVY = (11, 22, 42)      # Navy blue background
-        self.BEARS_ORANGE = (200, 56, 3)    # Classic Bears orange
-        self.BEARS_WHITE = (255, 255, 255)  # White text
+        # Classic Bears colors for news display (using centralized config)
+        self.BEARS_NAVY: RGBColor = Colors.BEARS_NAVY
+        self.BEARS_ORANGE: RGBColor = Colors.BEARS_ORANGE
+        self.BEARS_WHITE: RGBColor = Colors.WHITE
 
-        # Content rotation schedule (in minutes)
-        self.rotation_schedule = {
-            'weather': 2,      # Show weather for 2 minutes
-            'bears': 3,        # Show Bears info for 3 minutes (if football season)
-            'bears_news': 2,   # Show Bears breaking news for 2 minutes
-            'pga': 3,          # Show PGA Tour info for 3 minutes (if golf season)
-            'pga_facts': 2,    # Show PGA Tour facts/news for 2 minutes (if golf season)
-            'cubs_news': 2,    # Show Cubs breaking news for 2 minutes
-            'message': 4       # Custom message + Cubs facts for 4 minutes
+        # Content rotation schedule (in minutes) - using centralized config
+        self.rotation_schedule: dict[str, int] = {
+            'weather': GameConfig.WEATHER_DISPLAY_DURATION,
+            'bears': GameConfig.BEARS_DISPLAY_DURATION,
+            'bears_news': GameConfig.BEARS_NEWS_DURATION,
+            'pga': GameConfig.PGA_DISPLAY_DURATION,
+            'pga_facts': GameConfig.PGA_FACTS_DURATION,
+            'cubs_news': GameConfig.CUBS_NEWS_DURATION,
+            'message': GameConfig.MESSAGE_DISPLAY_DURATION
         }
 
         # Track when we last checked for new season
-        self.last_season_check = None
-        self.season_check_interval = 86400  # 24 hours in seconds
+        self.last_season_check: float | None = None
+        self.season_check_interval: int = GameConfig.SEASON_CHECK_INTERVAL
 
-    def _load_config(self):
+    def _load_config(self) -> dict[str, Any]:
         """Load configuration from JSON file"""
-        config_path = '/home/pi/config.json'
+        config_path: str = '/home/pi/config.json'
 
-        default_config = {
+        default_config: dict[str, Any] = {
             'zip_code': '',
             'weather_api_key': '',
             'custom_message': 'GO CUBS GO! SEE YOU NEXT SEASON!',
             'display_mode': 'auto',  # auto, weather_only, message_only
             'enable_bears': True,    # Enable/disable Bears display
-            'enable_bears_news': True, # Enable/disable Bears breaking news
+            'enable_bears_news': True,  # Enable/disable Bears breaking news
             'enable_pga': True,      # Enable/disable PGA Tour leaderboard
-            'enable_pga_facts': True, # Enable/disable PGA Tour facts/news
-            'enable_cubs_news': True # Enable/disable Cubs breaking news
+            'enable_pga_facts': True,  # Enable/disable PGA Tour facts/news
+            'enable_cubs_news': True  # Enable/disable Cubs breaking news
         }
 
         try:
             if os.path.exists(config_path):
                 with open(config_path, 'r') as f:
-                    loaded_config = json.load(f)
+                    loaded_config: dict[str, Any] = json.load(f)
                     # Merge with defaults
                     default_config.update(loaded_config)
         except Exception as e:
@@ -92,12 +99,12 @@ class OffSeasonHandler:
 
         return default_config
 
-    def _load_cubs_facts(self):
+    def _load_cubs_facts(self) -> list[str]:
         """Load Cubs facts from JSON file"""
-        facts_path = '/home/pi/cubs_facts.json'
+        facts_path: str = '/home/pi/cubs_facts.json'
 
         # Default facts in case file doesn't exist
-        default_facts = [
+        default_facts: list[str] = [
             "CUBS WON THE 2016 WORLD SERIES!",
             "WRIGLEY FIELD - HOME OF THE CUBS SINCE 1916",
             "FLY THE W! GO CUBS GO!",
@@ -261,125 +268,92 @@ class OffSeasonHandler:
 
     def _fetch_bears_news_rss(self):
         """
-        Fetch latest Bears/NFL news from RSS feeds
-        Uses multiple sources for comprehensive coverage
+        Fetch latest Bears news from official Chicago Bears RSS feed
+        Falls back to ESPN/CBS if official feed fails
         """
         news_headlines = []
 
-        # List of RSS feed URLs for Bears/NFL news
-        rss_feeds = [
-            'https://www.espn.com/espn/rss/nfl/news',
-            'https://www.si.com/rss/si_nfl.rss',
-            'https://www.cbssports.com/rss/headlines/nfl/'
-        ]
+        # Primary source: Official Chicago Bears RSS feed
+        official_feed = 'https://www.chicagobears.com/rss/news'
 
-        for feed_url in rss_feeds:
-            try:
-                print(f"Fetching Bears news from {feed_url}")
-                feed = feedparser.parse(feed_url)
+        try:
+            print(f"Fetching Bears news from official source: {official_feed}")
+            feed = feedparser.parse(official_feed)
 
-                # Check if feed has entries even if bozo flag is set
-                # Some feeds work fine despite bozo being True
-                if not feed.entries:
-                    print(f"No entries found in feed: {feed_url}")
-                    if feed.bozo:
-                        print(f"Feed error: {feed.get('bozo_exception', 'Unknown error')}")
-                    continue
+            if feed.entries:
+                print(f"Found {len(feed.entries)} entries from chicagobears.com")
 
-                print(f"Found {len(feed.entries)} entries in {feed_url}")
-
-                # Extract headlines from entries
-                for entry in feed.entries[:20]:  # Check top 20 from each feed for more coverage
+                for entry in feed.entries[:15]:
                     try:
-                        # Get title and format it
                         headline = entry.title.strip().upper()
+                        formatted_headline = f"BEARS NEWS - {headline}"
 
-                        # Comprehensive Bears keyword filtering
-                        # Current players (2025-2026 season) and retired Bears legends only
-                        bears_keywords = [
-                            # Team names and abbreviations
-                            'BEARS', 'CHICAGO BEARS', 'CHI BEARS', 'DA BEARS',
-                            'MONSTERS OF THE MIDWAY',
-
-                            # Current players (2025-2026 season)
-                            'CALEB WILLIAMS', 'WILLIAMS',
-                            'DJ MOORE', 'D.J. MOORE', 'MOORE',
-                            'KEENAN ALLEN', 'ALLEN',
-                            'ROME ODUNZE', 'ODUNZE',
-                            'COLE KMET', 'KMET',
-                            'DARNELL WRIGHT', 'WRIGHT',
-                            'TEVEN JENKINS', 'JENKINS',
-                            'BRAXTON JONES', 'JONES',
-                            'MONTEZ SWEAT', 'SWEAT',
-                            'TREMAINE EDMUNDS', 'EDMUNDS',
-                            'JAYLON JOHNSON', 'JOHNSON',
-                            'T.J. EDWARDS', 'EDWARDS',
-                            'KYLER GORDON', 'GORDON',
-                            'JAQUAN BRISKER', 'BRISKER',
-                            'TYRIQUE STEVENSON', 'STEVENSON',
-                            'KHALIL HERBERT', 'HERBERT',
-                            'D\'ANDRE SWIFT', 'SWIFT',
-                            'ROSCHON JOHNSON',
-                            'GERVON DEXTER', 'DEXTER',
-                            'ANDREW BILLINGS', 'BILLINGS',
-                            'NATE DAVIS', 'DAVIS',
-
-                            # Retired Bears legends (who retired as Bears only)
-                            'WALTER PAYTON', 'PAYTON', 'SWEETNESS',
-                            'DICK BUTKUS', 'BUTKUS',
-                            'MIKE DITKA', 'DITKA',
-                            'BRIAN URLACHER', 'URLACHER',
-                            'GALE SAYERS', 'SAYERS',
-                            'SID LUCKMAN', 'LUCKMAN',
-                            'MIKE SINGLETARY', 'SINGLETARY',
-                            'DAN HAMPTON', 'HAMPTON',
-                            'RICHARD DENT', 'DENT',
-                            'BILL GEORGE', 'GEORGE',
-                            'STEVE MCMICHAEL', 'MONGO',
-                            'RED GRANGE', 'GRANGE',
-                            'BULLDOG TURNER', 'TURNER',
-                            'BRONKO NAGURSKI', 'NAGURSKI',
-
-                            # Current coaches and front office
-                            'RYAN POLES', 'POLES', 'BEN JOHNSON', 'JOHNSON',
-                            'SHANE WALDRON', 'WALDRON',
-                            'GEORGE HALAS', 'HALAS',
-                            'VIRGINIA MCCASKEY', 'MCCASKEY',
-
-                            # Stadium and facilities
-                            'SOLDIER FIELD', 'SOLDIER',
-                            'HALAS HALL',
-
-                            # Division and conference
-                            'NFC NORTH', 'NFC'
-                        ]
-
-                        # Check if headline mentions Bears
-                        is_bears_related = any(keyword in headline for keyword in bears_keywords)
-
-                        if is_bears_related:
-                            # Add "BREAKING NEWS - " prefix as requested
-                            formatted_headline = f"BEARS NEWS - {headline}"
-
-                            # Avoid duplicates
-                            if formatted_headline not in news_headlines:
-                                news_headlines.append(formatted_headline)
-                                print(f"Added Bears headline: {headline[:50]}...")
+                        if formatted_headline not in news_headlines:
+                            news_headlines.append(formatted_headline)
+                            print(f"Added Bears headline: {headline[:50]}...")
 
                     except AttributeError as e:
                         print(f"Error parsing entry: {e}")
                         continue
+            else:
+                print(f"No entries from official feed")
+                if feed.bozo:
+                    print(f"Feed error: {feed.get('bozo_exception', 'Unknown error')}")
 
-            except Exception as e:
-                print(f"Error fetching from {feed_url}: {e}")
-                continue
+        except Exception as e:
+            print(f"Error fetching from official Bears feed: {e}")
+
+        # Fallback to other sources if official feed didn't provide enough news
+        if len(news_headlines) < 5:
+            print("Supplementing with ESPN/CBS feeds...")
+            fallback_feeds = [
+                'https://www.espn.com/espn/rss/nfl/news',
+                'https://www.cbssports.com/rss/headlines/nfl/'
+            ]
+
+            # Keywords for filtering NFL feeds for Bears content
+            bears_keywords = [
+                'BEARS', 'CHICAGO BEARS', 'CHI BEARS', 'DA BEARS',
+                'CALEB WILLIAMS', 'DJ MOORE', 'D.J. MOORE',
+                'KEENAN ALLEN', 'ROME ODUNZE', 'COLE KMET',
+                'MONTEZ SWEAT', 'TREMAINE EDMUNDS', 'JAYLON JOHNSON',
+                'D\'ANDRE SWIFT', 'KYLER GORDON', 'JAQUAN BRISKER',
+                'BEN JOHNSON', 'RYAN POLES',
+                'SOLDIER FIELD', 'HALAS HALL'
+            ]
+
+            for feed_url in fallback_feeds:
+                try:
+                    print(f"Fetching Bears news from {feed_url}")
+                    feed = feedparser.parse(feed_url)
+
+                    if not feed.entries:
+                        continue
+
+                    for entry in feed.entries[:20]:
+                        try:
+                            headline = entry.title.strip().upper()
+                            is_bears_related = any(keyword in headline for keyword in bears_keywords)
+
+                            if is_bears_related:
+                                formatted_headline = f"BEARS NEWS - {headline}"
+                                if formatted_headline not in news_headlines:
+                                    news_headlines.append(formatted_headline)
+                                    print(f"Added Bears headline: {headline[:50]}...")
+
+                        except AttributeError:
+                            continue
+
+                except Exception as e:
+                    print(f"Error fetching from {feed_url}: {e}")
+                    continue
 
         if not news_headlines:
             print("No Bears news found, using fallback message")
         else:
             print(f"Total Bears headlines collected: {len(news_headlines)}")
 
-        # Return up to 12 news items (increased from 8 for more variety)
+        # Return up to 12 news items
         return news_headlines[:12]
 
     def _should_update_bears_news(self):

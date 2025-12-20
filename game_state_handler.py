@@ -1,49 +1,83 @@
 """Handlers for different game states and display modes"""
 
+from __future__ import annotations
+
 import time
 import pendulum
 import statsapi
 from PIL import Image
 from rgbmatrix import graphics
-from scoreboard_config import Colors, Positions, GameConfig
+from typing import TYPE_CHECKING, Any
+
+from scoreboard_config import Colors, Positions, GameConfig, TeamConfig, RGBColor
+
+if TYPE_CHECKING:
+    from scoreboard_manager import ScoreboardManager
 
 
 class GameStateHandler:
     """Handles display for different game states"""
 
-    def __init__(self, scoreboard_manager):
+    def __init__(self, scoreboard_manager: ScoreboardManager) -> None:
         """Initialize with reference to main scoreboard manager"""
         self.manager = scoreboard_manager
-        self.scroll_position = 96  # For scrolling text
+        self.scroll_position: int = 96  # For scrolling text
 
-    def display_warmup(self, game_data, game_index, lineup, gameid):
+    def display_warmup(
+        self,
+        game_data: list[dict[str, Any]],
+        game_index: int,
+        lineup: str | None,
+        gameid: int
+    ) -> None:
         """Display warmup/pre-game screen"""
-        start_time = self.manager.format_game_time(game_data, game_index)
+        start_time: str = self.manager.format_game_time(game_data, game_index)
         self._display_pregame_base(
-            "WARM UP", Colors.GREEN, start_time, lineup, game_data, game_index, gameid)
+            "WARM UP", Colors.GREEN, start_time, lineup or "", game_data, game_index, gameid)
 
-    def display_delayed(self, game_data, game_index, lineup, gameid):
+    def display_delayed(
+        self,
+        game_data: list[dict[str, Any]],
+        game_index: int,
+        lineup: str | None,
+        gameid: int
+    ) -> None:
         """Display delayed game screen"""
-        start_time = self.manager.format_game_time(game_data, game_index)
+        start_time: str = self.manager.format_game_time(game_data, game_index)
         self._display_pregame_base(
-            "DELAYED", Colors.DELAY_YELLOW, start_time, lineup, game_data, game_index, gameid)
+            "DELAYED", Colors.DELAY_YELLOW, start_time, lineup or "", game_data, game_index, gameid)
 
-    def display_postponed(self, game_data, game_index, lineup, gameid):
+    def display_postponed(
+        self,
+        game_data: list[dict[str, Any]],
+        game_index: int,
+        lineup: str | None,
+        gameid: int
+    ) -> None:
         """Display postponed game screen"""
-        start_time = self.manager.format_game_time(game_data, game_index)
+        start_time: str = self.manager.format_game_time(game_data, game_index)
         self._display_pregame_base(
-            "POSTPONED", Colors.POSTPONE_RED, start_time, lineup, game_data, game_index, gameid)
+            "POSTPONED", Colors.POSTPONE_RED, start_time, lineup or "", game_data, game_index, gameid)
 
-    def _display_pregame_base(self, status_text, bg_color, start_time, lineup, game_data, game_index, gameid):
+    def _display_pregame_base(
+        self,
+        status_text: str,
+        bg_color: RGBColor,
+        start_time: str,
+        lineup: str,
+        game_data: list[dict[str, Any]],
+        game_index: int,
+        gameid: int
+    ) -> None:
         """Base method for pregame displays (warmup, delayed, postponed) - OPTIMIZED"""
         # Compare times for game start
-        game_datetime = game_data[game_index]['game_datetime'][-9:19]
-        time_compare = game_datetime[:5]
-        current_time = pendulum.now().format('HH:MM')
+        game_datetime: str = game_data[game_index]['game_datetime'][-9:19]
+        time_compare: str = game_datetime[:5]
+        current_time: str = pendulum.now().format('HH:MM')
 
         # Counter for when to refresh data (every 100 iterations instead of constantly)
-        refresh_counter = 0
-        refresh_interval = 1000  # Refresh data every 100 scroll iterations
+        refresh_counter: int = 0
+        refresh_interval: int = 1000  # Refresh data every 100 scroll iterations
 
         while current_time != time_compare and game_data[game_index]['status'] not in ['In Progress', 'Final']:
             self.manager.clear_canvas()
@@ -54,7 +88,7 @@ class GameStateHandler:
                 self.manager.draw_pixel(x, 14, 255, 255, 255)
 
             # Draw status text
-            x_offset = 17 if status_text != "POSTPONED" else 8
+            x_offset: int = 17 if status_text != "POSTPONED" else 8
             self.manager.draw_text('medium_bold', x_offset,
                                    12, Colors.WHITE, status_text)
             self.manager.draw_text('small', 17, 24, Colors.WHITE, 'START TIME')
@@ -62,7 +96,7 @@ class GameStateHandler:
 
             # Scroll lineup
             self.scroll_position -= 1
-            text_length = len(lineup) * 7  # Approximate character width
+            text_length: int = len(lineup) * 7  # Approximate character width
 
             if self.scroll_position + text_length < 0:
                 self.scroll_position = 96
@@ -91,37 +125,39 @@ class GameStateHandler:
                 # Just update current time without hitting the API
                 current_time = pendulum.now().format('HH:MM')
 
-    def display_no_game(self, game_data, game_index):
+    def display_no_game(
+        self, game_data: list[dict[str, Any]], game_index: int
+    ) -> None:
         """Display when no game is currently playing"""
-        gameid = game_data[game_index]['game_id']
-        game_date = game_data[game_index]['game_date']
-        game_time = self.manager.format_game_time(game_data, game_index)
-        game_type = game_data[game_index].get('game_type', 'R')
+        gameid: int = game_data[game_index]['game_id']
+        game_date: str = game_data[game_index]['game_date']
+        game_time: str = self.manager.format_game_time(game_data, game_index)
+        game_type: str = game_data[game_index].get('game_type', 'R')
 
         # Get opponent info
-        game_info = statsapi.get('game', {'gamePk': gameid})
+        game_info: dict[str, Any] = statsapi.get('game', {'gamePk': gameid})
         if game_info['gameData']['teams']['home']['abbreviation'] == 'CHC':
-            away = 'away'
+            away: str = 'away'
         else:
             away = 'home'
-        away_team = game_info['gameData']['teams'][away]['name']
+        away_team: str = game_info['gameData']['teams'][away]['name']
 
         # Create next game text
-        pitchers = self.manager.get_pitchers(game_data, game_index, gameid)
-        next_game_text = f'NEXT GAME {game_date[5:]} at {game_time} vs {away_team}     {pitchers}'
+        pitchers: str = self.manager.get_pitchers(game_data, game_index, gameid)
+        next_game_text: str = f'NEXT GAME {game_date[5:]} at {game_time} vs {away_team}     {pitchers}'
 
         # Main display loop
         while True:
             self.manager.clear_canvas()
 
             # Display marquee image
-            output_image = Image.new("RGB", (96, 48))
+            output_image: Image.Image = Image.new("RGB", (96, 48))
             output_image.paste(self.manager.game_images['marquee'], (0, 0))
             self.manager.canvas.SetImage(output_image.convert("RGB"), 0, 0)
 
             # Scroll next game text
             self.scroll_position -= 1
-            text_length = len(next_game_text) * 7
+            text_length: int = len(next_game_text) * 7
             if self.scroll_position + text_length < 0:
                 self.scroll_position = 96
 
@@ -141,31 +177,32 @@ class GameStateHandler:
             self.manager.swap_canvas()
             time.sleep(GameConfig.SCROLL_SPEED)
 
-    def _display_standings(self):
+    def _display_standings(self) -> None:
         """Display division standings"""
         self.manager.clear_canvas()
         self.manager.fill_canvas(*Colors.GREEN)
 
         # Get standings
-        standings = statsapi.get('standings', {'leagueId': 104})[
-            'records'][1]['teamRecords']
+        standings: list[dict[str, Any]] = statsapi.get(
+            'standings', {'leagueId': TeamConfig.NL_LEAGUE_ID}
+        )['records'][1]['teamRecords']
 
         # Draw title
         self.manager.draw_text(
             'tiny_bold', 3, 8, Colors.YELLOW, 'DIVISION STANDINGS')
 
         # Draw each team
-        y_position = 15
+        y_position: int = 15
         for team_record in standings:
-            team_id = team_record['team']['id']
-            team_info = statsapi.get('team', {'teamId': team_id})['teams'][0]
-            team_abv = team_info['abbreviation']
+            team_id: int = team_record['team']['id']
+            team_info: dict[str, Any] = statsapi.get('team', {'teamId': team_id})['teams'][0]
+            team_abv: str = team_info['abbreviation']
 
-            games_back = team_record['gamesBack']
+            games_back: str = team_record['gamesBack']
             if games_back == '-':
                 games_back = ''
 
-            record = f"{team_record['leagueRecord']['wins']}-{team_record['leagueRecord']['losses']} {team_record['leagueRecord']['pct']}"
+            record: str = f"{team_record['leagueRecord']['wins']}-{team_record['leagueRecord']['losses']} {team_record['leagueRecord']['pct']}"
 
             self.manager.draw_text(
                 'micro', 5, y_position, Colors.WHITE, team_abv)
@@ -179,58 +216,62 @@ class GameStateHandler:
         self.manager.swap_canvas()
         time.sleep(GameConfig.NO_GAME_STANDINGS_DISPLAY_TIME)
 
-    def _display_playoff_info(self, game_data, game_index):
+    def _display_playoff_info(
+        self, game_data: list[dict[str, Any]], game_index: int
+    ) -> None:
         """Display playoff series information"""
         self.manager.clear_canvas()
         self.manager.fill_canvas(*Colors.CUBS_BLUE)
 
         # Get game data
-        gameid = game_data[game_index]['game_id']
-        game_type = game_data[game_index].get('game_type', 'F')
-        series_status = game_data[game_index].get('series_status', '')
+        gameid: int = game_data[game_index]['game_id']
+        game_type: str = game_data[game_index].get('game_type', 'F')
+        series_status: str = game_data[game_index].get('series_status', '')
 
         # Get full game info
-        game_info = statsapi.get('game', {'gamePk': gameid})
+        game_info: dict[str, Any] = statsapi.get('game', {'gamePk': gameid})
 
         # Determine opponent
         if game_info['gameData']['teams']['home']['abbreviation'] == 'CHC':
-            opp_team = game_info['gameData']['teams']['away']
+            opp_team: dict[str, Any] = game_info['gameData']['teams']['away']
         else:
             opp_team = game_info['gameData']['teams']['home']
 
-        opp_name = opp_team['name']
-        opp_abbr = opp_team['abbreviation']
+        opp_name: str = opp_team['name']
+        opp_abbr: str = opp_team['abbreviation']
 
         # Map game type to display name
-        game_type_names = {
+        game_type_names: dict[str, str] = {
             'F': 'WILD CARD',
             'D': 'DIVISION SERIES',
             'L': 'LEAGUE CHAMPIONSHIP',
             'W': 'WORLD SERIES'
         }
-        series_name = game_type_names.get(game_type, 'PLAYOFFS')
+        series_name: str = game_type_names.get(game_type, 'PLAYOFFS')
 
         # Draw title
-        title_x = max(2, (96 - len(series_name) * 5) // 2)  # Center the title
+        title_x: int = max(2, (96 - len(series_name) * 5) // 2)  # Center the title
         self.manager.draw_text('tiny_bold', title_x, 8,
                                Colors.BRIGHT_YELLOW, series_name)
 
         # Draw opponent info
-        opponent_text = f"vs {opp_abbr}"
-        opp_x = max(2, (96 - len(opponent_text) * 9) // 2)
+        opponent_text: str = f"vs {opp_abbr}"
+        opp_x: int = max(2, (96 - len(opponent_text) * 9) // 2)
         self.manager.draw_text('medium_bold', opp_x, 21,
                                Colors.WHITE, opponent_text)
 
         # Draw series status if available
         if series_status:
             # Parse and display series status
-            status_parts = series_status.split()
+            status_parts: list[str] = series_status.split()
             if len(status_parts) >= 3:
                 # Format: "CHC leads 1-0" or "Series tied 1-1"
-                team_part = status_parts[0]
-                status_word = status_parts[1]  # "leads" or "tied"
-                score_part = status_parts[-1]  # "1-0"
+                team_part: str = status_parts[0]
+                status_word: str = status_parts[1]  # "leads" or "tied"
+                score_part: str = status_parts[-1]  # "1-0"
 
+                color: RGBColor
+                display_text: str
                 if team_part == 'CHC':
                     color = Colors.BRIGHT_YELLOW
                     display_text = "CUBS LEAD"
@@ -242,32 +283,34 @@ class GameStateHandler:
                     display_text = f"{team_part} LEAD"
 
                 # Display status
-                text_x = max(2, (96 - len(display_text) * 5) // 2)
+                text_x: int = max(2, (96 - len(display_text) * 5) // 2)
                 self.manager.draw_text(
                     'tiny_bold', text_x, 33, color, display_text)
 
                 # Display series score
-                score_x = max(2, (96 - len(score_part) * 7) // 2)
+                score_x: int = max(2, (96 - len(score_part) * 7) // 2)
                 self.manager.draw_text(
                     'standard_bold', score_x, 45, Colors.WHITE, score_part)
         else:
             # No series status available yet
-            series_begins_text = 'SERIES BEGINS'
-            series_begins_x = max(2, (96 - len(series_begins_text) * 5) // 2)
+            series_begins_text: str = 'SERIES BEGINS'
+            series_begins_x: int = max(2, (96 - len(series_begins_text) * 5) // 2)
             self.manager.draw_text(
                 'tiny', series_begins_x, 31, Colors.WHITE, series_begins_text)
 
             # Add game date below
             # Get MM-DD from YYYY-MM-DD
-            game_date = game_data[game_index]['game_date'][5:]
-            date_x = max(2, (96 - len(game_date) * 9) // 2)
+            game_date: str = game_data[game_index]['game_date'][5:]
+            date_x: int = max(2, (96 - len(game_date) * 9) // 2)
             self.manager.draw_text(
                 'medium_bold', date_x, 45, Colors.BRIGHT_YELLOW, game_date)
-            
+
         self.manager.swap_canvas()
         time.sleep(GameConfig.NO_GAME_STANDINGS_DISPLAY_TIME)
 
-    def _should_transition_state(self, game_data, game_index):
+    def _should_transition_state(
+        self, game_data: list[dict[str, Any]], game_index: int
+    ) -> bool:
         """Check if we should transition to a different game state"""
-        status = game_data[game_index]['status']
+        status: str = game_data[game_index]['status']
         return status in ['Warmup', 'Pre-Game', 'In Progress', 'Delayed', 'Postponed']

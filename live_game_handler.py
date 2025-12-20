@@ -1,23 +1,32 @@
 """Handler for live game display including scores, bases, and game updates"""
 
+from __future__ import annotations
+
 import time
 import pendulum
 import statsapi
 from PIL import Image
-from scoreboard_config import Colors, Positions, GameConfig, TeamConfig
+from typing import TYPE_CHECKING, Any
+
+from scoreboard_config import Colors, Positions, GameConfig, TeamConfig, DisplayConfig
+
+if TYPE_CHECKING:
+    from scoreboard_manager import ScoreboardManager
 
 
 class LiveGameHandler:
     """Handles live game display and updates"""
 
-    def __init__(self, scoreboard_manager):
+    def __init__(self, scoreboard_manager: ScoreboardManager) -> None:
         """Initialize with reference to main scoreboard manager"""
         self.manager = scoreboard_manager
-        self.cubs_score = 0
-        self.opp_score = 0
-        self.is_cubs_home = False
+        self.cubs_score: int = 0
+        self.opp_score: int = 0
+        self.is_cubs_home: bool = False
 
-    def display_game_on(self, game_data, game_index, gameid):
+    def display_game_on(
+        self, game_data: list[dict[str, Any]], game_index: int, gameid: int
+    ) -> None:
         """Main game display loop"""
         self.is_cubs_home = (
             game_data[game_index]['home_id'] == TeamConfig.CUBS_TEAM_ID)
