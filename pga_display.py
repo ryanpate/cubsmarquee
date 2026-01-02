@@ -214,13 +214,13 @@ class PGADisplay:
     def _fetch_pga_news_rss(self):
         """
         Fetch latest PGA news from RSS feeds
-        Uses ESPN and CBS Sports for better summaries with story context
+        Uses CBS Sports and Golf.com for comprehensive golf coverage
         """
         news_items = []
 
-        # List of RSS feed URLs - ESPN and CBS Sports have the best summaries
+        # List of RSS feed URLs - CBS Sports as primary, Golf.com as secondary
+        # Note: PGA Tour website does not offer a public RSS feed
         rss_feeds = [
-            ('https://www.espn.com/espn/rss/golf/news', 'ESPN'),
             ('https://www.cbssports.com/rss/headlines/golf/', 'CBS'),
             ('https://golf.com/feed/', 'Golf.com'),
         ]
