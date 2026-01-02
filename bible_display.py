@@ -6,6 +6,7 @@ import time
 import json
 import os
 import random
+from datetime import date, datetime, timedelta
 from PIL import Image
 from typing import TYPE_CHECKING, Any
 
@@ -26,10 +27,9 @@ class BibleDisplay:
         # Load Bible verses
         self.bible_verses: list[dict[str, str]] = self._load_bible_verses()
 
-        # Initialize shuffled verses list and index for non-repeating rotation
-        self.shuffled_verses: list[dict[str, str]] = self.bible_verses.copy()
-        random.shuffle(self.shuffled_verses)
-        self.verses_index: int = 0
+        # Track today's verse - same verse all day, changes daily
+        self.current_verse_date: date | None = None
+        self.todays_verse: dict[str, str] | None = None
 
         # Color scheme - warm gold and white on deep purple/navy
         self.BIBLE_NAVY: RGBColor = (20, 20, 60)  # Deep navy/purple
@@ -138,10 +138,46 @@ class BibleDisplay:
         for x in range(96):
             self.manager.draw_pixel(x, 27, 60, 60, 100)  # Subtle blue-gray line
 
+    def _get_display_date(self) -> date:
+        """Get the 'display date' for verse selection.
+
+        The verse changes at 1am, not midnight. So between midnight and 1am,
+        we still use yesterday's date for verse selection.
+        """
+        now = datetime.now()
+        # If it's before 1am, use yesterday's date
+        if now.hour < 1:
+            return (now - timedelta(days=1)).date()
+        return now.date()
+
+    def _get_todays_verse(self) -> dict[str, str]:
+        """Get the verse for today - same verse all day, changes at 1am"""
+        display_date = self._get_display_date()
+
+        # Check if we need to pick a new verse (new day or first run)
+        if self.current_verse_date != display_date or self.todays_verse is None:
+            # Use date as seed for consistent daily selection
+            # This ensures the same verse shows all day but changes at 1am
+            day_seed = display_date.year * 1000 + display_date.timetuple().tm_yday
+            random.seed(day_seed)
+            self.todays_verse = random.choice(self.bible_verses)
+            self.current_verse_date = display_date
+            # Reset seed to not affect other random operations
+            random.seed()
+            print(f"Bible verse of the day ({display_date}): {self.todays_verse.get('reference', 'Unknown')}")
+
+        return self.todays_verse
+
     def display_bible_verse(self, duration: int = 180) -> None:
-        """Display scrolling Bible verses - random order, no repeats until all shown"""
+        """Display today's verse - same verse scrolls all day, changes daily"""
         start_time = time.time()
         self.scroll_position = 96
+
+        # Get today's verse (same verse all day)
+        todays_verse_data = self._get_todays_verse()
+        verse_text = todays_verse_data.get('verse', '')
+        reference = todays_verse_data.get('reference', '')
+        full_text = f'"{verse_text}" - {reference}'
 
         while time.time() - start_time < duration:
             try:
@@ -150,30 +186,16 @@ class BibleDisplay:
                 # Draw the Bible header
                 self._draw_bible_header()
 
-                # Get current verse from shuffled list
-                current_verse_data = self.shuffled_verses[self.verses_index]
-                verse_text = current_verse_data.get('verse', '')
-                reference = current_verse_data.get('reference', '')
-                full_text = f'"{verse_text}" - {reference}'
-
                 # Scroll the message
                 scroll_increment = getattr(GameConfig, 'SCROLL_PIXELS', 2)
                 self.scroll_position -= scroll_increment
                 text_length = len(full_text) * 9
 
-                # When text scrolls off, move to next verse
+                # Reset scroll when text finishes - keeps showing same verse
                 if self.scroll_position + text_length < 0:
                     self.scroll_position = 96
-                    self.verses_index += 1
 
-                    # Re-shuffle when all verses have been shown
-                    if self.verses_index >= len(self.shuffled_verses):
-                        print(f"Completed full cycle of {len(self.shuffled_verses)} Bible verses - re-shuffling")
-                        self.shuffled_verses = self.bible_verses.copy()
-                        random.shuffle(self.shuffled_verses)
-                        self.verses_index = 0
-
-                # Draw scrolling verse text in cream below header (moved down 2 pixels)
+                # Draw scrolling verse text in cream below header
                 self.manager.draw_text(
                     'medium_bold', int(self.scroll_position), 44,
                     self.BIBLE_CREAM, full_text
