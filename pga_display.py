@@ -214,70 +214,96 @@ class PGADisplay:
     def _fetch_pga_news_rss(self):
         """
         Fetch latest PGA news from RSS feeds
-        Uses summaries for more context instead of just headlines
+        Uses ESPN and CBS Sports for better summaries with story context
         """
         news_items = []
 
-        # List of RSS feed URLs to try
+        # List of RSS feed URLs - ESPN and CBS Sports have the best summaries
         rss_feeds = [
-            'https://golf.com/feed/',
-            'https://www.golfdigest.com/feed/news',
-            'https://www.pgatour.com/feeds/news.xml'
+            ('https://www.espn.com/espn/rss/golf/news', 'ESPN'),
+            ('https://www.cbssports.com/rss/headlines/golf/', 'CBS'),
+            ('https://golf.com/feed/', 'Golf.com'),
         ]
 
-        for feed_url in rss_feeds:
+        for feed_url, source in rss_feeds:
             try:
-                print(f"Fetching PGA news from {feed_url}")
+                print(f"Fetching PGA news from {source}: {feed_url}")
                 feed = feedparser.parse(feed_url)
 
                 # Check if feed was successfully parsed
-                if feed.bozo:
+                if feed.bozo and not feed.entries:
                     print(f"Warning: Feed parsing issue for {feed_url}")
                     continue
 
-                # Extract summaries from entries
-                for entry in feed.entries[:5]:  # Get top 5 from each feed
+                # Extract news with summaries from entries
+                for entry in feed.entries[:6]:  # Get top 6 from each feed
                     try:
-                        # Try to get summary/description, fall back to title
-                        summary = None
+                        title = entry.title.strip() if hasattr(entry, 'title') else ''
+                        if not title:
+                            continue
 
-                        # Check for summary field (most common)
+                        # Get summary/description for story context
+                        summary = None
                         if hasattr(entry, 'summary') and entry.summary:
                             summary = self._clean_html(entry.summary)
-                        # Check for description field
                         elif hasattr(entry, 'description') and entry.description:
                             summary = self._clean_html(entry.description)
-                        # Check for content field
                         elif hasattr(entry, 'content') and entry.content:
                             summary = self._clean_html(entry.content[0].get('value', ''))
 
-                        # If we got a summary, extract first sentence
-                        if summary and len(summary) > 20:
-                            tldr = self._get_first_sentence(summary)
+                        # Build informative news item combining title and summary
+                        if summary and len(summary) > 30:
+                            # Extract key info from summary (first 1-2 sentences)
+                            summary_short = self._get_first_sentence(summary, max_length=180)
+
+                            # If summary adds info beyond the title, include both
+                            title_words = set(title.lower().split())
+                            summary_words = set(summary_short.lower().split())
+                            # Check if summary has significant new info
+                            new_words = summary_words - title_words
+                            if len(new_words) > 5 and summary_short.lower() != title.lower():
+                                # Combine: shortened title + summary detail
+                                title_short = title[:60] + '...' if len(title) > 60 else title
+                                news_text = f"{title_short} - {summary_short}"
+                            else:
+                                # Summary is just the title repeated, use summary as it's usually more complete
+                                news_text = summary_short
                         else:
-                            # Fall back to title if no good summary
-                            tldr = entry.title.strip()
+                            # No good summary, just use title
+                            news_text = title
 
-                        # Format and uppercase
-                        formatted_news = f"GOLF NEWS: {tldr.upper()}"
+                        # Format with source tag and uppercase
+                        formatted_news = f"GOLF: {news_text.upper()}"
 
-                        # Avoid duplicates
-                        if formatted_news not in news_items:
+                        # Avoid duplicates (check first 50 chars to catch similar headlines)
+                        is_duplicate = False
+                        for existing in news_items:
+                            if existing[:50] == formatted_news[:50]:
+                                is_duplicate = True
+                                break
+                        if not is_duplicate:
                             news_items.append(formatted_news)
 
-                    except AttributeError:
+                    except AttributeError as e:
+                        print(f"Error parsing entry: {e}")
                         continue
 
-                # If we got news from first feed, that's enough
-                if news_items:
-                    print(f"Successfully fetched {len(news_items)} PGA news summaries")
+                print(f"Got {len(news_items)} news items from {source}")
+
+                # Continue to next source to get variety (don't break early)
+                if len(news_items) >= 10:
                     break
 
             except Exception as e:
                 print(f"Error fetching from {feed_url}: {e}")
                 continue
 
-        return news_items[:8]  # Return max 8 news items
+        if news_items:
+            print(f"Successfully fetched {len(news_items)} PGA news items with summaries")
+        else:
+            print("No PGA news items found from any source")
+
+        return news_items[:10]  # Return max 10 news items
 
     def _should_update_news(self):
         """Check if news needs updating"""
