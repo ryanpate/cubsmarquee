@@ -850,8 +850,11 @@ HTML_TEMPLATE = """
                 const data = await response.json();
 
                 if (data.success) {
-                    showStatus('service-control-status', data.message, true);
+                    showStatus('service-control-status', data.message + ' Refreshing status...', true);
+                    // Poll status multiple times to show when operation completes
                     setTimeout(updateServiceStatus, 2000);
+                    setTimeout(updateServiceStatus, 5000);
+                    setTimeout(updateServiceStatus, 8000);
                 } else {
                     showStatus('service-control-status', 'Error: ' + data.message, false);
                 }
@@ -1191,81 +1194,41 @@ def control_service():
             return jsonify({'success': False, 'message': 'Invalid action'})
 
         if action == 'stop':
-            # Stop the systemd service
-            subprocess.run(['sudo', 'systemctl', 'stop', 'cubs-scoreboard'],
-                          timeout=30, check=False)
-            time.sleep(1)
-            # Kill any remaining python processes running main.py
-            subprocess.run(['sudo', 'pkill', '-9', '-f', 'python.*main.py'],
-                          timeout=10, check=False)
-            time.sleep(1)
-            return jsonify({'success': True, 'message': 'Service stopped'})
+            # Run stop in background to avoid timeout
+            subprocess.Popen(
+                ['bash', '-c', 'sudo systemctl stop cubs-scoreboard; sudo pkill -9 -f "python.*main.py" 2>/dev/null; exit 0'],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True
+            )
+            return jsonify({'success': True, 'message': 'Stop command sent. Service will stop shortly.'})
 
         elif action == 'start':
-            # First ensure no stale processes
-            subprocess.run(['sudo', 'pkill', '-9', '-f', 'python.*main.py'],
-                          timeout=10, check=False)
-            time.sleep(1)
-            # Start the service
-            result = subprocess.run(
-                ['sudo', 'systemctl', 'start', 'cubs-scoreboard'],
-                capture_output=True,
-                text=True,
-                timeout=30
+            # Run start in background to avoid timeout
+            subprocess.Popen(
+                ['bash', '-c', 'sudo pkill -9 -f "python.*main.py" 2>/dev/null; sleep 1; sudo systemctl start cubs-scoreboard'],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True
             )
-            time.sleep(2)
-            # Verify it started
-            status = subprocess.run(
-                ['systemctl', 'is-active', 'cubs-scoreboard'],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            if status.stdout.strip() == 'active':
-                return jsonify({'success': True, 'message': 'Service started successfully'})
-            else:
-                return jsonify({'success': False, 'message': f'Service failed to start: {result.stderr or "Check logs for details"}'})
+            return jsonify({'success': True, 'message': 'Start command sent. Service will start shortly.'})
 
         elif action == 'restart':
-            # Stop completely first
-            subprocess.run(['sudo', 'systemctl', 'stop', 'cubs-scoreboard'],
-                          timeout=30, check=False)
-            time.sleep(2)
-            # Force kill any remaining processes
-            subprocess.run(['sudo', 'pkill', '-9', '-f', 'python.*main.py'],
-                          timeout=10, check=False)
-            time.sleep(2)
-            # Verify processes are gone
-            for _ in range(3):
-                check = subprocess.run(['pgrep', '-f', 'python.*main.py'],
-                                      capture_output=True, timeout=5)
-                if check.returncode != 0:
-                    break
-                subprocess.run(['sudo', 'pkill', '-9', '-f', 'python.*main.py'],
-                              timeout=10, check=False)
-                time.sleep(1)
-            # Now start the service
-            result = subprocess.run(
-                ['sudo', 'systemctl', 'start', 'cubs-scoreboard'],
-                capture_output=True,
-                text=True,
-                timeout=30
+            # Run full restart sequence in background to avoid timeout
+            subprocess.Popen(
+                ['bash', '-c', '''
+                    sudo systemctl stop cubs-scoreboard 2>/dev/null
+                    sleep 2
+                    sudo pkill -9 -f "python.*main.py" 2>/dev/null
+                    sleep 2
+                    sudo systemctl start cubs-scoreboard
+                '''],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True
             )
-            time.sleep(3)
-            # Verify it started
-            status = subprocess.run(
-                ['systemctl', 'is-active', 'cubs-scoreboard'],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            if status.stdout.strip() == 'active':
-                return jsonify({'success': True, 'message': 'Service restarted successfully'})
-            else:
-                return jsonify({'success': False, 'message': f'Service restart failed: {result.stderr or "Check logs for details"}'})
+            return jsonify({'success': True, 'message': 'Restart command sent. Service will restart shortly.'})
 
-    except subprocess.TimeoutExpired:
-        return jsonify({'success': False, 'message': 'Operation timed out'})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
 
