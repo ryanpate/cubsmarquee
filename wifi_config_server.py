@@ -567,12 +567,12 @@ HTML_TEMPLATE = """
             </div>
 
             <div class="button-group">
-                <button onclick="controlService('start')" class="button-start">Start Service</button>
-                <button onclick="controlService('stop')" class="button-stop">Stop Service</button>
-                <button onclick="controlService('restart')" class="button-restart">Restart Service</button>
+                <button onclick="controlService(this, 'start')" class="button-start">Start Service</button>
+                <button onclick="controlService(this, 'stop')" class="button-stop">Stop Service</button>
+                <button onclick="controlService(this, 'restart')" class="button-restart">Restart Service</button>
             </div>
 
-            <button onclick="rebootDevice()" class="button-reboot">Reboot Pi</button>
+            <button onclick="rebootDevice(this)" class="button-reboot">Reboot Pi</button>
             
             <div id="service-control-status" class="status"></div>
         </div>
@@ -834,8 +834,7 @@ HTML_TEMPLATE = """
             }
         }
 
-        async function controlService(action) {
-            const button = event.target;
+        async function controlService(button, action) {
             button.disabled = true;
             const originalText = button.textContent;
             button.textContent = action.charAt(0).toUpperCase() + action.slice(1) + 'ing...';
@@ -866,10 +865,13 @@ HTML_TEMPLATE = """
             }
         }
 
-        async function rebootDevice() {
+        async function rebootDevice(button) {
             if (!confirm('Are you sure you want to reboot the Raspberry Pi? The display will be unavailable for about 2 minutes.')) {
                 return;
             }
+
+            button.disabled = true;
+            button.textContent = 'Rebooting...';
 
             try {
                 const response = await fetch('/reboot', {
@@ -879,13 +881,16 @@ HTML_TEMPLATE = """
                 const data = await response.json();
 
                 if (data.success) {
-                    alert('Reboot initiated! The Pi will restart in a few seconds. Wait about 2 minutes before reconnecting.');
                     showStatus('service-control-status', 'Rebooting... Please wait 2 minutes before reconnecting.', true);
                 } else {
                     showStatus('service-control-status', 'Reboot error: ' + data.message, false);
+                    button.disabled = false;
+                    button.textContent = 'Reboot Pi';
                 }
             } catch (error) {
                 showStatus('service-control-status', 'Reboot error: ' + error.message, false);
+                button.disabled = false;
+                button.textContent = 'Reboot Pi';
             }
         }
 
