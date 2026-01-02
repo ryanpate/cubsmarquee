@@ -356,6 +356,31 @@ HTML_TEMPLATE = """
         .button-group button {
             flex: 1;
         }
+        .button-start {
+            background: #28a745;
+        }
+        .button-start:hover {
+            background: #218838;
+        }
+        .button-stop {
+            background: #dc3545;
+        }
+        .button-stop:hover {
+            background: #c82333;
+        }
+        .button-restart {
+            background: #fd7e14;
+        }
+        .button-restart:hover {
+            background: #e96b02;
+        }
+        .button-reboot {
+            background: #6c757d;
+            margin-top: 20px;
+        }
+        .button-reboot:hover {
+            background: #5a6268;
+        }
     </style>
 </head>
 <body>
@@ -542,12 +567,12 @@ HTML_TEMPLATE = """
             </div>
 
             <div class="button-group">
-                <button onclick="controlService('start')" class="button-secondary">Start Service</button>
-                <button onclick="controlService('stop')" class="button-secondary">Stop Service</button>
-                <button onclick="controlService('restart')">Restart Service</button>
+                <button onclick="controlService('start')" class="button-start">Start Service</button>
+                <button onclick="controlService('stop')" class="button-stop">Stop Service</button>
+                <button onclick="controlService('restart')" class="button-restart">Restart Service</button>
             </div>
 
-            <button onclick="rebootDevice()" style="margin-top: 20px;">Reboot Pi</button>
+            <button onclick="rebootDevice()" class="button-reboot">Reboot Pi</button>
             
             <div id="service-control-status" class="status"></div>
         </div>
@@ -1166,41 +1191,81 @@ def control_service():
             return jsonify({'success': False, 'message': 'Invalid action'})
 
         if action == 'stop':
-            subprocess.run(['sudo', 'systemctl', 'stop',
-                           'cubs-scoreboard'], timeout=25)
-            subprocess.run(
-                ['sudo', 'pkill', '-f', 'python.*main.py'], timeout=25)
+            # Stop the systemd service
+            subprocess.run(['sudo', 'systemctl', 'stop', 'cubs-scoreboard'],
+                          timeout=30, check=False)
+            time.sleep(1)
+            # Kill any remaining python processes running main.py
+            subprocess.run(['sudo', 'pkill', '-9', '-f', 'python.*main.py'],
+                          timeout=10, check=False)
+            time.sleep(1)
             return jsonify({'success': True, 'message': 'Service stopped'})
 
-        elif action == 'restart':
-            subprocess.run(['sudo', 'systemctl', 'stop',
-                           'cubs-scoreboard'], timeout=25)
-            subprocess.run(
-                ['sudo', 'pkill', '-f', 'python.*main.py'], timeout=25)
+        elif action == 'start':
+            # First ensure no stale processes
+            subprocess.run(['sudo', 'pkill', '-9', '-f', 'python.*main.py'],
+                          timeout=10, check=False)
+            time.sleep(1)
+            # Start the service
+            result = subprocess.run(
+                ['sudo', 'systemctl', 'start', 'cubs-scoreboard'],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
             time.sleep(2)
+            # Verify it started
+            status = subprocess.run(
+                ['systemctl', 'is-active', 'cubs-scoreboard'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if status.stdout.strip() == 'active':
+                return jsonify({'success': True, 'message': 'Service started successfully'})
+            else:
+                return jsonify({'success': False, 'message': f'Service failed to start: {result.stderr or "Check logs for details"}'})
+
+        elif action == 'restart':
+            # Stop completely first
+            subprocess.run(['sudo', 'systemctl', 'stop', 'cubs-scoreboard'],
+                          timeout=30, check=False)
+            time.sleep(2)
+            # Force kill any remaining processes
+            subprocess.run(['sudo', 'pkill', '-9', '-f', 'python.*main.py'],
+                          timeout=10, check=False)
+            time.sleep(2)
+            # Verify processes are gone
+            for _ in range(3):
+                check = subprocess.run(['pgrep', '-f', 'python.*main.py'],
+                                      capture_output=True, timeout=5)
+                if check.returncode != 0:
+                    break
+                subprocess.run(['sudo', 'pkill', '-9', '-f', 'python.*main.py'],
+                              timeout=10, check=False)
+                time.sleep(1)
+            # Now start the service
             result = subprocess.run(
                 ['sudo', 'systemctl', 'start', 'cubs-scoreboard'],
                 capture_output=True,
                 text=True,
-                timeout=20
+                timeout=30
             )
-            if result.returncode == 0:
-                return jsonify({'success': True, 'message': 'Service restarted'})
-            else:
-                return jsonify({'success': False, 'message': f'Service restart failed: {result.stderr}'})
-
-        else:  # action == 'start'
-            result = subprocess.run(
-                ['sudo', 'systemctl', 'start', 'cubs-scoreboard'],
+            time.sleep(3)
+            # Verify it started
+            status = subprocess.run(
+                ['systemctl', 'is-active', 'cubs-scoreboard'],
                 capture_output=True,
                 text=True,
-                timeout=20
+                timeout=5
             )
-            if result.returncode == 0:
-                return jsonify({'success': True, 'message': 'Service started'})
+            if status.stdout.strip() == 'active':
+                return jsonify({'success': True, 'message': 'Service restarted successfully'})
             else:
-                return jsonify({'success': False, 'message': f'Service start failed: {result.stderr}'})
+                return jsonify({'success': False, 'message': f'Service restart failed: {result.stderr or "Check logs for details"}'})
 
+    except subprocess.TimeoutExpired:
+        return jsonify({'success': False, 'message': 'Operation timed out'})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
 
@@ -1209,8 +1274,15 @@ def control_service():
 def reboot_device():
     """Reboot the Raspberry Pi"""
     try:
-        subprocess.Popen(['sudo', 'reboot'])
-        return jsonify({'success': True, 'message': 'Reboot initiated'})
+        # Use 'shutdown -r now' with a small delay via 'at' or bash to ensure response is sent
+        # Run reboot in background after 2 second delay to allow HTTP response to complete
+        subprocess.Popen(
+            ['bash', '-c', 'sleep 2 && sudo reboot'],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True
+        )
+        return jsonify({'success': True, 'message': 'Reboot initiated - Pi will restart in a few seconds'})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
 
