@@ -11,6 +11,7 @@ from PIL import Image
 from typing import TYPE_CHECKING, Any
 
 from scoreboard_config import Colors, GameConfig, RGBColor
+from retry import retry_http_request
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
@@ -66,14 +67,12 @@ class WeatherDisplay:
         try:
             # Current weather
             current_url = f"https://api.openweathermap.org/data/2.5/weather?zip={zip_code},US&appid={api_key}&units=imperial"
-            current_response = requests.get(current_url, timeout=10)
-            current_response.raise_for_status()
+            current_response = retry_http_request(current_url, timeout=10)
             self.weather_data = current_response.json()
 
             # 5-day forecast (3-hour intervals)
             forecast_url = f"https://api.openweathermap.org/data/2.5/forecast?zip={zip_code},US&appid={api_key}&units=imperial"
-            forecast_response = requests.get(forecast_url, timeout=10)
-            forecast_response.raise_for_status()
+            forecast_response = retry_http_request(forecast_url, timeout=10)
             self.forecast_data = forecast_response.json()
 
             self.last_update = time.time()

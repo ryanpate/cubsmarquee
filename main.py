@@ -16,6 +16,7 @@ from live_game_handler import LiveGameHandler
 from off_season_handler import OffSeasonHandler
 from scoreboard_config import GameConfig, TeamConfig
 from logger import setup_logging, get_logger
+from config_validator import validate_config_on_startup
 
 
 # Global flag for graceful shutdown
@@ -267,6 +268,14 @@ def main() -> None:
     logger.info("=" * 60)
     logger.info("Cubs LED Scoreboard Starting...")
     logger.info("=" * 60)
+
+    # Validate configuration on startup
+    logger.info("Validating configuration...")
+    config_valid = validate_config_on_startup()
+    if config_valid:
+        logger.info("Configuration validation passed")
+    else:
+        logger.warning("Configuration has issues - some features may be disabled")
 
     # Register signal handlers for graceful shutdown
     signal.signal(signal.SIGTERM, _signal_handler)

@@ -111,11 +111,15 @@ def load_config():
         'weather_api_key': '',
         'custom_message': 'GO CUBS GO! SEE YOU NEXT SEASON!',
         'display_mode': 'auto',
+        'enable_weather': True,
         'enable_bears': True,
         'enable_bears_news': True,
         'enable_pga': True,
+        'enable_pga_news': True,
         'enable_pga_facts': True,
-        'enable_cubs_news': True
+        'enable_cubs_news': True,
+        'enable_cubs_facts': True,
+        'enable_bible': True
     }
 
     try:
@@ -412,6 +416,16 @@ HTML_TEMPLATE = """
                 </select>
             </div>
 
+            <h3 style="margin-top: 20px; color: #0C2340;">Content Display Options</h3>
+            <p class="help-text" style="margin-bottom: 15px;">Select which content to show in the off-season rotation:</p>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="enable_weather">
+                    Enable Weather display
+                </label>
+            </div>
+
             <div class="form-group">
                 <label>
                     <input type="checkbox" id="enable_bears">
@@ -435,8 +449,22 @@ HTML_TEMPLATE = """
 
             <div class="form-group">
                 <label>
+                    <input type="checkbox" id="enable_pga_news">
+                    Enable PGA Tour news display (golf season)
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label>
                     <input type="checkbox" id="enable_pga_facts">
-                    Enable PGA Tour facts/news display (golf season)
+                    Enable PGA Tour facts display (golf season)
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="enable_cubs_facts">
+                    Enable Cubs facts & custom message display
                 </label>
             </div>
 
@@ -444,6 +472,13 @@ HTML_TEMPLATE = """
                 <label>
                     <input type="checkbox" id="enable_cubs_news">
                     Enable Cubs breaking news display
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="enable_bible">
+                    Enable Bible Verse of the Day display
                 </label>
             </div>
 
@@ -545,11 +580,15 @@ HTML_TEMPLATE = """
         window.onload = function() {
             const config = {{ config | tojson }};
             document.getElementById('display_mode').value = config.display_mode || 'auto';
+            document.getElementById('enable_weather').checked = config.enable_weather !== false;
             document.getElementById('enable_bears').checked = config.enable_bears !== false;
             document.getElementById('enable_bears_news').checked = config.enable_bears_news !== false;
             document.getElementById('enable_pga').checked = config.enable_pga !== false;
+            document.getElementById('enable_pga_news').checked = config.enable_pga_news !== false;
             document.getElementById('enable_pga_facts').checked = config.enable_pga_facts !== false;
+            document.getElementById('enable_cubs_facts').checked = config.enable_cubs_facts !== false;
             document.getElementById('enable_cubs_news').checked = config.enable_cubs_news !== false;
+            document.getElementById('enable_bible').checked = config.enable_bible !== false;
             updateServiceStatus();
         };
 
@@ -658,11 +697,15 @@ HTML_TEMPLATE = """
                 weather_api_key: document.getElementById('weather_api_key').value,
                 custom_message: document.getElementById('custom_message').value,
                 display_mode: document.getElementById('display_mode').value,
+                enable_weather: document.getElementById('enable_weather').checked,
                 enable_bears: document.getElementById('enable_bears').checked,
                 enable_bears_news: document.getElementById('enable_bears_news').checked,
                 enable_pga: document.getElementById('enable_pga').checked,
+                enable_pga_news: document.getElementById('enable_pga_news').checked,
                 enable_pga_facts: document.getElementById('enable_pga_facts').checked,
-                enable_cubs_news: document.getElementById('enable_cubs_news').checked
+                enable_cubs_facts: document.getElementById('enable_cubs_facts').checked,
+                enable_cubs_news: document.getElementById('enable_cubs_news').checked,
+                enable_bible: document.getElementById('enable_bible').checked
             };
 
             const button = event.target;
@@ -1052,11 +1095,15 @@ def save_config_route():
             'weather_api_key': data.get('weather_api_key', ''),
             'custom_message': data.get('custom_message', 'GO CUBS GO!'),
             'display_mode': data.get('display_mode', 'auto'),
+            'enable_weather': data.get('enable_weather', True),
             'enable_bears': data.get('enable_bears', True),
             'enable_bears_news': data.get('enable_bears_news', True),
             'enable_pga': data.get('enable_pga', True),
+            'enable_pga_news': data.get('enable_pga_news', True),
             'enable_pga_facts': data.get('enable_pga_facts', True),
-            'enable_cubs_news': data.get('enable_cubs_news', True)
+            'enable_cubs_facts': data.get('enable_cubs_facts', True),
+            'enable_cubs_news': data.get('enable_cubs_news', True),
+            'enable_bible': data.get('enable_bible', True)
         })
 
         if save_config(current_config):

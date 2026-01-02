@@ -11,6 +11,7 @@ from scoreboard_config import (
     DisplayConfig, TeamConfig, Colors, Positions, Fonts, GameConfig, RGBColor
 )
 from typing import Any
+from retry import retry_api_call
 
 
 class ScoreboardManager:
@@ -63,10 +64,17 @@ class ScoreboardManager:
     def load_game_images(
         self, game_data: list[dict[str, Any]], game_index: int = 0
     ) -> dict[str, Image.Image] | None:
-        """Load team logos and other images for the current game"""
+        """
+        Load team logos and other images for the current game.
+
+        Handles missing images gracefully by using placeholder images or
+        falling back to text-only display.
+        """
         try:
             gameid: int = game_data[game_index]['game_id']
-            game_info: dict[str, Any] = statsapi.get('game', {'gamePk': gameid})
+            game_info: dict[str, Any] = retry_api_call(
+                statsapi.get, 'game', {'gamePk': gameid}
+            )
 
             # Determine opponent abbreviation
             opp_abv: str = 'UNK'
@@ -76,25 +84,72 @@ class ScoreboardManager:
                     opp_abv = team_data['abbreviation']
                     break
 
-            # Load images
-            self.game_images = {
-                'cubs': Image.open('./logos/cubs.png'),
-                'opponent': Image.open(f'./logos/{opp_abv}.png'),
-                'batting': Image.open('./baseball.png'),
-                'marquee': Image.open('./marquee.png')
-            }
+            # Load images with individual error handling
+            self.game_images = {}
+
+            # Load Cubs logo (required)
+            cubs_logo_path = './logos/cubs.png'
+            try:
+                self.game_images['cubs'] = Image.open(cubs_logo_path)
+            except FileNotFoundError:
+                print(f"Warning: Cubs logo not found at {cubs_logo_path}")
+                self.game_images['cubs'] = self._create_placeholder_image()
+
+            # Load opponent logo (fall back to placeholder)
+            opp_logo_path = f'./logos/{opp_abv}.png'
+            try:
+                self.game_images['opponent'] = Image.open(opp_logo_path)
+            except FileNotFoundError:
+                print(f"Warning: Opponent logo not found at {opp_logo_path}, using placeholder")
+                self.game_images['opponent'] = self._create_placeholder_image()
+
+            # Load batting indicator (optional)
+            batting_path = './baseball.png'
+            try:
+                self.game_images['batting'] = Image.open(batting_path)
+            except FileNotFoundError:
+                print(f"Warning: Batting image not found at {batting_path}")
+                self.game_images['batting'] = self._create_placeholder_image(size=(8, 8))
+
+            # Load marquee image (optional)
+            marquee_path = './marquee.png'
+            try:
+                self.game_images['marquee'] = Image.open(marquee_path)
+            except FileNotFoundError:
+                print(f"Warning: Marquee image not found at {marquee_path}")
+                self.game_images['marquee'] = self._create_placeholder_image()
 
             return self.game_images
 
         except Exception as e:
             print(f"Error loading game images: {e}")
-            return None
+            import traceback
+            traceback.print_exc()
+            # Return minimal placeholder set so display can continue
+            return self._create_fallback_images()
+
+    def _create_placeholder_image(
+        self, size: tuple[int, int] = (16, 16), color: tuple[int, int, int] = (50, 50, 50)
+    ) -> Image.Image:
+        """Create a placeholder image when the real image is missing"""
+        img = Image.new('RGB', size, color)
+        return img
+
+    def _create_fallback_images(self) -> dict[str, Image.Image]:
+        """Create a complete set of fallback images for error recovery"""
+        return {
+            'cubs': self._create_placeholder_image(),
+            'opponent': self._create_placeholder_image(),
+            'batting': self._create_placeholder_image(size=(8, 8)),
+            'marquee': self._create_placeholder_image(size=(96, 32))
+        }
 
     def get_schedule(self) -> list[dict[str, Any]]:
         """Get the Cubs game schedule"""
         current_date = pendulum.now()
         date_string: str = current_date.format('MM/DD/YYYY')
-        sched: list[dict[str, Any]] = statsapi.schedule(
+        sched: list[dict[str, Any]] = retry_api_call(
+            statsapi.schedule,
             start_date=date_string, team=TeamConfig.CUBS_TEAM_ID
         )
 
@@ -104,7 +159,8 @@ class ScoreboardManager:
             days_ahead += 1
             next_date = current_date.add(days=days_ahead)
             date_string = next_date.format('MM/DD/YYYY')
-            sched = statsapi.schedule(
+            sched = retry_api_call(
+                statsapi.schedule,
                 start_date=date_string, team=TeamConfig.CUBS_TEAM_ID
             )
 
@@ -120,7 +176,9 @@ class ScoreboardManager:
         home_pitcher: str = game_data[game_index]['home_probable_pitcher'] or 'TBD'
         away_pitcher: str = game_data[game_index]['away_probable_pitcher'] or 'TBD'
 
-        game_info: dict[str, Any] = statsapi.get('game', {'gamePk': gameid})
+        game_info: dict[str, Any] = retry_api_call(
+            statsapi.get, 'game', {'gamePk': gameid}
+        )
 
         if game_data[game_index]['home_id'] == TeamConfig.CUBS_TEAM_ID:
             away_team: str = game_info['gameData']['teams']['away']['teamName']
@@ -132,7 +190,9 @@ class ScoreboardManager:
     def get_lineup(self, gameid: int) -> str:
         """Get the lineup for both teams"""
         try:
-            game_info: dict[str, Any] = statsapi.get('game', {'gamePk': gameid})
+            game_info: dict[str, Any] = retry_api_call(
+                statsapi.get, 'game', {'gamePk': gameid}
+            )
             boxscore: dict[str, Any] = game_info['liveData']['boxscore']
 
             lineup: list[str] = []
@@ -143,7 +203,9 @@ class ScoreboardManager:
             home_lineup: str = f"{home_team} - "
 
             for player_id in home_batters:
-                player_info = statsapi.get('people', {'personIds': player_id})['people'][0]
+                player_info = retry_api_call(
+                    statsapi.get, 'people', {'personIds': player_id}
+                )['people'][0]
                 last_name: str = player_info['lastName']
                 position: str = player_info['primaryPosition']['abbreviation']
                 home_lineup += f"{position}:{last_name} "
@@ -156,7 +218,9 @@ class ScoreboardManager:
             away_lineup: str = f"  {away_team} - "
 
             for player_id in away_batters:
-                player_info = statsapi.get('people', {'personIds': player_id})['people'][0]
+                player_info = retry_api_call(
+                    statsapi.get, 'people', {'personIds': player_id}
+                )['people'][0]
                 last_name = player_info['lastName']
                 position = player_info['primaryPosition']['abbreviation']
                 away_lineup += f"{position}:{last_name} "
@@ -172,25 +236,32 @@ class ScoreboardManager:
     def format_game_time(
         self, game_data: list[dict[str, Any]], game_index: int
     ) -> str:
-        """Format the game time for display"""
-        game_time: str = game_data[game_index]['game_datetime'][-9:19]
+        """
+        Format the game time for display in local Chicago time.
 
-        # Handle midnight
-        if game_time[:2] == '00':
-            game_time = '24:' + game_time[3:]
+        Uses pendulum for proper timezone handling including DST.
+        """
+        try:
+            # Get the full datetime string from game data
+            game_datetime_str: str = game_data[game_index]['game_datetime']
 
-        # Convert to local time (CST/CDT - assuming UTC-5)
-        hour: int = int(game_time[:2])
-        if hour - 5 < 0:
-            hour = hour + 7
-        else:
-            hour = hour - 5
+            # Parse the ISO datetime string (UTC) using pendulum
+            game_datetime = pendulum.parse(game_datetime_str)
 
-        # Convert to 12-hour format
-        if hour > 12:
-            hour = hour - 12
+            # Convert to Chicago timezone (handles CST/CDT automatically)
+            chicago_time = game_datetime.in_timezone('America/Chicago')
 
-        return f"{hour}{game_time[2:5]}"
+            # Format as 12-hour time (e.g., "7:05")
+            return chicago_time.format('h:mm')
+
+        except Exception as e:
+            print(f"Error formatting game time: {e}")
+            # Fallback to raw time extraction if parsing fails
+            try:
+                game_time: str = game_data[game_index]['game_datetime'][11:16]
+                return game_time
+            except Exception:
+                return "TBD"
 
     def clear_canvas(self) -> None:
         """Clear the canvas"""

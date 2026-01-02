@@ -10,6 +10,7 @@ from rgbmatrix import graphics
 from typing import TYPE_CHECKING, Any
 
 from scoreboard_config import Colors, Positions, GameConfig, TeamConfig, RGBColor
+from retry import retry_api_call
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
@@ -135,7 +136,9 @@ class GameStateHandler:
         game_type: str = game_data[game_index].get('game_type', 'R')
 
         # Get opponent info
-        game_info: dict[str, Any] = statsapi.get('game', {'gamePk': gameid})
+        game_info: dict[str, Any] = retry_api_call(
+            statsapi.get, 'game', {'gamePk': gameid}
+        )
         if game_info['gameData']['teams']['home']['abbreviation'] == 'CHC':
             away: str = 'away'
         else:
@@ -183,8 +186,8 @@ class GameStateHandler:
         self.manager.fill_canvas(*Colors.GREEN)
 
         # Get standings
-        standings: list[dict[str, Any]] = statsapi.get(
-            'standings', {'leagueId': TeamConfig.NL_LEAGUE_ID}
+        standings: list[dict[str, Any]] = retry_api_call(
+            statsapi.get, 'standings', {'leagueId': TeamConfig.NL_LEAGUE_ID}
         )['records'][1]['teamRecords']
 
         # Draw title
@@ -195,7 +198,9 @@ class GameStateHandler:
         y_position: int = 15
         for team_record in standings:
             team_id: int = team_record['team']['id']
-            team_info: dict[str, Any] = statsapi.get('team', {'teamId': team_id})['teams'][0]
+            team_info: dict[str, Any] = retry_api_call(
+                statsapi.get, 'team', {'teamId': team_id}
+            )['teams'][0]
             team_abv: str = team_info['abbreviation']
 
             games_back: str = team_record['gamesBack']
@@ -229,7 +234,9 @@ class GameStateHandler:
         series_status: str = game_data[game_index].get('series_status', '')
 
         # Get full game info
-        game_info: dict[str, Any] = statsapi.get('game', {'gamePk': gameid})
+        game_info: dict[str, Any] = retry_api_call(
+            statsapi.get, 'game', {'gamePk': gameid}
+        )
 
         # Determine opponent
         if game_info['gameData']['teams']['home']['abbreviation'] == 'CHC':

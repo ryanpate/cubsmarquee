@@ -15,6 +15,7 @@ from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor
 from weather_display import WeatherDisplay
 from bears_display import BearsDisplay
 from pga_display import PGADisplay
+from bible_display import BibleDisplay
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
@@ -29,6 +30,7 @@ class OffSeasonHandler:
         self.weather_display: WeatherDisplay = WeatherDisplay(scoreboard_manager)
         self.bears_display: BearsDisplay = BearsDisplay(scoreboard_manager)
         self.pga_display: PGADisplay = PGADisplay(scoreboard_manager)
+        self.bible_display: BibleDisplay = BibleDisplay(scoreboard_manager)
         self.scroll_position: int = DisplayConfig.MATRIX_COLS
 
         # Load configuration
@@ -63,9 +65,11 @@ class OffSeasonHandler:
             'bears': GameConfig.BEARS_DISPLAY_DURATION,
             'bears_news': GameConfig.BEARS_NEWS_DURATION,
             'pga': GameConfig.PGA_DISPLAY_DURATION,
+            'pga_news': GameConfig.PGA_NEWS_DURATION if hasattr(GameConfig, 'PGA_NEWS_DURATION') else 2,
             'pga_facts': GameConfig.PGA_FACTS_DURATION,
             'cubs_news': GameConfig.CUBS_NEWS_DURATION,
-            'message': GameConfig.MESSAGE_DISPLAY_DURATION
+            'message': GameConfig.MESSAGE_DISPLAY_DURATION,
+            'bible': GameConfig.BIBLE_DISPLAY_DURATION if hasattr(GameConfig, 'BIBLE_DISPLAY_DURATION') else 3
         }
 
         # Track when we last checked for new season
@@ -97,11 +101,15 @@ class OffSeasonHandler:
             'weather_api_key': '',
             'custom_message': 'GO CUBS GO! SEE YOU NEXT SEASON!',
             'display_mode': 'auto',  # auto, weather_only, message_only
+            'enable_weather': True,  # Enable/disable Weather display
             'enable_bears': True,    # Enable/disable Bears display
             'enable_bears_news': True,  # Enable/disable Bears breaking news
             'enable_pga': True,      # Enable/disable PGA Tour leaderboard
-            'enable_pga_facts': True,  # Enable/disable PGA Tour facts/news
-            'enable_cubs_news': True  # Enable/disable Cubs breaking news
+            'enable_pga_news': True,  # Enable/disable PGA Tour news
+            'enable_pga_facts': True,  # Enable/disable PGA Tour facts
+            'enable_cubs_facts': True,  # Enable/disable Cubs facts & message
+            'enable_cubs_news': True,  # Enable/disable Cubs breaking news
+            'enable_bible': True  # Enable/disable Bible Verse of the Day
         }
 
         try:
@@ -533,16 +541,20 @@ class OffSeasonHandler:
                 print("Skipping Bears display (disabled in config)")
 
         # Display weather (between Bears schedule and Bears news)
-        print("Displaying weather...")
-        try:
-            self.weather_display.display_weather_screen(
-                duration=self.rotation_schedule['weather'] * 60
-            )
-            print("Weather display finished")
-        except Exception as e:
-            print(f"Error in weather display: {e}")
-            import traceback
-            traceback.print_exc()
+        weather_enabled = self.config.get('enable_weather', True)
+        if weather_enabled:
+            print("Displaying weather...")
+            try:
+                self.weather_display.display_weather_screen(
+                    duration=self.rotation_schedule['weather'] * 60
+                )
+                print("Weather display finished")
+            except Exception as e:
+                print(f"Error in weather display: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("Skipping weather display (disabled in config)")
 
         # Display Bears breaking news if enabled
         bears_news_enabled = self.config.get('enable_bears_news', True)
@@ -579,10 +591,29 @@ class OffSeasonHandler:
             else:
                 print("Skipping PGA display (disabled in config)")
 
-        # Display PGA Tour facts/news if it's golf season and enabled
+        # Display PGA Tour news if it's golf season and enabled
+        pga_news_enabled = self.config.get('enable_pga_news', True)
+        if self._is_golf_season() and pga_news_enabled:
+            print("Displaying PGA Tour news (golf season)...")
+            try:
+                self.pga_display.display_pga_news(
+                    duration=self.rotation_schedule['pga_news'] * 60
+                )
+                print("PGA news display finished")
+            except Exception as e:
+                print(f"Error in PGA news display: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            if not self._is_golf_season():
+                print("Skipping PGA news (not golf season)")
+            else:
+                print("Skipping PGA news (disabled in config)")
+
+        # Display PGA Tour facts if it's golf season and enabled
         pga_facts_enabled = self.config.get('enable_pga_facts', True)
         if self._is_golf_season() and pga_facts_enabled:
-            print("Displaying PGA Tour facts/news (golf season)...")
+            print("Displaying PGA Tour facts (golf season)...")
             try:
                 self.pga_display.display_pga_facts(
                     duration=self.rotation_schedule['pga_facts'] * 60
@@ -599,28 +630,35 @@ class OffSeasonHandler:
                 print("Skipping PGA facts (disabled in config)")
 
         # Display custom message with Cubs facts
-        print("Displaying custom message and Cubs facts...")
-        try:
-            self._display_custom_message(
-                duration=self.rotation_schedule['message'] * 60
-            )
-            print("Custom message finished")
-        except Exception as e:
-            print(f"Error in custom message: {e}")
-            import traceback
-            traceback.print_exc()
+        cubs_facts_enabled = self.config.get('enable_cubs_facts', True)
+        if cubs_facts_enabled:
+            print("Displaying custom message and Cubs facts...")
+            try:
+                self._display_custom_message(
+                    duration=self.rotation_schedule['message'] * 60
+                )
+                print("Custom message finished")
+            except Exception as e:
+                print(f"Error in custom message: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("Skipping Cubs facts/custom message (disabled in config)")
 
         # Display weather (between Cubs facts and Cubs news)
-        print("Displaying weather...")
-        try:
-            self.weather_display.display_weather_screen(
-                duration=self.rotation_schedule['weather'] * 60
-            )
-            print("Weather display finished")
-        except Exception as e:
-            print(f"Error in weather display: {e}")
-            import traceback
-            traceback.print_exc()
+        if weather_enabled:
+            print("Displaying weather...")
+            try:
+                self.weather_display.display_weather_screen(
+                    duration=self.rotation_schedule['weather'] * 60
+                )
+                print("Weather display finished")
+            except Exception as e:
+                print(f"Error in weather display: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("Skipping weather display (disabled in config)")
 
         # Display Cubs breaking news if enabled
         cubs_news_enabled = self.config.get('enable_cubs_news', True)
@@ -637,6 +675,22 @@ class OffSeasonHandler:
                 traceback.print_exc()
         else:
             print("Skipping Cubs news (disabled in config)")
+
+        # Display Bible Verse of the Day if enabled
+        bible_enabled = self.config.get('enable_bible', True)
+        if bible_enabled:
+            print("Displaying Bible Verse of the Day...")
+            try:
+                self.bible_display.display_bible_verse(
+                    duration=self.rotation_schedule['bible'] * 60
+                )
+                print("Bible verse display finished")
+            except Exception as e:
+                print(f"Error in Bible verse display: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("Skipping Bible verse (disabled in config)")
 
         print("=== Rotation cycle complete ===")
 

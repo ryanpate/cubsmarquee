@@ -8,6 +8,7 @@ import pendulum
 from typing import TYPE_CHECKING, Any
 
 from scoreboard_config import Colors, GameConfig, RGBColor
+from retry import retry_http_request
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
@@ -37,8 +38,7 @@ class BearsDisplay:
         try:
             url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
 
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
+            response = retry_http_request(url, timeout=10)
             data = response.json()
 
             # Find the game by ID
@@ -61,8 +61,7 @@ class BearsDisplay:
             # ESPN API endpoint for Chicago Bears (team ID: 3)
             url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/chi/schedule"
 
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
+            response = retry_http_request(url, timeout=10)
             data = response.json()
 
             self.bears_data = data
@@ -85,13 +84,16 @@ class BearsDisplay:
         if not self.bears_data:
             return None
 
-        today = pendulum.now().format('YYYY-MM-DD')
+        # Get today's date in Chicago timezone
+        today = pendulum.now('America/Chicago').format('YYYY-MM-DD')
 
         try:
             events = self.bears_data.get('events', [])
 
             for event in events:
-                game_date = event['date'][:10]  # Get YYYY-MM-DD
+                # Parse the UTC date and convert to Chicago timezone before comparing
+                game_datetime = pendulum.parse(event['date'])
+                game_date = game_datetime.in_timezone('America/Chicago').format('YYYY-MM-DD')
 
                 if game_date == today:
                     return event

@@ -9,6 +9,7 @@ from PIL import Image
 from typing import TYPE_CHECKING, Any
 
 from scoreboard_config import Colors, Positions, GameConfig, TeamConfig, DisplayConfig
+from retry import retry_api_call
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
@@ -48,8 +49,8 @@ class LiveGameHandler:
                 break
 
             # Get current game data
-            game_info = statsapi.get('game', {'gamePk': gameid})
-            play_data = statsapi.get('game_playByPlay', {'gamePk': gameid})
+            game_info = retry_api_call(statsapi.get, 'game', {'gamePk': gameid})
+            play_data = retry_api_call(statsapi.get, 'game_playByPlay', {'gamePk': gameid})
 
             # Clear canvas
             self.manager.clear_canvas()
@@ -429,7 +430,7 @@ class LiveGameHandler:
 
     def display_game_over(self, game_data, game_index, gameid):
         """Display game over screen - Cubs always on left, opponent always on right"""
-        game_info = statsapi.get('game', {'gamePk': gameid})
+        game_info = retry_api_call(statsapi.get, 'game', {'gamePk': gameid})
         boxscore = game_info['liveData']['boxscore']['teams']
         linescore = game_info['liveData']['linescore']
 
