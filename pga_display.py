@@ -365,11 +365,20 @@ class PGADisplay:
         """Get the next upcoming tournament from leaderboard or calendar"""
         now = pendulum.now()
 
+        # Status values that indicate a canceled/invalid tournament
+        canceled_statuses = ['STATUS_CANCELED', 'STATUS_POSTPONED']
+
         # First, check the leaderboard data for upcoming/scheduled events
         if self.pga_data:
             try:
                 events = self.pga_data.get('events', [])
                 for event in events:
+                    # Skip canceled tournaments
+                    status_name = event.get('status', {}).get('type', {}).get('name', '')
+                    if status_name in canceled_statuses:
+                        print(f"Skipping canceled tournament: {event.get('name')}")
+                        continue
+
                     # Get event dates
                     start_date_str = event.get('date', '')
                     end_date_str = event.get('endDate', start_date_str)
@@ -390,10 +399,26 @@ class PGADisplay:
             except Exception as e:
                 print(f"Error parsing leaderboard for upcoming: {e}")
 
+        # Build list of canceled event IDs from leaderboard data
+        canceled_event_ids: set[str] = set()
+        if self.pga_data:
+            for event in self.pga_data.get('events', []):
+                status_name = event.get('status', {}).get('type', {}).get('name', '')
+                if status_name in canceled_statuses:
+                    event_id = event.get('id', '')
+                    if event_id:
+                        canceled_event_ids.add(str(event_id))
+
         # Fall back to calendar data
         if self.pga_calendar:
             try:
                 for event in self.pga_calendar:
+                    # Skip events we know are canceled from the leaderboard
+                    event_id = str(event.get('id', ''))
+                    if event_id in canceled_event_ids:
+                        print(f"Skipping canceled calendar event: {event.get('label')}")
+                        continue
+
                     start_date_str = event.get('startDate', '')
                     if start_date_str:
                         start_date = pendulum.parse(start_date_str)
