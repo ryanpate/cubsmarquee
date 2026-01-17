@@ -119,7 +119,10 @@ def load_config():
         'enable_pga_facts': True,
         'enable_cubs_news': True,
         'enable_cubs_facts': True,
-        'enable_bible': True
+        'enable_bible': True,
+        'enable_newsmax': True,
+        'enable_stocks': True,
+        'enable_spring_training': True
     }
 
     try:
@@ -508,6 +511,27 @@ HTML_TEMPLATE = """
             </div>
 
             <div class="form-group">
+                <label>
+                    <input type="checkbox" id="enable_newsmax">
+                    Enable Newsmax news display
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="enable_stocks">
+                    Enable Stock Exchange ticker display
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="enable_spring_training">
+                    Enable Spring Training countdown display
+                </label>
+            </div>
+
+            <div class="form-group">
                 <label for="zip_code">ZIP Code (for weather):</label>
                 <input type="text" id="zip_code" placeholder="e.g., 60613" value="{{ config.zip_code }}">
             </div>
@@ -614,6 +638,9 @@ HTML_TEMPLATE = """
             document.getElementById('enable_cubs_facts').checked = config.enable_cubs_facts !== false;
             document.getElementById('enable_cubs_news').checked = config.enable_cubs_news !== false;
             document.getElementById('enable_bible').checked = config.enable_bible !== false;
+            document.getElementById('enable_newsmax').checked = config.enable_newsmax !== false;
+            document.getElementById('enable_stocks').checked = config.enable_stocks !== false;
+            document.getElementById('enable_spring_training').checked = config.enable_spring_training !== false;
             updateServiceStatus();
         };
 
@@ -730,7 +757,10 @@ HTML_TEMPLATE = """
                 enable_pga_facts: document.getElementById('enable_pga_facts').checked,
                 enable_cubs_facts: document.getElementById('enable_cubs_facts').checked,
                 enable_cubs_news: document.getElementById('enable_cubs_news').checked,
-                enable_bible: document.getElementById('enable_bible').checked
+                enable_bible: document.getElementById('enable_bible').checked,
+                enable_newsmax: document.getElementById('enable_newsmax').checked,
+                enable_stocks: document.getElementById('enable_stocks').checked,
+                enable_spring_training: document.getElementById('enable_spring_training').checked
             };
 
             const button = event.target;
@@ -1136,7 +1166,10 @@ def save_config_route():
             'enable_pga_facts': data.get('enable_pga_facts', True),
             'enable_cubs_facts': data.get('enable_cubs_facts', True),
             'enable_cubs_news': data.get('enable_cubs_news', True),
-            'enable_bible': data.get('enable_bible', True)
+            'enable_bible': data.get('enable_bible', True),
+            'enable_newsmax': data.get('enable_newsmax', True),
+            'enable_stocks': data.get('enable_stocks', True),
+            'enable_spring_training': data.get('enable_spring_training', True)
         })
 
         if save_config(current_config):

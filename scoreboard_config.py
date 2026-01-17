@@ -154,6 +154,9 @@ class GameConfig:
     PGA_FACTS_DURATION: int = 2
     CUBS_NEWS_DURATION: int = 2
     MESSAGE_DISPLAY_DURATION: int = 4
+    NEWSMAX_DISPLAY_DURATION: int = 2
+    STOCKS_DISPLAY_DURATION: int = 2
+    SPRING_TRAINING_DISPLAY_DURATION: int = 2
 
     # Display thresholds
     OFF_SEASON_DAYS_THRESHOLD: int = 30  # Days until next game to trigger off-season

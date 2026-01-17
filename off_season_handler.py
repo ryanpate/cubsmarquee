@@ -16,6 +16,9 @@ from weather_display import WeatherDisplay
 from bears_display import BearsDisplay
 from pga_display import PGADisplay
 from bible_display import BibleDisplay
+from newsmax_display import NewsmaxDisplay
+from stock_display import StockDisplay
+from spring_training_display import SpringTrainingDisplay
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
@@ -31,6 +34,9 @@ class OffSeasonHandler:
         self.bears_display: BearsDisplay = BearsDisplay(scoreboard_manager)
         self.pga_display: PGADisplay = PGADisplay(scoreboard_manager)
         self.bible_display: BibleDisplay = BibleDisplay(scoreboard_manager)
+        self.newsmax_display: NewsmaxDisplay = NewsmaxDisplay(scoreboard_manager)
+        self.stock_display: StockDisplay = StockDisplay(scoreboard_manager)
+        self.spring_training_display: SpringTrainingDisplay = SpringTrainingDisplay(scoreboard_manager)
         self.scroll_position: int = DisplayConfig.MATRIX_COLS
 
         # Load configuration
@@ -69,7 +75,10 @@ class OffSeasonHandler:
             'pga_facts': GameConfig.PGA_FACTS_DURATION,
             'cubs_news': GameConfig.CUBS_NEWS_DURATION,
             'message': GameConfig.MESSAGE_DISPLAY_DURATION,
-            'bible': GameConfig.BIBLE_DISPLAY_DURATION if hasattr(GameConfig, 'BIBLE_DISPLAY_DURATION') else 3
+            'bible': GameConfig.BIBLE_DISPLAY_DURATION if hasattr(GameConfig, 'BIBLE_DISPLAY_DURATION') else 3,
+            'newsmax': GameConfig.NEWSMAX_DISPLAY_DURATION if hasattr(GameConfig, 'NEWSMAX_DISPLAY_DURATION') else 2,
+            'stocks': GameConfig.STOCKS_DISPLAY_DURATION if hasattr(GameConfig, 'STOCKS_DISPLAY_DURATION') else 2,
+            'spring_training': GameConfig.SPRING_TRAINING_DISPLAY_DURATION if hasattr(GameConfig, 'SPRING_TRAINING_DISPLAY_DURATION') else 2
         }
 
         # Track when we last checked for new season
@@ -109,7 +118,10 @@ class OffSeasonHandler:
             'enable_pga_facts': True,  # Enable/disable PGA Tour facts
             'enable_cubs_facts': True,  # Enable/disable Cubs facts & message
             'enable_cubs_news': True,  # Enable/disable Cubs breaking news
-            'enable_bible': True  # Enable/disable Bible Verse of the Day
+            'enable_bible': True,  # Enable/disable Bible Verse of the Day
+            'enable_newsmax': True,  # Enable/disable Newsmax news
+            'enable_stocks': True,  # Enable/disable Stock Exchange ticker
+            'enable_spring_training': True  # Enable/disable Spring Training countdown
         }
 
         try:
@@ -645,6 +657,22 @@ class OffSeasonHandler:
         else:
             print("Skipping Cubs facts/custom message (disabled in config)")
 
+        # Display Spring Training countdown if enabled
+        spring_training_enabled = self.config.get('enable_spring_training', True)
+        if spring_training_enabled:
+            print("Displaying Spring Training countdown...")
+            try:
+                self.spring_training_display.display_spring_training_countdown(
+                    duration=self.rotation_schedule['spring_training'] * 60
+                )
+                print("Spring Training countdown finished")
+            except Exception as e:
+                print(f"Error in Spring Training countdown: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("Skipping Spring Training countdown (disabled in config)")
+
         # Display weather (between Cubs facts and Cubs news)
         if weather_enabled:
             print("Displaying weather...")
@@ -691,6 +719,38 @@ class OffSeasonHandler:
                 traceback.print_exc()
         else:
             print("Skipping Bible verse (disabled in config)")
+
+        # Display Newsmax news if enabled
+        newsmax_enabled = self.config.get('enable_newsmax', True)
+        if newsmax_enabled:
+            print("Displaying Newsmax news...")
+            try:
+                self.newsmax_display.display_newsmax_news(
+                    duration=self.rotation_schedule['newsmax'] * 60
+                )
+                print("Newsmax news display finished")
+            except Exception as e:
+                print(f"Error in Newsmax news display: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("Skipping Newsmax news (disabled in config)")
+
+        # Display Stock Exchange ticker if enabled
+        stocks_enabled = self.config.get('enable_stocks', True)
+        if stocks_enabled:
+            print("Displaying Stock Exchange ticker...")
+            try:
+                self.stock_display.display_stock_ticker(
+                    duration=self.rotation_schedule['stocks'] * 60
+                )
+                print("Stock ticker display finished")
+            except Exception as e:
+                print(f"Error in Stock ticker display: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("Skipping Stock ticker (disabled in config)")
 
         print("=== Rotation cycle complete ===")
 
