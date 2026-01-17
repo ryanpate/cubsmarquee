@@ -347,12 +347,44 @@ class PGADisplay:
             active_states = ['in', 'post']  # 'in' = in progress, 'post' = completed
             canceled_statuses = ['STATUS_CANCELED', 'STATUS_POSTPONED']
 
-            if state in active_states and status not in canceled_statuses:
-                # Check if there are actually competitors/leaders
-                competitions = event.get('competitions', [])
-                if competitions:
-                    competitors = competitions[0].get('competitors', [])
-                    if competitors:
+            # Skip canceled tournaments
+            if status in canceled_statuses:
+                return None
+
+            # Check if there are actually competitors/leaders
+            competitions = event.get('competitions', [])
+            has_competitors = False
+            if competitions:
+                competitors = competitions[0].get('competitors', [])
+                if competitors:
+                    has_competitors = True
+
+            if not has_competitors:
+                return None
+
+            # If state is 'in' or 'post', tournament is definitely active
+            if state in active_states:
+                return event
+
+            # For 'pre' state, check if we're within tournament dates or starting soon
+            # (Day 1 morning before play starts, API may still show 'pre')
+            if state == 'pre':
+                start_date_str = event.get('date', '')
+                end_date_str = event.get('endDate', start_date_str)
+                if start_date_str:
+                    now = pendulum.now()
+                    start_date = pendulum.parse(start_date_str)
+                    end_date = pendulum.parse(end_date_str) if end_date_str else start_date
+
+                    # Show leaderboard if:
+                    # 1. Today is within tournament dates, OR
+                    # 2. Tournament starts within 24 hours (covers timezone edge cases)
+                    hours_until_start = (start_date - now).total_hours()
+                    within_dates = start_date.date() <= now.date() <= end_date.date()
+                    starts_soon = hours_until_start <= 24 and hours_until_start >= -24
+
+                    if within_dates or starts_soon:
+                        print(f"Tournament '{event.get('name')}' starts in {hours_until_start:.1f} hours - showing leaderboard")
                         return event
 
             return None
@@ -447,6 +479,30 @@ class PGADisplay:
             status = event.get('status', {}).get('type', {}).get('name', '')
             status_detail = event.get('status', {}).get('type', {}).get('shortDetail', '')
 
+            # Try to get round/period info from multiple sources
+            period = event.get('status', {}).get('period', 0)
+
+            # Check competition for round info
+            competitions = event.get('competitions', [])
+            if competitions:
+                comp_status = competitions[0].get('status', {})
+                if not period:
+                    period = comp_status.get('period', 0)
+                if not status_detail:
+                    status_detail = comp_status.get('type', {}).get('shortDetail', '')
+                if not status_detail:
+                    status_detail = comp_status.get('type', {}).get('detail', '')
+
+            if period and not status_detail:
+                status_detail = f"Round {period}"
+
+            # Also check detail field from event status
+            if not status_detail:
+                status_detail = event.get('status', {}).get('type', {}).get('detail', '')
+
+            # Log what we found for debugging
+            print(f"PGA Status - period: {period}, status_detail: '{status_detail}', status: '{status}'")
+
             # Get competition data
             competitions = event.get('competitions', [])
             if not competitions:
@@ -454,12 +510,31 @@ class PGADisplay:
 
             competition = competitions[0]
 
-            # Get competitors (players)
+            # Get competitors (players) and sort by position
             competitors = competition.get('competitors', [])
 
-            # Get top 5 leaders
+            # Sort competitors by their position/ranking
+            def get_position_sort_key(player):
+                try:
+                    # Try displayValue first (e.g., "1", "T2", "T10")
+                    pos_obj = player.get('status', {}).get('position', {})
+                    pos_str = pos_obj.get('displayValue', '') or pos_obj.get('id', '')
+
+                    if not pos_str:
+                        return 999
+
+                    # Remove 'T' prefix for tied positions and convert to int
+                    pos_clean = str(pos_str).replace('T', '').strip()
+                    return int(pos_clean) if pos_clean.isdigit() else 999
+                except (ValueError, TypeError):
+                    return 999
+
+            sorted_competitors = sorted(competitors, key=get_position_sort_key)
+            print(f"Sorted {len(sorted_competitors)} competitors")
+
+            # Get top 25 leaders
             leaders = []
-            for i, player in enumerate(competitors[:5]):
+            for i, player in enumerate(sorted_competitors[:25]):
                 try:
                     athlete = player.get('athlete', {})
                     name = athlete.get('displayName', 'Unknown')
@@ -471,8 +546,13 @@ class PGADisplay:
                     else:
                         score = str(score_obj) if score_obj else 'E'
 
-                    # Get position
-                    position = player.get('status', {}).get('position', {}).get('displayValue', str(i+1))
+                    # Get position - try multiple fields
+                    pos_obj = player.get('status', {}).get('position', {})
+                    position = pos_obj.get('displayValue', '') or pos_obj.get('id', '') or str(i+1)
+
+                    # Debug first 5 players
+                    if i < 5:
+                        print(f"Player {i}: {name}, pos={position}, score={score}, pos_obj={pos_obj}")
 
                     leaders.append({
                         'name': name,
@@ -487,6 +567,7 @@ class PGADisplay:
                 'name': tournament_name,
                 'status': status,
                 'status_detail': status_detail,
+                'period': period,
                 'leaders': leaders
             }
 
@@ -579,6 +660,10 @@ class PGADisplay:
         start_time = time.time()
         last_update = 0
         scroll_position = DisplayConfig.MATRIX_COLS
+        row_height = 8  # Height per player row with 'tiny' font
+        leaderboard_top = 24  # Y position where first player stops
+        leaderboard_bottom = 48  # Bottom of display
+        screen_bottom = 60  # Start position off screen (below pixel 48)
 
         try:
             # Get initial tournament info
@@ -589,9 +674,16 @@ class PGADisplay:
             tournament_name = tourney_info['name']
             status = tourney_info['status']
             status_detail = tourney_info['status_detail']
+            period = tourney_info.get('period', 0)
             leaders = tourney_info['leaders']
 
-            print(f"Tournament: {tournament_name}, Status: {status}")
+            print(f"Tournament: {tournament_name}, Status: {status}, Period: {period}, Leaders: {len(leaders)}")
+
+            # Calculate total scroll distance - from off-screen to showing all players
+            total_height = len(leaders) * row_height
+            # Start with first player below screen, end when last player scrolls off top
+            max_scroll = total_height + (screen_bottom - leaderboard_top)
+            vertical_scroll_offset = 0  # Start at 0, players begin off-screen
 
             while time.time() - start_time < duration:
                 # Update live scores periodically
@@ -604,52 +696,34 @@ class PGADisplay:
                             if updated_info:
                                 leaders = updated_info['leaders']
                                 status_detail = updated_info['status_detail']
+                                # Recalculate scroll bounds
+                                total_height = len(leaders) * row_height
+                                max_scroll = total_height + (screen_bottom - leaderboard_top)
                                 print("PGA scores updated")
                     last_update = current_time
 
                 self.manager.clear_canvas()
 
-                # Draw header (includes gradient background)
+                # Draw full background first
                 self._draw_pga_header()
 
-                # Tournament name - positioned below header (y=20)
-                name_upper = tournament_name.upper()
-                name_width = len(name_upper) * 5  # tiny font width
-
-                if name_width > 90:
-                    # Scroll long names
-                    scroll_increment = getattr(GameConfig, 'SCROLL_PIXELS', 1)
-                    scroll_position -= scroll_increment
-                    if scroll_position + name_width < 0:
-                        scroll_position = DisplayConfig.MATRIX_COLS
-
-                    self.manager.draw_text('tiny', int(scroll_position), 20,
-                                           self.PGA_GOLD, name_upper)
-                else:
-                    # Center short names
-                    name_x = max(2, (DisplayConfig.MATRIX_COLS - name_width) // 2)
-                    self.manager.draw_text('tiny', name_x, 20,
-                                           self.PGA_GOLD, name_upper)
-
-                # Status indicator (Round 1, Round 2, Final, etc.) - y=25
-                if status_detail:
-                    status_short = status_detail[:15]
-                    status_x = max(2, (DisplayConfig.MATRIX_COLS - len(status_short) * 4) // 2)
-                    self.manager.draw_text('micro', status_x, 25,
-                                           self.PGA_WHITE, status_short)
-
-                # Leaderboard column headers (like actual PGA leaderboard)
-                self.manager.draw_text('ultra_micro', 2, 30, (120, 120, 120), 'POS')
-                self.manager.draw_text('ultra_micro', 18, 30, (120, 120, 120), 'PLAYER')
-                self.manager.draw_text('ultra_micro', 72, 30, (120, 120, 120), 'SCORE')
-
-                # Display leaderboard - top 4 players in tabular layout
+                # Display leaderboard - scrolling from bottom to top
                 if leaders:
-                    y_pos = 36
-                    for i, leader in enumerate(leaders[:4]):
+                    for i, leader in enumerate(leaders):
+                        # Players start off-screen at bottom and scroll upward
+                        # Base position starts at screen_bottom, scrolls up as offset increases
+                        y_pos = screen_bottom + (i * row_height) - vertical_scroll_offset
+
+                        # Skip if fully scrolled off (optimization)
+                        # Allow drawing above/below visible area for smooth clipping
+                        if y_pos < leaderboard_top - row_height * 2:
+                            continue
+                        if y_pos > screen_bottom + row_height:
+                            continue
+
                         pos = leader['position']
                         name_parts = leader['name'].split()
-                        last_name = name_parts[-1][:8].upper() if name_parts else "UNKNOWN"
+                        last_name = name_parts[-1][:7].upper() if name_parts else "UNKNOWN"
                         score = leader['score']
 
                         # Leader highlighted in gold
@@ -660,15 +734,14 @@ class PGADisplay:
                             pos_color = self.PGA_WHITE
                             name_color = self.PGA_WHITE
 
-                        # Draw position (column 1)
-                        self.manager.draw_text('micro', 4, y_pos, pos_color, str(pos))
+                        # Draw position (column 1) - using tiny font
+                        self.manager.draw_text('tiny', 2, y_pos, pos_color, str(pos))
 
-                        # Draw name (column 2)
-                        self.manager.draw_text('micro', 18, y_pos, name_color, last_name)
+                        # Draw name (column 2) - using tiny font
+                        self.manager.draw_text('tiny', 18, y_pos, name_color, last_name)
 
-                        # Draw score (column 3) with color coding
+                        # Draw score (column 3) with color coding - using tiny font
                         try:
-                            score_clean = score.replace('+', '').replace('E', '0').replace('-', '')
                             if score.startswith('-'):
                                 score_color = (100, 255, 100)  # Under par - bright green
                             elif score.startswith('+'):
@@ -678,11 +751,85 @@ class PGADisplay:
                         except (ValueError, AttributeError):
                             score_color = self.PGA_WHITE
 
-                        self.manager.draw_text('micro', 74, y_pos, score_color, score)
-                        y_pos += 4
+                        self.manager.draw_text('tiny', 74, y_pos, score_color, score)
+
+                    # Increment vertical scroll (scrolling upward)
+                    vertical_scroll_offset += 1
+
+                    # Reset scroll when all players have scrolled through
+                    if vertical_scroll_offset >= max_scroll:
+                        vertical_scroll_offset = 0
+
+                # Redraw header area to mask any leaderboard text that scrolled above
+                # This creates the line-by-line disappearing effect at the top
+                for y in range(leaderboard_top):
+                    if y < 12:
+                        # Header area - dark navy
+                        for x in range(DisplayConfig.MATRIX_COLS):
+                            self.manager.draw_pixel(x, y, *self.PGA_NAVY)
+                    else:
+                        # Area between header and leaderboard - golf green
+                        green_val = max(60, 120 - y)
+                        for x in range(DisplayConfig.MATRIX_COLS):
+                            self.manager.draw_pixel(x, y, 20, green_val, 30)
+
+                # Gold bar at top
+                for y in range(3):
+                    for x in range(DisplayConfig.MATRIX_COLS):
+                        self.manager.draw_pixel(x, y, *self.PGA_GOLD)
+
+                # White separator line
+                for x in range(DisplayConfig.MATRIX_COLS):
+                    self.manager.draw_pixel(x, 11, 100, 100, 100)
+
+                # Draw PGA logo
+                if self.pga_logo:
+                    self._draw_logo(2, 3, self.pga_logo)
+                    text_x = 20 + (76 - 40) // 2 - 5
+                else:
+                    text_x = (DisplayConfig.MATRIX_COLS - 40) // 2
+
+                # "PGA TOUR" text
+                self.manager.draw_text('tiny_bold', text_x - 2, 10, self.PGA_WHITE, 'PGA TOUR')
+
+                # Separator line between title and leaderboard
+                for x in range(DisplayConfig.MATRIX_COLS):
+                    self.manager.draw_pixel(x, 22, 100, 100, 100)
+
+                # Tournament name with day - positioned below header (y=20)
+                # Use period directly if available, otherwise try to extract from status_detail
+                day_text = ""
+                if period and period > 0:
+                    day_text = f"Day {period}"
+                elif status_detail:
+                    # Extract just the round number if present
+                    import re
+                    round_match = re.search(r'[Rr]ound\s*(\d+)', status_detail)
+                    if round_match:
+                        day_text = f"Day {round_match.group(1)}"
+                    elif "Final" in status_detail:
+                        day_text = "Final Round"
+
+                if day_text:
+                    full_title = f"{tournament_name} - {day_text}".upper()
+                else:
+                    full_title = tournament_name.upper()
+
+                print(f"Title: {full_title}, period: {period}, status_detail: {status_detail}")
+
+                title_width = len(full_title) * 5  # tiny font width
+
+                # Always scroll the title with day info
+                scroll_increment = getattr(GameConfig, 'SCROLL_PIXELS', 1)
+                scroll_position -= scroll_increment
+                if scroll_position + title_width < 0:
+                    scroll_position = DisplayConfig.MATRIX_COLS
+
+                self.manager.draw_text('tiny', int(scroll_position), 20,
+                                       self.PGA_GOLD, full_title)
 
                 self.manager.swap_canvas()
-                time.sleep(0.1)
+                time.sleep(0.12)  # Slower vertical scroll speed
 
         except Exception as e:
             print(f"Error displaying PGA tournament: {e}")
