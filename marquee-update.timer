@@ -1,0 +1,14 @@
+[Unit]
+Description=Check for Cubs Marquee updates every 6 hours
+
+[Timer]
+# Run 5 minutes after boot
+OnBootSec=5min
+# Then run every 6 hours
+OnUnitActiveSec=6h
+# Add randomized delay up to 30 min to prevent all marquees updating simultaneously
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

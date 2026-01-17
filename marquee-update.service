@@ -1,0 +1,13 @@
+[Unit]
+Description=Cubs Marquee Auto-Update Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/pi/auto_update.sh
+User=root
+WorkingDirectory=/home/pi
+
+[Install]
+WantedBy=multi-user.target
