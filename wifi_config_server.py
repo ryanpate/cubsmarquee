@@ -122,7 +122,12 @@ def load_config():
         'enable_bible': True,
         'enable_newsmax': True,
         'enable_stocks': True,
-        'enable_spring_training': True
+        'enable_spring_training': True,
+        'enable_flights': True,
+        'flight_tracking_latitude': None,
+        'flight_tracking_longitude': None,
+        'flight_tracking_address': '',
+        'airlabs_api_key': ''
     }
 
     try:
@@ -532,6 +537,39 @@ HTML_TEMPLATE = """
             </div>
 
             <div class="form-group">
+                <label>
+                    <input type="checkbox" id="enable_flights">
+                    Enable Flight Tracking display
+                </label>
+            </div>
+
+            <h3 style="margin-top: 20px; color: #0C2340;">Flight Tracking Location</h3>
+            <p class="help-text" style="margin-bottom: 15px;">Set your location to track flights overhead (uses OpenSky Network API):</p>
+
+            <div class="form-group">
+                <label for="flight_tracking_address">Location Address:</label>
+                <input type="text" id="flight_tracking_address" placeholder="e.g., Chicago, IL or 1060 W Addison St, Chicago">
+                <div class="help-text">Enter a city, state or full address</div>
+            </div>
+
+            <button type="button" onclick="geocodeAddress()" class="button-secondary" style="margin-bottom: 15px;">Calculate Coordinates</button>
+
+            <div class="form-group">
+                <label>Calculated Coordinates:</label>
+                <div class="info-box" id="coordinates-display">
+                    <span id="coords-text">Not configured</span>
+                </div>
+                <input type="hidden" id="flight_tracking_latitude">
+                <input type="hidden" id="flight_tracking_longitude">
+            </div>
+
+            <div class="form-group">
+                <label for="airlabs_api_key">AirLabs API Key (for flight destinations):</label>
+                <input type="text" id="airlabs_api_key" placeholder="Get free API key from airlabs.co" value="{{ config.airlabs_api_key }}">
+                <div class="help-text">Free tier: 1,000 calls/month. Get key at <a href="https://airlabs.co" target="_blank">airlabs.co</a>. Without this, destinations show as "UNKNOWN".</div>
+            </div>
+
+            <div class="form-group">
                 <label for="zip_code">ZIP Code (for weather):</label>
                 <input type="text" id="zip_code" placeholder="e.g., 60613" value="{{ config.zip_code }}">
             </div>
@@ -641,6 +679,22 @@ HTML_TEMPLATE = """
             document.getElementById('enable_newsmax').checked = config.enable_newsmax !== false;
             document.getElementById('enable_stocks').checked = config.enable_stocks !== false;
             document.getElementById('enable_spring_training').checked = config.enable_spring_training !== false;
+            document.getElementById('enable_flights').checked = config.enable_flights !== false;
+
+            // Load flight tracking location
+            document.getElementById('flight_tracking_address').value = config.flight_tracking_address || '';
+            document.getElementById('flight_tracking_latitude').value = config.flight_tracking_latitude || '';
+            document.getElementById('flight_tracking_longitude').value = config.flight_tracking_longitude || '';
+
+            // Display coordinates if configured
+            if (config.flight_tracking_latitude && config.flight_tracking_longitude) {
+                document.getElementById('coords-text').textContent =
+                    `Lat: ${config.flight_tracking_latitude.toFixed(4)}, Lon: ${config.flight_tracking_longitude.toFixed(4)}`;
+            }
+
+            // Load AirLabs API key
+            document.getElementById('airlabs_api_key').value = config.airlabs_api_key || '';
+
             updateServiceStatus();
         };
 
@@ -743,7 +797,47 @@ HTML_TEMPLATE = """
             }
         }
 
+        async function geocodeAddress() {
+            const address = document.getElementById('flight_tracking_address').value;
+            const apiKey = document.getElementById('weather_api_key').value;
+
+            if (!address) {
+                showStatus('config-status', 'Please enter a location address', false);
+                return;
+            }
+
+            if (!apiKey) {
+                showStatus('config-status', 'OpenWeather API key is required for geocoding', false);
+                return;
+            }
+
+            try {
+                const response = await fetch('/geocode_address', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ address: address, api_key: apiKey })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    document.getElementById('flight_tracking_latitude').value = data.latitude;
+                    document.getElementById('flight_tracking_longitude').value = data.longitude;
+                    document.getElementById('coords-text').textContent =
+                        `Lat: ${data.latitude.toFixed(4)}, Lon: ${data.longitude.toFixed(4)}`;
+                    showStatus('config-status', 'Coordinates calculated! Click Save Configuration to save.', true);
+                } else {
+                    showStatus('config-status', 'Geocoding error: ' + data.message, false);
+                }
+            } catch (error) {
+                showStatus('config-status', 'Geocoding error: ' + error.message, false);
+            }
+        }
+
         async function saveConfig() {
+            const latValue = document.getElementById('flight_tracking_latitude').value;
+            const lonValue = document.getElementById('flight_tracking_longitude').value;
+
             const config = {
                 zip_code: document.getElementById('zip_code').value,
                 weather_api_key: document.getElementById('weather_api_key').value,
@@ -760,7 +854,12 @@ HTML_TEMPLATE = """
                 enable_bible: document.getElementById('enable_bible').checked,
                 enable_newsmax: document.getElementById('enable_newsmax').checked,
                 enable_stocks: document.getElementById('enable_stocks').checked,
-                enable_spring_training: document.getElementById('enable_spring_training').checked
+                enable_spring_training: document.getElementById('enable_spring_training').checked,
+                enable_flights: document.getElementById('enable_flights').checked,
+                flight_tracking_address: document.getElementById('flight_tracking_address').value,
+                flight_tracking_latitude: latValue ? parseFloat(latValue) : null,
+                flight_tracking_longitude: lonValue ? parseFloat(lonValue) : null,
+                airlabs_api_key: document.getElementById('airlabs_api_key').value
             };
 
             const button = event.target;
@@ -1145,6 +1244,47 @@ country=US
         return jsonify({'success': False, 'message': str(e)})
 
 
+@app.route('/geocode_address', methods=['POST'])
+def geocode_address():
+    """Geocode an address to latitude/longitude using OpenWeatherMap Geocoding API"""
+    try:
+        data = request.json
+        address = data.get('address', '')
+        api_key = data.get('api_key', '')
+
+        if not address:
+            return jsonify({'success': False, 'message': 'Address is required'})
+
+        if not api_key:
+            return jsonify({'success': False, 'message': 'OpenWeather API key is required'})
+
+        # Use OpenWeatherMap Geocoding API
+        import requests
+        url = f"http://api.openweathermap.org/geo/1.0/direct?q={address}&limit=1&appid={api_key}"
+
+        response = requests.get(url, timeout=10)
+
+        if response.status_code == 200:
+            results = response.json()
+            if results and len(results) > 0:
+                lat = results[0]['lat']
+                lon = results[0]['lon']
+                return jsonify({
+                    'success': True,
+                    'latitude': lat,
+                    'longitude': lon,
+                    'name': results[0].get('name', ''),
+                    'country': results[0].get('country', '')
+                })
+            else:
+                return jsonify({'success': False, 'message': 'Address not found'})
+        else:
+            return jsonify({'success': False, 'message': f'API error: {response.status_code}'})
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+
 @app.route('/save_config', methods=['POST'])
 def save_config_route():
     """Save display configuration"""
@@ -1169,7 +1309,12 @@ def save_config_route():
             'enable_bible': data.get('enable_bible', True),
             'enable_newsmax': data.get('enable_newsmax', True),
             'enable_stocks': data.get('enable_stocks', True),
-            'enable_spring_training': data.get('enable_spring_training', True)
+            'enable_spring_training': data.get('enable_spring_training', True),
+            'enable_flights': data.get('enable_flights', True),
+            'flight_tracking_address': data.get('flight_tracking_address', ''),
+            'flight_tracking_latitude': data.get('flight_tracking_latitude'),
+            'flight_tracking_longitude': data.get('flight_tracking_longitude'),
+            'airlabs_api_key': data.get('airlabs_api_key', '')
         })
 
         if save_config(current_config):

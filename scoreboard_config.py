@@ -52,6 +52,13 @@ class Colors:
     PGA_GOLD: RGBColor = (255, 215, 0)
     PGA_GREEN: RGBColor = (34, 139, 34)
 
+    # Flight tracking colors (sky theme)
+    FLIGHT_BLUE: RGBColor = (30, 100, 180)
+    FLIGHT_DARK_BLUE: RGBColor = (15, 40, 80)
+    FLIGHT_ALTITUDE_HIGH: RGBColor = (255, 215, 0)  # Gold for high altitude (>30k ft)
+    FLIGHT_ALTITUDE_MED: RGBColor = (255, 140, 0)   # Orange for medium (15k-30k ft)
+    FLIGHT_ALTITUDE_LOW: RGBColor = (50, 205, 50)   # Green for low (<15k ft)
+
 
 class Positions:
     """Display positions for various elements"""
@@ -157,6 +164,11 @@ class GameConfig:
     NEWSMAX_DISPLAY_DURATION: int = 2
     STOCKS_DISPLAY_DURATION: int = 2
     SPRING_TRAINING_DISPLAY_DURATION: int = 2
+    FLIGHT_DISPLAY_DURATION: int = 2
+
+    # Flight tracking settings
+    FLIGHT_UPDATE_INTERVAL: int = 30  # seconds between API updates
+    FLIGHT_BOUNDING_BOX_SIZE: float = 0.125  # degrees lat/long around center point (~7-8 mile radius)
 
     # Display thresholds
     OFF_SEASON_DAYS_THRESHOLD: int = 30  # Days until next game to trigger off-season

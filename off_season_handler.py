@@ -19,6 +19,7 @@ from bible_display import BibleDisplay
 from newsmax_display import NewsmaxDisplay
 from stock_display import StockDisplay
 from spring_training_display import SpringTrainingDisplay
+from flight_display import FlightDisplay
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
@@ -37,6 +38,7 @@ class OffSeasonHandler:
         self.newsmax_display: NewsmaxDisplay = NewsmaxDisplay(scoreboard_manager)
         self.stock_display: StockDisplay = StockDisplay(scoreboard_manager)
         self.spring_training_display: SpringTrainingDisplay = SpringTrainingDisplay(scoreboard_manager)
+        self.flight_display: FlightDisplay = FlightDisplay(scoreboard_manager)
         self.scroll_position: int = DisplayConfig.MATRIX_COLS
 
         # Load configuration
@@ -78,7 +80,8 @@ class OffSeasonHandler:
             'bible': GameConfig.BIBLE_DISPLAY_DURATION if hasattr(GameConfig, 'BIBLE_DISPLAY_DURATION') else 3,
             'newsmax': GameConfig.NEWSMAX_DISPLAY_DURATION if hasattr(GameConfig, 'NEWSMAX_DISPLAY_DURATION') else 2,
             'stocks': GameConfig.STOCKS_DISPLAY_DURATION if hasattr(GameConfig, 'STOCKS_DISPLAY_DURATION') else 2,
-            'spring_training': GameConfig.SPRING_TRAINING_DISPLAY_DURATION if hasattr(GameConfig, 'SPRING_TRAINING_DISPLAY_DURATION') else 2
+            'spring_training': GameConfig.SPRING_TRAINING_DISPLAY_DURATION if hasattr(GameConfig, 'SPRING_TRAINING_DISPLAY_DURATION') else 2,
+            'flights': GameConfig.FLIGHT_DISPLAY_DURATION if hasattr(GameConfig, 'FLIGHT_DISPLAY_DURATION') else 2
         }
 
         # Track when we last checked for new season
@@ -121,7 +124,12 @@ class OffSeasonHandler:
             'enable_bible': True,  # Enable/disable Bible Verse of the Day
             'enable_newsmax': True,  # Enable/disable Newsmax news
             'enable_stocks': True,  # Enable/disable Stock Exchange ticker
-            'enable_spring_training': True  # Enable/disable Spring Training countdown
+            'enable_spring_training': True,  # Enable/disable Spring Training countdown
+            'enable_flights': True,  # Enable/disable Flight Tracking display
+            'flight_tracking_latitude': None,  # Latitude for flight tracking center
+            'flight_tracking_longitude': None,  # Longitude for flight tracking center
+            'flight_tracking_address': '',  # Address for flight tracking location
+            'airlabs_api_key': ''  # AirLabs API key for flight destinations
         }
 
         try:
@@ -751,6 +759,22 @@ class OffSeasonHandler:
                 traceback.print_exc()
         else:
             print("Skipping Stock ticker (disabled in config)")
+
+        # Display Flight Tracking if enabled
+        flights_enabled = self.config.get('enable_flights', True)
+        if flights_enabled:
+            print("Displaying Flight Tracking...")
+            try:
+                self.flight_display.display_flight_info(
+                    duration=self.rotation_schedule['flights'] * 60
+                )
+                print("Flight tracking display finished")
+            except Exception as e:
+                print(f"Error in Flight tracking display: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("Skipping Flight tracking (disabled in config)")
 
         print("=== Rotation cycle complete ===")
 
