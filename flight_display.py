@@ -188,6 +188,121 @@ class FlightDisplay:
         self._save_destination_cache()
         return None
 
+    # Airport IATA code to city name mapping
+    AIRPORT_CITIES: dict[str, str] = {
+        # Major US Hubs
+        'ATL': 'ATLANTA',
+        'DFW': 'DALLAS',
+        'DEN': 'DENVER',
+        'ORD': 'CHICAGO',
+        'MDW': 'CHICAGO',
+        'LAX': 'LOS ANGELES',
+        'CLT': 'CHARLOTTE',
+        'LAS': 'LAS VEGAS',
+        'PHX': 'PHOENIX',
+        'MCO': 'ORLANDO',
+        'SEA': 'SEATTLE',
+        'MIA': 'MIAMI',
+        'JFK': 'NEW YORK',
+        'EWR': 'NEWARK',
+        'LGA': 'NEW YORK',
+        'SFO': 'SAN FRAN',
+        'IAH': 'HOUSTON',
+        'BOS': 'BOSTON',
+        'FLL': 'FT LAUD',
+        'MSP': 'MINNEAPOLIS',
+        'DTW': 'DETROIT',
+        'PHL': 'PHILLY',
+        'SLC': 'SALT LAKE',
+        'DCA': 'WASHINGTON',
+        'IAD': 'WASHINGTON',
+        'BWI': 'BALTIMORE',
+        'SAN': 'SAN DIEGO',
+        'TPA': 'TAMPA',
+        'PDX': 'PORTLAND',
+        'STL': 'ST LOUIS',
+        'BNA': 'NASHVILLE',
+        'AUS': 'AUSTIN',
+        'HNL': 'HONOLULU',
+        'OAK': 'OAKLAND',
+        'SJC': 'SAN JOSE',
+        'RDU': 'RALEIGH',
+        'MCI': 'KANSAS CITY',
+        'SMF': 'SACRAMENTO',
+        'SNA': 'ORANGE CO',
+        'CLE': 'CLEVELAND',
+        'IND': 'INDIANAPOLIS',
+        'PIT': 'PITTSBURGH',
+        'CMH': 'COLUMBUS',
+        'SAT': 'SAN ANTONIO',
+        'MKE': 'MILWAUKEE',
+        'JAX': 'JACKSONVILLE',
+        'OMA': 'OMAHA',
+        'ABQ': 'ALBUQUERQUE',
+        'BUF': 'BUFFALO',
+        'ONT': 'ONTARIO CA',
+        'BUR': 'BURBANK',
+        'RSW': 'FT MYERS',
+        'PBI': 'PALM BEACH',
+        'MSY': 'NEW ORLEANS',
+        'RNO': 'RENO',
+        'BOI': 'BOISE',
+        'OKC': 'OKLAHOMA CITY',
+        'TUS': 'TUCSON',
+        'ELP': 'EL PASO',
+        'SDF': 'LOUISVILLE',
+        'CVG': 'CINCINNATI',
+        'DSM': 'DES MOINES',
+        'GRR': 'GRAND RAPIDS',
+        'MSN': 'MADISON',
+        'ORF': 'NORFOLK',
+        'RIC': 'RICHMOND',
+        'ALB': 'ALBANY',
+        'SYR': 'SYRACUSE',
+        'ROC': 'ROCHESTER',
+        'PWM': 'PORTLAND ME',
+        'BTV': 'BURLINGTON',
+        'MHT': 'MANCHESTER',
+        'PVD': 'PROVIDENCE',
+        'HPN': 'WESTCHESTER',
+        # International
+        'YYZ': 'TORONTO',
+        'YVR': 'VANCOUVER',
+        'YUL': 'MONTREAL',
+        'YYC': 'CALGARY',
+        'MEX': 'MEXICO CITY',
+        'CUN': 'CANCUN',
+        'GDL': 'GUADALAJARA',
+        'LHR': 'LONDON',
+        'LGW': 'LONDON',
+        'CDG': 'PARIS',
+        'FRA': 'FRANKFURT',
+        'AMS': 'AMSTERDAM',
+        'MAD': 'MADRID',
+        'BCN': 'BARCELONA',
+        'FCO': 'ROME',
+        'MUC': 'MUNICH',
+        'ZRH': 'ZURICH',
+        'DUB': 'DUBLIN',
+        'NRT': 'TOKYO',
+        'HND': 'TOKYO',
+        'ICN': 'SEOUL',
+        'PEK': 'BEIJING',
+        'PVG': 'SHANGHAI',
+        'HKG': 'HONG KONG',
+        'SIN': 'SINGAPORE',
+        'BKK': 'BANGKOK',
+        'SYD': 'SYDNEY',
+        'DXB': 'DUBAI',
+        'DOH': 'DOHA',
+    }
+
+    def _get_airport_city(self, iata_code: str) -> str:
+        """Convert airport IATA code to city name"""
+        if not iata_code or iata_code == 'UNKNOWN':
+            return 'UNKNOWN'
+        return self.AIRPORT_CITIES.get(iata_code.upper(), iata_code)
+
     def _icao_to_iata_callsign(self, icao_callsign: str) -> str | None:
         """
         Convert ICAO callsign to IATA format.
@@ -474,7 +589,9 @@ class FlightDisplay:
         callsign = flight['callsign']
         altitude_ft = flight['altitude_ft']
         velocity_mph = flight['velocity_mph']
-        destination = flight.get('destination', 'UNKNOWN')
+        dest_code = flight.get('destination', 'UNKNOWN')
+        # Convert airport code to city name
+        destination = self._get_airport_city(dest_code)
 
         # Get altitude color
         alt_color = self._get_altitude_color(altitude_ft)
