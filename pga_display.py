@@ -343,8 +343,7 @@ class PGADisplay:
             status = event.get('status', {}).get('type', {}).get('name', '')
             state = event.get('status', {}).get('type', {}).get('state', '')
 
-            # Valid active states: in progress, or completed with results
-            active_states = ['in', 'post']  # 'in' = in progress, 'post' = completed
+            # Valid active states: in progress
             canceled_statuses = ['STATUS_CANCELED', 'STATUS_POSTPONED']
 
             # Skip canceled tournaments
@@ -362,9 +361,33 @@ class PGADisplay:
             if not has_competitors:
                 return None
 
-            # If state is 'in' or 'post', tournament is definitely active
-            if state in active_states:
+            # If tournament is in progress, show it
+            if state == 'in':
                 return event
+
+            # For completed tournaments ('post'), only show if ended recently
+            # This allows viewing final results for ~6 hours after tournament ends
+            if state == 'post':
+                end_date_str = event.get('endDate', '')
+                if end_date_str:
+                    try:
+                        end_date = pendulum.parse(end_date_str)
+                        now = pendulum.now()
+                        hours_since_end = (now - end_date).total_hours()
+
+                        # Only show completed tournament for 6 hours after it ends
+                        if hours_since_end <= 6:
+                            print(f"Showing completed tournament - ended {hours_since_end:.1f} hours ago")
+                            return event
+                        else:
+                            print(f"Tournament ended {hours_since_end:.1f} hours ago - showing next tournament")
+                            return None
+                    except Exception as e:
+                        print(f"Error parsing tournament end date: {e}")
+                        return None
+                else:
+                    # No end date, don't show completed tournament
+                    return None
 
             # For 'pre' state, check if we're within tournament dates or starting soon
             # (Day 1 morning before play starts, API may still show 'pre')
