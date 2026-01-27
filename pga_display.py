@@ -901,15 +901,17 @@ class PGADisplay:
         start_date = upcoming['start_date']
         end_date = upcoming['end_date']
 
-        # Format dates for display
-        start_str = start_date.in_timezone('America/Chicago').format('MMM D')
-        end_str = end_date.in_timezone('America/Chicago').format('D')
+        # Format dates for display - use UTC date to avoid timezone rollback
+        # (API returns dates like "2026-01-29T05:00Z" where the date part is the calendar date)
+        start_str = start_date.format('MMM D')  # Use UTC date directly
+        end_str = end_date.format('D')
         date_range = f"{start_str}-{end_str}"
 
-        # Calculate days until tournament using calendar dates in Chicago timezone
+        # Calculate days until tournament using calendar dates
+        # Compare date portions only (ignore time/timezone to avoid off-by-one errors)
         now_chicago = pendulum.now('America/Chicago')
-        today = now_chicago.start_of('day')
-        tournament_day = start_date.in_timezone('America/Chicago').start_of('day')
+        today = now_chicago.date()
+        tournament_day = start_date.date()  # Get the calendar date from UTC
         days_until = (tournament_day - today).days
 
         while time.time() - start_time < duration:
