@@ -60,6 +60,13 @@ class CubsScoreboard:
             logger.info("Off-season handler initialized")
 
             self.current_game_index: int = 0
+
+            # Split-squad game tracking
+            self.split_squad_active: bool = False
+            self.split_squad_games: list[int] = []  # Indices of simultaneous games
+            self.split_squad_display_index: int = 0  # Which split-squad game we're showing
+            self.split_squad_last_switch: float = 0.0  # Timestamp of last game switch
+
             logger.info("All components initialized successfully")
 
         except Exception as e:
@@ -163,8 +170,37 @@ class CubsScoreboard:
                 self.off_season_handler.display_off_season_content()
                 return
 
-            # Check for doubleheader
-            self.current_game_index = self.determine_game_index(game_data)
+            # Check for split-squad games (spring training simultaneous games)
+            is_split_squad, split_indices = self.detect_split_squad_games(game_data)
+
+            if is_split_squad:
+                # Update split-squad state
+                if not self.split_squad_active or self.split_squad_games != split_indices:
+                    # New split-squad situation detected
+                    self.split_squad_active = True
+                    self.split_squad_games = split_indices
+                    self.split_squad_display_index = 0
+                    self.split_squad_last_switch = time.time()
+                    logger.info(
+                        f"Split-squad mode activated: {len(split_indices)} games"
+                    )
+
+                # Get current game to display based on rotation
+                self.current_game_index = self.get_split_squad_game_index(game_data)
+            else:
+                # No split-squad - use normal doubleheader logic
+                if self.split_squad_active:
+                    logger.info("Split-squad mode deactivated")
+                    self.split_squad_active = False
+                    self.split_squad_games = []
+
+                self.current_game_index = self.determine_game_index(game_data)
+
+            # Set split-squad indicator and switch time on manager for handlers
+            self.manager.split_squad_indicator = self.get_split_squad_indicator()
+            self.manager.split_squad_switch_time = (
+                self.split_squad_last_switch + GameConfig.SPLIT_SQUAD_ROTATION_INTERVAL
+            )
 
             # Load images for current game
             self.manager.load_game_images(game_data, self.current_game_index)
@@ -190,6 +226,91 @@ class CubsScoreboard:
             if game_data[0]['status'] in ['Final', 'Game Over']:
                 return 1
         return 0
+
+    def detect_split_squad_games(
+        self, game_data: list[dict[str, Any]]
+    ) -> tuple[bool, list[int]]:
+        """
+        Detect if there are simultaneous split-squad games (spring training).
+
+        Returns:
+            Tuple of (is_split_squad, list of game indices that are simultaneous)
+        """
+        if len(game_data) < 2:
+            return False, []
+
+        # Get games that are currently active (not finished, not far in future)
+        now = pendulum.now('America/Chicago')
+        simultaneous_indices: list[int] = []
+
+        for i, game in enumerate(game_data):
+            status = game.get('status', '')
+
+            # Include games that are in progress, warming up, or scheduled to start soon
+            if status in ['In Progress', 'Warmup', 'Pre-Game']:
+                simultaneous_indices.append(i)
+            elif status == 'Scheduled':
+                # Check if game starts within 2 hours (could overlap with another game)
+                game_time_str = game.get('game_datetime', '')
+                if game_time_str:
+                    try:
+                        game_time = pendulum.parse(game_time_str)
+                        hours_until = (game_time - now).total_hours()
+                        if -0.5 <= hours_until <= 2:
+                            simultaneous_indices.append(i)
+                    except Exception:
+                        pass
+            elif status.startswith('Delayed'):
+                simultaneous_indices.append(i)
+
+        # Split-squad if we have 2+ simultaneous games
+        if len(simultaneous_indices) >= 2:
+            logger.info(
+                f"Split-squad detected: {len(simultaneous_indices)} simultaneous games"
+            )
+            return True, simultaneous_indices
+
+        return False, []
+
+    def get_split_squad_game_index(self, game_data: list[dict[str, Any]]) -> int:
+        """
+        Get the current game index for split-squad rotation.
+        Handles timing-based alternation between simultaneous games.
+        """
+        current_time = time.time()
+
+        # Check if it's time to switch games
+        time_since_switch = current_time - self.split_squad_last_switch
+        if time_since_switch >= GameConfig.SPLIT_SQUAD_ROTATION_INTERVAL:
+            # Move to next game in rotation
+            self.split_squad_display_index = (
+                (self.split_squad_display_index + 1) % len(self.split_squad_games)
+            )
+            self.split_squad_last_switch = current_time
+            logger.info(
+                f"Split-squad: Switching to game {self.split_squad_display_index + 1} "
+                f"of {len(self.split_squad_games)}"
+            )
+
+        return self.split_squad_games[self.split_squad_display_index]
+
+    def get_split_squad_indicator(self) -> str:
+        """Get indicator text showing which split-squad game is displayed"""
+        if not self.split_squad_active or len(self.split_squad_games) < 2:
+            return ""
+        return f"{self.split_squad_display_index + 1}/{len(self.split_squad_games)}"
+
+    def should_switch_split_squad_game(self) -> bool:
+        """
+        Check if it's time to switch to the next split-squad game.
+        Called by handlers to know when to exit their display loop.
+        """
+        if not self.split_squad_active:
+            return False
+
+        current_time = time.time()
+        time_since_switch = current_time - self.split_squad_last_switch
+        return time_since_switch >= GameConfig.SPLIT_SQUAD_ROTATION_INTERVAL
 
     def route_by_status(
         self, game_data: list[dict[str, Any]], gameid: int, status: str

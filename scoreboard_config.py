@@ -173,6 +173,9 @@ class GameConfig:
     # Display thresholds
     OFF_SEASON_DAYS_THRESHOLD: int = 30  # Days until next game to trigger off-season
 
+    # Split-squad game settings (spring training)
+    SPLIT_SQUAD_ROTATION_INTERVAL: int = 45  # seconds to display each game before switching
+
 
 class DisplayHandler(ABC):
     """Abstract base class for all display handlers"""

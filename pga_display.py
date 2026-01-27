@@ -906,9 +906,11 @@ class PGADisplay:
         end_str = end_date.in_timezone('America/Chicago').format('D')
         date_range = f"{start_str}-{end_str}"
 
-        # Calculate days until tournament
-        now = pendulum.now()
-        days_until = (start_date - now).days
+        # Calculate days until tournament using calendar dates in Chicago timezone
+        now_chicago = pendulum.now('America/Chicago')
+        today = now_chicago.start_of('day')
+        tournament_day = start_date.in_timezone('America/Chicago').start_of('day')
+        days_until = (tournament_day - today).days
 
         while time.time() - start_time < duration:
             self.manager.clear_canvas()

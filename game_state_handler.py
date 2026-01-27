@@ -9,7 +9,7 @@ from PIL import Image
 from rgbmatrix import graphics
 from typing import TYPE_CHECKING, Any
 
-from scoreboard_config import Colors, Positions, GameConfig, TeamConfig, RGBColor
+from scoreboard_config import Colors, Positions, GameConfig, TeamConfig, RGBColor, DisplayConfig
 from retry import retry_api_call
 
 if TYPE_CHECKING:
@@ -106,10 +106,20 @@ class GameStateHandler:
 
             self.manager.draw_text(
                 'lineup', self.scroll_position, 45, Colors.WHITE, lineup)
+
+            # Draw split-squad indicator if active
+            if self.manager.split_squad_indicator:
+                self._draw_split_squad_indicator()
+
             self.manager.swap_canvas()
 
             # Use consistent scroll speed
             time.sleep(GameConfig.SCROLL_SPEED)
+
+            # Exit if in split-squad mode and it's time to switch games
+            if self.manager.split_squad_indicator:
+                if time.time() >= self.manager.split_squad_switch_time:
+                    break
 
             # Increment refresh counter
             refresh_counter += 1
@@ -125,6 +135,27 @@ class GameStateHandler:
             else:
                 # Just update current time without hitting the API
                 current_time = pendulum.now().format('HH:MM')
+
+    def _draw_split_squad_indicator(self) -> None:
+        """
+        Draw split-squad game indicator in top-right corner.
+        Shows which game is being displayed (e.g., "1/2" or "2/2").
+        """
+        indicator = self.manager.split_squad_indicator
+        if not indicator:
+            return
+
+        # Draw a small background box in top-right corner
+        box_x = 88
+        box_y = 0
+
+        # Dark background for visibility
+        for y in range(box_y, box_y + 8):
+            for x in range(box_x, DisplayConfig.MATRIX_COLS):
+                self.manager.draw_pixel(x, y, 40, 40, 40)
+
+        # Draw the indicator text (e.g., "1/2") in yellow
+        self.manager.draw_text('micro', box_x + 1, 6, Colors.YELLOW, indicator)
 
     def display_no_game(
         self, game_data: list[dict[str, Any]], game_index: int
@@ -177,8 +208,18 @@ class GameStateHandler:
 
             self.manager.draw_text(
                 'standard_bold', self.scroll_position, 46, Colors.YELLOW, next_game_text)
+
+            # Draw split-squad indicator if active
+            if self.manager.split_squad_indicator:
+                self._draw_split_squad_indicator()
+
             self.manager.swap_canvas()
             time.sleep(GameConfig.SCROLL_SPEED)
+
+            # Exit if in split-squad mode and it's time to switch games
+            if self.manager.split_squad_indicator:
+                if time.time() >= self.manager.split_squad_switch_time:
+                    break
 
     def _display_standings(self) -> None:
         """Display division standings"""

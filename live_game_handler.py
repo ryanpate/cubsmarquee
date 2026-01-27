@@ -148,8 +148,18 @@ class LiveGameHandler:
             # Check for score changes
             self._check_score_changes(game_data, game_index)
 
+            # Draw split-squad indicator if active (top-right corner)
+            if self.manager.split_squad_indicator:
+                self._draw_split_squad_indicator()
+
             self.manager.swap_canvas()
             time.sleep(GameConfig.GAME_CHECK_DELAY)
+
+            # Exit loop if in split-squad mode and it's time to switch games
+            if self.manager.split_squad_indicator:
+                if time.time() >= self.manager.split_squad_switch_time:
+                    # Return to main loop to switch to next game
+                    break
 
     def _draw_batting_indicator_overlay(self, inning_state):
         """Draw batting indicator by overlaying on the current pixel buffer"""
@@ -198,6 +208,28 @@ class LiveGameHandler:
                     if pixel != (0, 0, 0):
                         self.manager.draw_pixel(
                             pos[0] + x, pos[1] + y, pixel[0], pixel[1], pixel[2])
+
+    def _draw_split_squad_indicator(self) -> None:
+        """
+        Draw split-squad game indicator in top-right corner.
+        Shows which game is being displayed (e.g., "1/2" or "2/2").
+        """
+        indicator = self.manager.split_squad_indicator
+        if not indicator:
+            return
+
+        # Draw a small background box in top-right corner
+        # Position: x=88-95, y=0-7 (8x8 pixels)
+        box_x = 88
+        box_y = 0
+
+        # Dark background for visibility
+        for y in range(box_y, box_y + 8):
+            for x in range(box_x, DisplayConfig.MATRIX_COLS):
+                self.manager.draw_pixel(x, y, 40, 40, 40)
+
+        # Draw the indicator text (e.g., "1/2") in yellow
+        self.manager.draw_text('micro', box_x + 1, 6, Colors.YELLOW, indicator)
 
     def _draw_bases_original(self, game_info):
         """Draw bases exactly like original"""

@@ -28,6 +28,10 @@ class ScoreboardManager:
         self.current_lineup: str | None = None
         self.game_images: dict[str, Image.Image] = {}
 
+        # Split-squad indicator (set by main.py when multiple games are active)
+        self.split_squad_indicator: str = ""  # e.g., "1/2" or "2/2"
+        self.split_squad_switch_time: float = 0.0  # When to switch to next game
+
     def _setup_matrix(self) -> RGBMatrix:
         """Configure and initialize the RGB matrix"""
         options = RGBMatrixOptions()
