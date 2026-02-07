@@ -5,11 +5,11 @@ from __future__ import annotations
 import time
 import pendulum
 import statsapi
-from PIL import Image
+from PIL import Image, ImageDraw
 from rgbmatrix import graphics
 from typing import TYPE_CHECKING, Any
 
-from scoreboard_config import Colors, Positions, GameConfig, TeamConfig, RGBColor, DisplayConfig
+from scoreboard_config import Colors, Positions, GameConfig, TeamConfig, RGBColor, DisplayConfig, get_scroll_delay
 from retry import retry_api_call
 
 if TYPE_CHECKING:
@@ -178,22 +178,40 @@ class GameStateHandler:
 
         # Create next game text
         pitchers: str = self.manager.get_pitchers(game_data, game_index, gameid)
-        next_game_text: str = f'NEXT GAME {game_date[5:]} at {game_time} vs {away_team}     {pitchers}'
+        if game_type in ('S', 'E'):
+            next_game_text: str = f'SPRING TRAINING {game_date[5:]} at {game_time} vs {away_team}     {pitchers}'
+        else:
+            next_game_text: str = f'NEXT GAME {game_date[5:]} at {game_time} vs {away_team}     {pitchers}'
+
+        # Pre-generate Cubs gradient background (matches Cubs Facts screen)
+        gradient_bg: Image.Image = Image.new("RGB", (96, 48))
+        pixels = gradient_bg.load()
+        for y in range(34):
+            blue_intensity = int(102 + (y * 0.5))
+            for x in range(96):
+                pixels[x, y] = (0, 51, blue_intensity)
+        for y in range(34, 48):
+            for x in range(96):
+                pixels[x, y] = (0, 0, 0)
 
         # Main display loop
         while True:
             self.manager.clear_canvas()
 
-            # Display marquee image
-            output_image: Image.Image = Image.new("RGB", (96, 48))
+            # Display Cubs gradient background with marquee image (matches Cubs Facts screen)
+            output_image: Image.Image = gradient_bg.copy()
             output_image.paste(self.manager.game_images['marquee'], (0, 0))
             self.manager.canvas.SetImage(output_image.convert("RGB"), 0, 0)
 
             # Scroll next game text
             self.scroll_position -= 1
-            text_length: int = len(next_game_text) * 7
+            text_length: int = len(next_game_text) * 9
             if self.scroll_position + text_length < 0:
                 self.scroll_position = 96
+
+                # Spring training: return after one scroll pass to cycle through other content
+                if game_type in ('S', 'E'):
+                    break
 
                 # Show standings for regular season, playoff info for postseason
                 if game_type == 'R':
@@ -207,14 +225,25 @@ class GameStateHandler:
                     break
 
             self.manager.draw_text(
-                'standard_bold', self.scroll_position, 46, Colors.YELLOW, next_game_text)
+                'medium_bold', int(self.scroll_position), 48, Colors.YELLOW, next_game_text)
 
             # Draw split-squad indicator if active
             if self.manager.split_squad_indicator:
                 self._draw_split_squad_indicator()
 
             self.manager.swap_canvas()
-            time.sleep(GameConfig.SCROLL_SPEED)
+            # Match Cubs Facts scroll speed from config
+            try:
+                import json, os
+                _cfg_path = '/home/pi/config.json'
+                if os.path.exists(_cfg_path):
+                    with open(_cfg_path, 'r') as _f:
+                        _cfg = json.load(_f)
+                else:
+                    _cfg = {}
+            except Exception:
+                _cfg = {}
+            time.sleep(get_scroll_delay(_cfg.get('scroll_speed_cubs_facts', 5)))
 
             # Exit if in split-squad mode and it's time to switch games
             if self.manager.split_squad_indicator:

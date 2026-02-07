@@ -325,6 +325,11 @@ class CubsScoreboard:
         if status == 'Scheduled':
             self.state_handler.display_no_game(
                 game_data, self.current_game_index)
+            # For spring training, cycle through off-season content between game displays
+            game_type = game_data[self.current_game_index].get('game_type', 'R')
+            if game_type in ('S', 'E'):
+                logger.info("Spring training scheduled game - cycling through off-season content")
+                self.off_season_handler._display_rotation_cycle()
 
         elif status in ['Warmup', 'Pre-Game']:
             self.state_handler.display_warmup(
