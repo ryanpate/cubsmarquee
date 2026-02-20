@@ -35,6 +35,7 @@ class WeatherDisplay:
         self.cloud_positions: list[dict[str, Any]] = []
         self.star_twinkle: list[dict[str, Any]] = []
         self.lightning_flash: int = 0
+        self.shooting_star: dict[str, Any] | None = None  # Active shooting star
 
         # Track when background was last drawn
         self._last_hour: int | None = None
@@ -733,6 +734,7 @@ class WeatherDisplay:
 
         self.animation_frame = 0
         self.lightning_flash = 0
+        self.shooting_star = None  # Will spawn randomly during night
 
     def _initialize_animations_for_condition(self, condition, time_period):
         """Reinitialize animations when condition or time period changes"""
@@ -788,6 +790,8 @@ class WeatherDisplay:
                         'direction': random.choice([-1, 1]),
                         'speed': random.uniform(8, 15)
                     })
+                # Reset shooting star for fresh night
+                self.shooting_star = None
 
     def _draw_animated_weather(self, condition, hour, time_period):
         """Draw animated weather effects"""
@@ -992,3 +996,62 @@ class WeatherDisplay:
             elif star['brightness'] <= 80:
                 star['brightness'] = 80
                 star['direction'] = 1
+
+        # Animate shooting star
+        self._animate_shooting_star()
+
+    def _animate_shooting_star(self):
+        """Animate a shooting star that randomly streaks across the night sky"""
+        import random
+
+        # Randomly spawn a new shooting star (about 1 in 50 frames, ~15 sec avg)
+        if self.shooting_star is None:
+            if random.random() < 0.02:
+                # Start from top edge or left edge
+                if random.random() < 0.7:
+                    # Start from top edge (more common)
+                    start_x = random.randint(5, 60)
+                    start_y = random.randint(0, 5)
+                else:
+                    # Start from left edge
+                    start_x = random.randint(0, 10)
+                    start_y = random.randint(5, 20)
+
+                self.shooting_star = {
+                    'x': float(start_x),
+                    'y': float(start_y),
+                    'speed_x': random.uniform(2.5, 4.0),  # Horizontal speed
+                    'speed_y': random.uniform(1.0, 2.0),  # Vertical speed
+                    'tail_length': random.randint(6, 10),  # Length of trail
+                    'brightness': 255
+                }
+
+        # Animate active shooting star
+        if self.shooting_star is not None:
+            star = self.shooting_star
+            x = int(star['x'])
+            y = int(star['y'])
+
+            # Draw the shooting star head (bright white)
+            if 0 <= x < 96 and 0 <= y < 48:
+                self.manager.draw_pixel(x, y, 255, 255, 255)
+
+            # Draw the tail (fading behind the star)
+            for i in range(1, star['tail_length'] + 1):
+                tail_x = int(star['x'] - (star['speed_x'] * i * 0.4))
+                tail_y = int(star['y'] - (star['speed_y'] * i * 0.4))
+
+                if 0 <= tail_x < 96 and 0 <= tail_y < 48:
+                    # Fade brightness along the tail
+                    fade = 1.0 - (i / (star['tail_length'] + 1))
+                    brightness = int(255 * fade * 0.8)
+                    blue_tint = min(255, int(brightness * 1.1))
+                    self.manager.draw_pixel(tail_x, tail_y, brightness, brightness, blue_tint)
+
+            # Move the shooting star
+            star['x'] += star['speed_x']
+            star['y'] += star['speed_y']
+
+            # Remove when off screen
+            if star['x'] > 96 or star['y'] > 48:
+                self.shooting_star = None

@@ -11,7 +11,7 @@ import feedparser
 from PIL import Image
 from typing import TYPE_CHECKING, Any
 
-from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor
+from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, get_scroll_delay
 from weather_display import WeatherDisplay
 from bears_display import BearsDisplay
 from pga_display import PGADisplay
@@ -78,6 +78,7 @@ class OffSeasonHandler:
             'cubs_news': GameConfig.CUBS_NEWS_DURATION,
             'message': GameConfig.MESSAGE_DISPLAY_DURATION,
             'bible': GameConfig.BIBLE_DISPLAY_DURATION if hasattr(GameConfig, 'BIBLE_DISPLAY_DURATION') else 3,
+            'bible_facts': GameConfig.BIBLE_FACTS_DURATION if hasattr(GameConfig, 'BIBLE_FACTS_DURATION') else 2,
             'newsmax': GameConfig.NEWSMAX_DISPLAY_DURATION if hasattr(GameConfig, 'NEWSMAX_DISPLAY_DURATION') else 2,
             'stocks': GameConfig.STOCKS_DISPLAY_DURATION if hasattr(GameConfig, 'STOCKS_DISPLAY_DURATION') else 2,
             'spring_training': GameConfig.SPRING_TRAINING_DISPLAY_DURATION if hasattr(GameConfig, 'SPRING_TRAINING_DISPLAY_DURATION') else 2,
@@ -91,6 +92,10 @@ class OffSeasonHandler:
         # Cache marquee image to avoid loading every frame
         self._marquee_image: Image.Image | None = self._load_marquee_image()
 
+        # Pre-generate cached background images for performance
+        self._cubs_gradient_bg: Image.Image = self._create_cubs_gradient_background()
+        self._bears_sweater_bg: Image.Image = self._create_bears_sweater_background()
+
     def _load_marquee_image(self) -> Image.Image | None:
         """Load and cache the marquee image"""
         try:
@@ -103,6 +108,36 @@ class OffSeasonHandler:
         except Exception as e:
             print(f"Error loading marquee image: {e}")
             return None
+
+    def _create_cubs_gradient_background(self) -> Image.Image:
+        """Pre-generate Cubs gradient background image for performance"""
+        img = Image.new("RGB", (96, 48))
+        pixels = img.load()
+        for y in range(34):
+            blue_intensity = int(102 + (y * 0.5))
+            for x in range(96):
+                pixels[x, y] = (0, 51, blue_intensity)
+        # Black background for scrolling text area (y=34-47)
+        for y in range(34, 48):
+            for x in range(96):
+                pixels[x, y] = (0, 0, 0)
+        print("Cubs gradient background cached (with black scroll area)")
+        return img
+
+    def _create_bears_sweater_background(self) -> Image.Image:
+        """Pre-generate Bears sweater header background image for performance"""
+        img = Image.new("RGB", (96, 48), self.BEARS_NAVY)
+        pixels = img.load()
+        # Top orange stripe (3 pixels tall, y=4-6)
+        for y in range(4, 7):
+            for x in range(96):
+                pixels[x, y] = self.BEARS_ORANGE
+        # Bottom orange stripe (3 pixels tall, y=22-24)
+        for y in range(22, 25):
+            for x in range(96):
+                pixels[x, y] = self.BEARS_ORANGE
+        print("Bears sweater background cached")
+        return img
 
     def _load_config(self) -> dict[str, Any]:
         """Load configuration from JSON file"""
@@ -122,6 +157,7 @@ class OffSeasonHandler:
             'enable_cubs_facts': True,  # Enable/disable Cubs facts & message
             'enable_cubs_news': True,  # Enable/disable Cubs breaking news
             'enable_bible': True,  # Enable/disable Bible Verse of the Day
+            'enable_bible_facts': True,  # Enable/disable Bible Facts
             'enable_newsmax': True,  # Enable/disable Newsmax news
             'enable_stocks': True,  # Enable/disable Stock Exchange ticker
             'enable_spring_training': True,  # Enable/disable Spring Training countdown
@@ -728,6 +764,22 @@ class OffSeasonHandler:
         else:
             print("Skipping Bible verse (disabled in config)")
 
+        # Display Bible Facts if enabled
+        bible_facts_enabled = self.config.get('enable_bible_facts', True)
+        if bible_facts_enabled:
+            print("Displaying Bible Facts...")
+            try:
+                self.bible_display.display_bible_facts(
+                    duration=self.rotation_schedule['bible_facts'] * 60
+                )
+                print("Bible facts display finished")
+            except Exception as e:
+                print(f"Error in Bible facts display: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("Skipping Bible facts (disabled in config)")
+
         # Display Newsmax news if enabled
         newsmax_enabled = self.config.get('enable_newsmax', True)
         if newsmax_enabled:
@@ -787,24 +839,11 @@ class OffSeasonHandler:
         self._display_custom_message(duration=300)  # 5 minutes
 
     def _display_bears_loading(self, message="FETCHING NEWS..."):
-        """Display loading message with Bears sweater header"""
+        """Display loading message with Bears sweater header using cached image"""
         self.manager.clear_canvas()
 
-        # Draw the classic Bears sweater header
-        # Fill entire background with Bears navy
-        for y in range(48):
-            for x in range(96):
-                self.manager.draw_pixel(x, y, *self.BEARS_NAVY)
-
-        # Top orange stripe (3 pixels tall)
-        for y in range(4, 7):
-            for x in range(96):
-                self.manager.draw_pixel(x, y, *self.BEARS_ORANGE)
-
-        # Bottom orange stripe (3 pixels tall)
-        for y in range(22, 25):
-            for x in range(96):
-                self.manager.draw_pixel(x, y, *self.BEARS_ORANGE)
+        # Use pre-generated cached background for performance
+        self.manager.canvas.SetImage(self._bears_sweater_bg, 0, 0)
 
         # Draw "CHICAGO BEARS" text in white, centered between stripes
         self.manager.draw_text('small_bold', 9, 19,
@@ -819,22 +858,17 @@ class OffSeasonHandler:
         self.manager.swap_canvas()
 
     def _display_cubs_loading(self, message="FETCHING NEWS..."):
-        """Display loading message with Cubs logo"""
+        """Display loading message with Cubs logo using cached background"""
         self.manager.clear_canvas()
 
-        # Create gradient background (same as Cubs facts display)
-        for y in range(48):
-            # Gradient from Cubs blue to slightly lighter blue
-            blue_intensity = int(102 + (y * 0.5))
-            for x in range(96):
-                self.manager.draw_pixel(x, y, 0, 51, blue_intensity)
+        # Use pre-generated cached gradient for performance
+        output_image = self._cubs_gradient_bg.copy()
 
-        # Display cached marquee image (Cubs logo) at the top
+        # Paste cached marquee image (Cubs logo) at the top if available
         if self._marquee_image is not None:
-            output_image = Image.new("RGB", (96, 48))
             output_image.paste(self._marquee_image, (0, 0))
-            self.manager.canvas.SetImage(
-                output_image.convert("RGB"), 0, 0)
+
+        self.manager.canvas.SetImage(output_image.convert("RGB"), 0, 0)
 
         # Display loading message centered at bottom
         message_width = len(message) * 5
@@ -845,21 +879,9 @@ class OffSeasonHandler:
         self.manager.swap_canvas()
 
     def _draw_sweater_header(self):
-        """Draw the classic Bears sweater header with orange stripes"""
-        # Fill entire background with Bears navy
-        for y in range(48):
-            for x in range(96):
-                self.manager.draw_pixel(x, y, *self.BEARS_NAVY)
-
-        # Top orange stripe (3 pixels tall)
-        for y in range(4, 7):
-            for x in range(96):
-                self.manager.draw_pixel(x, y, *self.BEARS_ORANGE)
-
-        # Bottom orange stripe (3 pixels tall)
-        for y in range(22, 25):
-            for x in range(96):
-                self.manager.draw_pixel(x, y, *self.BEARS_ORANGE)
+        """Draw the classic Bears sweater header with orange stripes using cached image"""
+        # Use pre-generated cached background for performance
+        self.manager.canvas.SetImage(self._bears_sweater_bg, 0, 0)
 
         # Draw "CHICAGO BEARS" text in white, centered between stripes
         self.manager.draw_text('small_bold', 9, 19,
@@ -888,9 +910,8 @@ class OffSeasonHandler:
                 # Get current news headline
                 current_headline = live_news[message_index]
 
-                # Scroll the message
-                scroll_increment = getattr(GameConfig, 'SCROLL_PIXELS', 2)
-                self.scroll_position -= scroll_increment
+                # Scroll smoothly 1 pixel at a time (like Spring Training)
+                self.scroll_position -= 1
                 text_length = len(current_headline) * 9
 
                 if self.scroll_position + text_length < 0:
@@ -906,16 +927,17 @@ class OffSeasonHandler:
                         if fresh_news:
                             live_news = fresh_news
 
-                # Draw scrolling Bears news below the sweater header in white
+                # Draw scrolling text
                 self.manager.draw_text(
                     'medium_bold', int(self.scroll_position), 44,
                     self.BEARS_WHITE, current_headline
                 )
 
                 self.manager.swap_canvas()
-
-                # Use GameConfig SCROLL_SPEED for consistent timing
-                time.sleep(GameConfig.SCROLL_SPEED)
+                # Load config after drawing (like Spring Training)
+                fresh_config = self._load_config()
+                scroll_delay = get_scroll_delay(fresh_config.get('scroll_speed_bears_news', 5))
+                time.sleep(scroll_delay)
 
             except KeyboardInterrupt:
                 raise
@@ -942,26 +964,20 @@ class OffSeasonHandler:
             try:
                 self.manager.clear_canvas()
 
-                # Create gradient background (same as Cubs facts display)
-                for y in range(48):
-                    # Gradient from Cubs blue to slightly lighter blue
-                    blue_intensity = int(102 + (y * 0.5))
-                    for x in range(96):
-                        self.manager.draw_pixel(x, y, 0, 51, blue_intensity)
+                # Use pre-generated cached gradient for performance
+                output_image = self._cubs_gradient_bg.copy()
 
-                # Display cached marquee image (Cubs logo) at the top
+                # Paste cached marquee image (Cubs logo) at the top if available
                 if self._marquee_image is not None:
-                    output_image = Image.new("RGB", (96, 48))
                     output_image.paste(self._marquee_image, (0, 0))
-                    self.manager.canvas.SetImage(
-                        output_image.convert("RGB"), 0, 0)
+
+                self.manager.canvas.SetImage(output_image.convert("RGB"), 0, 0)
 
                 # Get current news headline
                 current_headline = live_news[message_index]
 
-                # Scroll the message
-                scroll_increment = getattr(GameConfig, 'SCROLL_PIXELS', 2)
-                self.scroll_position -= scroll_increment
+                # Scroll smoothly 1 pixel at a time (like Spring Training)
+                self.scroll_position -= 1
                 text_length = len(current_headline) * 9
 
                 if self.scroll_position + text_length < 0:
@@ -977,16 +993,17 @@ class OffSeasonHandler:
                         if fresh_news:
                             live_news = fresh_news
 
-                # Draw scrolling Cubs news at the bottom (same as Cubs facts)
+                # Draw scrolling text
                 self.manager.draw_text(
                     'medium_bold', int(self.scroll_position), 48,
                     Colors.YELLOW, current_headline
                 )
 
                 self.manager.swap_canvas()
-
-                # Use GameConfig SCROLL_SPEED for consistent timing
-                time.sleep(GameConfig.SCROLL_SPEED)
+                # Load config after drawing (like Spring Training)
+                fresh_config = self._load_config()
+                scroll_delay = get_scroll_delay(fresh_config.get('scroll_speed_cubs_news', 5))
+                time.sleep(scroll_delay)
 
             except KeyboardInterrupt:
                 raise
@@ -1012,19 +1029,14 @@ class OffSeasonHandler:
             try:
                 self.manager.clear_canvas()
 
-                # Create gradient background
-                for y in range(48):
-                    # Gradient from Cubs blue to slightly lighter blue
-                    blue_intensity = int(102 + (y * 0.5))
-                    for x in range(96):
-                        self.manager.draw_pixel(x, y, 0, 51, blue_intensity)
+                # Use pre-generated cached gradient for performance
+                output_image = self._cubs_gradient_bg.copy()
 
-                # Display cached marquee image if available
+                # Paste cached marquee image at the top if available
                 if self._marquee_image is not None:
-                    output_image = Image.new("RGB", (96, 48))
                     output_image.paste(self._marquee_image, (0, 0))
-                    self.manager.canvas.SetImage(
-                        output_image.convert("RGB"), 0, 0)
+
+                self.manager.canvas.SetImage(output_image.convert("RGB"), 0, 0)
 
                 # Get current message - custom message once, then facts continuously
                 if showing_custom and not custom_shown:
@@ -1033,9 +1045,8 @@ class OffSeasonHandler:
                     current_message = self.shuffled_cubs_facts[self.cubs_facts_index]
                     showing_custom = False
 
-                # Scroll the message (move multiple pixels for smoother motion)
-                scroll_increment = getattr(GameConfig, 'SCROLL_PIXELS', 2)
-                self.scroll_position -= scroll_increment
+                # Scroll smoothly 1 pixel at a time (like Spring Training)
+                self.scroll_position -= 1
                 text_length = len(current_message) * 9
 
                 if self.scroll_position + text_length < 0:
@@ -1057,13 +1068,17 @@ class OffSeasonHandler:
                             random.shuffle(self.shuffled_cubs_facts)
                             self.cubs_facts_index = 0
 
+                # Draw scrolling text
                 self.manager.draw_text(
-                    'medium_bold', int(
-                        self.scroll_position), 48, Colors.YELLOW, current_message
+                    'medium_bold', int(self.scroll_position), 48,
+                    Colors.YELLOW, current_message
                 )
 
                 self.manager.swap_canvas()
-                time.sleep(GameConfig.SCROLL_SPEED)
+                # Load config after drawing (like Spring Training)
+                fresh_config = self._load_config()
+                scroll_delay = get_scroll_delay(fresh_config.get('scroll_speed_cubs_facts', 5))
+                time.sleep(scroll_delay)
 
             except Exception as e:
                 print(f"Error in custom message display: {e}")

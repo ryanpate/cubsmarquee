@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta
 from PIL import Image
 from typing import TYPE_CHECKING, Any
 
-from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor
+from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, get_scroll_delay
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
@@ -31,6 +31,12 @@ class BibleDisplay:
         self.current_verse_date: date | None = None
         self.todays_verse: dict[str, str] | None = None
 
+        # Load Bible facts for facts display
+        self.bible_facts: list[str] = self._load_bible_facts()
+        self.shuffled_bible_facts: list[str] = self.bible_facts.copy()
+        random.shuffle(self.shuffled_bible_facts)
+        self.bible_facts_index: int = 0
+
         # Color scheme - warm gold and white on deep purple/navy
         self.BIBLE_NAVY: RGBColor = (20, 20, 60)  # Deep navy/purple
         self.BIBLE_GOLD: RGBColor = (255, 215, 0)  # Gold for header
@@ -39,6 +45,9 @@ class BibleDisplay:
 
         # Load Bible icon
         self.bible_icon: Image.Image | None = self._load_bible_icon()
+
+        # Pre-generate cached background image for performance
+        self._bible_bg: Image.Image = self._create_bible_background()
 
     def _load_bible_icon(self) -> Image.Image | None:
         """Load Bible icon for display"""
@@ -58,6 +67,12 @@ class BibleDisplay:
                     print(f"Error loading Bible icon: {e}")
         print("Bible icon not found (optional)")
         return None
+
+    def _create_bible_background(self) -> Image.Image:
+        """Pre-generate Bible background image for performance"""
+        img = Image.new("RGB", (96, 48), self.BIBLE_NAVY)
+        print("Bible background cached")
+        return img
 
     def _draw_icon(self, x: int, y: int, icon: Image.Image) -> None:
         """Draw an icon at the specified position"""
@@ -112,12 +127,46 @@ class BibleDisplay:
             print(f"Error loading Bible verses: {e}")
             return default_verses
 
+    def _load_bible_facts(self) -> list[str]:
+        """Load Bible facts from JSON file"""
+        facts_path = '/home/pi/bible_facts.json'
+        alt_facts_path = './bible_facts.json'
+
+        # Default facts in case file doesn't exist
+        default_facts = [
+            "THE BIBLE WAS WRITTEN OVER A PERIOD OF 1,500 YEARS BY 40 DIFFERENT AUTHORS!",
+            "THE SHORTEST VERSE IN THE BIBLE IS JOHN 11:35 - 'JESUS WEPT.'",
+            "THE BIBLE HAS BEEN TRANSLATED INTO OVER 3,000 LANGUAGES!",
+            "THE BIBLE IS THE BEST-SELLING BOOK OF ALL TIME!",
+            "THE BIBLE CONTAINS 66 BOOKS - 39 OLD TESTAMENT AND 27 NEW TESTAMENT!"
+        ]
+
+        try:
+            # Try primary path first
+            if os.path.exists(facts_path):
+                with open(facts_path, 'r') as f:
+                    data = json.load(f)
+                    facts = data.get('facts', default_facts)
+                    print(f"Loaded {len(facts)} Bible facts from {facts_path}")
+                    return facts
+            # Try alternate path
+            elif os.path.exists(alt_facts_path):
+                with open(alt_facts_path, 'r') as f:
+                    data = json.load(f)
+                    facts = data.get('facts', default_facts)
+                    print(f"Loaded {len(facts)} Bible facts from {alt_facts_path}")
+                    return facts
+            else:
+                print(f"Bible facts file not found, using defaults")
+                return default_facts
+        except Exception as e:
+            print(f"Error loading Bible facts: {e}")
+            return default_facts
+
     def _draw_bible_header(self):
-        """Draw elegant Bible verse header with icon and two-line title"""
-        # Fill background with deep navy/purple
-        for y in range(48):
-            for x in range(96):
-                self.manager.draw_pixel(x, y, *self.BIBLE_NAVY)
+        """Draw elegant Bible verse header with icon and two-line title using cached background"""
+        # Use pre-generated cached background for performance
+        self.manager.canvas.SetImage(self._bible_bg, 0, 0)
 
         # Draw Bible icon on the left if available (shifted right 8 pixels)
         icon_width = 0
@@ -168,6 +217,17 @@ class BibleDisplay:
 
         return self.todays_verse
 
+    def _load_scroll_config(self) -> dict:
+        """Load scroll speed settings from config file"""
+        config_path = '/home/pi/config.json'
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"Error loading config for scroll speed: {e}")
+        return {}
+
     def display_bible_verse(self, duration: int = 180) -> None:
         """Display today's verse - same verse scrolls all day, changes daily"""
         start_time = time.time()
@@ -186,23 +246,25 @@ class BibleDisplay:
                 # Draw the Bible header
                 self._draw_bible_header()
 
-                # Scroll the message
-                scroll_increment = getattr(GameConfig, 'SCROLL_PIXELS', 2)
-                self.scroll_position -= scroll_increment
+                # Scroll smoothly 1 pixel at a time (like Spring Training)
+                self.scroll_position -= 1
                 text_length = len(full_text) * 9
 
                 # Reset scroll when text finishes - keeps showing same verse
                 if self.scroll_position + text_length < 0:
                     self.scroll_position = 96
 
-                # Draw scrolling verse text in cream below header
+                # Draw scrolling text
                 self.manager.draw_text(
                     'medium_bold', int(self.scroll_position), 44,
                     self.BIBLE_CREAM, full_text
                 )
 
                 self.manager.swap_canvas()
-                time.sleep(GameConfig.SCROLL_SPEED)
+                # Load config after drawing (like Spring Training)
+                config = self._load_scroll_config()
+                scroll_delay = get_scroll_delay(config.get('scroll_speed_bible', 5))
+                time.sleep(scroll_delay)
 
             except KeyboardInterrupt:
                 raise
@@ -225,3 +287,78 @@ class BibleDisplay:
         self.manager.draw_text('small_bold', x_pos, 38, self.BIBLE_CREAM, message)
 
         self.manager.swap_canvas()
+
+    def _draw_bible_facts_header(self) -> None:
+        """Draw elegant Bible facts header with icon and two-line title using cached background"""
+        # Use pre-generated cached background for performance
+        self.manager.canvas.SetImage(self._bible_bg, 0, 0)
+
+        # Draw Bible icon on the left if available (shifted right 8 pixels)
+        icon_width = 0
+        if self.bible_icon:
+            self._draw_icon(10, 2, self.bible_icon)
+            icon_width = self.bible_icon.width + 4
+
+        # Calculate text positioning based on icon (shifted right 8 pixels)
+        text_start_x = icon_width + 10
+
+        # Draw "BIBLE" on first line
+        self.manager.draw_text('small_bold', text_start_x, 13, self.BIBLE_GOLD, 'BIBLE')
+
+        # Draw "FACTS" on second line
+        self.manager.draw_text('small_bold', text_start_x, 23, self.BIBLE_GOLD, 'FACTS')
+
+        # Draw subtle separator line below header area
+        for x in range(96):
+            self.manager.draw_pixel(x, 27, 60, 60, 100)  # Subtle blue-gray line
+
+    def display_bible_facts(self, duration: int = 120) -> None:
+        """Display scrolling Bible facts with same header style as verse page"""
+        start_time = time.time()
+        self.scroll_position = 96
+
+        while time.time() - start_time < duration:
+            try:
+                self.manager.clear_canvas()
+
+                # Draw the Bible facts header
+                self._draw_bible_facts_header()
+
+                # Get current fact
+                current_fact = self.shuffled_bible_facts[self.bible_facts_index]
+
+                # Scroll smoothly 1 pixel at a time (like Spring Training)
+                self.scroll_position -= 1
+                text_length = len(current_fact) * 9
+
+                # Reset scroll when text finishes and move to next fact
+                if self.scroll_position + text_length < 0:
+                    self.scroll_position = 96
+                    self.bible_facts_index += 1
+
+                    # Check if we've shown all facts - re-shuffle
+                    if self.bible_facts_index >= len(self.shuffled_bible_facts):
+                        print(f"Completed full cycle of {len(self.shuffled_bible_facts)} Bible facts - re-shuffling")
+                        self.shuffled_bible_facts = self.bible_facts.copy()
+                        random.shuffle(self.shuffled_bible_facts)
+                        self.bible_facts_index = 0
+
+                # Draw scrolling text
+                self.manager.draw_text(
+                    'medium_bold', int(self.scroll_position), 44,
+                    self.BIBLE_CREAM, current_fact
+                )
+
+                self.manager.swap_canvas()
+                # Load config after drawing (like Spring Training)
+                config = self._load_scroll_config()
+                scroll_delay = get_scroll_delay(config.get('scroll_speed_bible_facts', 5))
+                time.sleep(scroll_delay)
+
+            except KeyboardInterrupt:
+                raise
+            except Exception as e:
+                print(f"Error in Bible facts display: {e}")
+                import traceback
+                traceback.print_exc()
+                time.sleep(1)

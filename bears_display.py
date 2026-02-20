@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import time
+import json
+import os
 import requests
 import pendulum
+from PIL import Image
 from typing import TYPE_CHECKING, Any
 
-from scoreboard_config import Colors, GameConfig, RGBColor
+from scoreboard_config import Colors, GameConfig, RGBColor, get_scroll_delay
 from retry import retry_http_request
 
 if TYPE_CHECKING:
@@ -29,6 +32,35 @@ class BearsDisplay:
         self.BEARS_NAVY: RGBColor = Colors.BEARS_NAVY
         self.BEARS_ORANGE: RGBColor = Colors.BEARS_ORANGE
         self.BEARS_WHITE: RGBColor = Colors.WHITE
+
+        # Pre-generate cached background image for performance
+        self._bears_sweater_bg: Image.Image = self._create_bears_sweater_background()
+
+    def _create_bears_sweater_background(self) -> Image.Image:
+        """Pre-generate Bears sweater header background image for performance"""
+        img = Image.new("RGB", (96, 48), self.BEARS_NAVY)
+        pixels = img.load()
+        # Top orange stripe (3 pixels tall, y=4-6)
+        for y in range(4, 7):
+            for x in range(96):
+                pixels[x, y] = self.BEARS_ORANGE
+        # Bottom orange stripe (3 pixels tall, y=22-24)
+        for y in range(22, 25):
+            for x in range(96):
+                pixels[x, y] = self.BEARS_ORANGE
+        print("Bears sweater background cached")
+        return img
+
+    def _load_scroll_config(self) -> dict:
+        """Load scroll speed settings from config file"""
+        config_path = '/home/pi/config.json'
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"Error loading config for scroll speed: {e}")
+        return {}
 
     def _fetch_live_scores(self, game_id):
         """
@@ -219,21 +251,9 @@ class BearsDisplay:
             return None
 
     def _draw_sweater_header(self):
-        """Draw the classic Bears sweater header with orange stripes"""
-        # Fill entire background with Bears navy
-        for y in range(48):
-            for x in range(96):
-                self.manager.draw_pixel(x, y, *self.BEARS_NAVY)
-
-        # Top orange stripe (3 pixels tall)
-        for y in range(4, 7):
-            for x in range(96):
-                self.manager.draw_pixel(x, y, *self.BEARS_ORANGE)
-
-        # Bottom orange stripe (3 pixels tall)
-        for y in range(22, 25):
-            for x in range(96):
-                self.manager.draw_pixel(x, y, *self.BEARS_ORANGE)
+        """Draw the classic Bears sweater header with orange stripes using cached background"""
+        # Use pre-generated cached background for performance
+        self.manager.canvas.SetImage(self._bears_sweater_bg, 0, 0)
 
         # Draw "CHICAGO BEARS" text in white, centered between stripes
         self.manager.draw_text('small_bold', 9, 19,
@@ -415,22 +435,22 @@ class BearsDisplay:
                 # Draw sweater-style header
                 self._draw_sweater_header()
 
-                # Scroll the message using GameConfig settings for consistency
-                scroll_increment = getattr(GameConfig, 'SCROLL_PIXELS', 2)
-                scroll_position -= scroll_increment
+                # Scroll smoothly 1 pixel at a time (like Spring Training)
+                scroll_position -= 1
                 text_length = len(message) * 9
 
                 if scroll_position + text_length < 0:
                     scroll_position = 96
 
-                # Draw scrolling message below the header
+                # Draw scrolling text
                 self.manager.draw_text('medium_bold', int(scroll_position), 44,
                                        self.BEARS_WHITE, message)
 
                 self.manager.swap_canvas()
-
-                # Use GameConfig SCROLL_SPEED for consistent timing
-                time.sleep(GameConfig.SCROLL_SPEED)
+                # Load config after drawing (like Spring Training)
+                config = self._load_scroll_config()
+                scroll_delay = get_scroll_delay(config.get('scroll_speed_bears', 5))
+                time.sleep(scroll_delay)
 
         except Exception as e:
             print(f"Error displaying Bears game: {e}")

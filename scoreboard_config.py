@@ -132,12 +132,77 @@ class Fonts:
     CHAR_WIDTH_MICRO: int = 4
 
 
+def get_scroll_delay(speed_setting: int) -> float:
+    """Convert scroll speed setting (1-10) to actual delay in seconds.
+
+    Args:
+        speed_setting: Value from 1 (slowest) to 10 (fastest), default 5
+
+    Returns:
+        Delay in seconds between scroll updates
+    """
+    # Clamp value to valid range
+    speed = max(1, min(10, speed_setting))
+    # Map: 1 = 0.05s (50ms, slowest), 10 = 0.01s (10ms, fastest)
+    # Linear interpolation for predictable behavior
+    return 0.05 - (speed - 1) * 0.00444
+
+
+def get_scroll_params(speed_setting: int) -> tuple[float, int]:
+    """Get both scroll delay and pixel increment based on speed setting.
+
+    Due to ~50-60ms frame drawing overhead, we must vary BOTH delay AND
+    pixel increment to achieve noticeable speed differences.
+
+    Args:
+        speed_setting: Value from 1 (slowest) to 10 (fastest), default 5
+
+    Returns:
+        Tuple of (delay_seconds, pixels_per_frame)
+    """
+    speed = max(1, min(10, speed_setting))
+
+    # Speed settings with both delay and pixel increment adjustments
+    # to overcome ~55ms fixed frame drawing overhead
+    #
+    # Effective speed = pixels_per_frame / (delay + ~0.055 overhead)
+    #
+    # Speed 1-2: Very slow, smooth (1 pixel, long delay)
+    # Speed 3-4: Slow (1 pixel, medium delay)
+    # Speed 5-6: Medium (1-2 pixels, short delay)
+    # Speed 7-8: Fast (2 pixels, minimal delay)
+    # Speed 9-10: Very fast (3 pixels, minimal delay)
+
+    if speed <= 2:
+        # Very slow: 1 pixel, 100-80ms delay
+        delay = 0.100 - (speed - 1) * 0.020
+        pixels = 1
+    elif speed <= 4:
+        # Slow: 1 pixel, 60-40ms delay
+        delay = 0.060 - (speed - 3) * 0.020
+        pixels = 1
+    elif speed <= 6:
+        # Medium: 1-2 pixels, 30-20ms delay
+        delay = 0.030 - (speed - 5) * 0.010
+        pixels = 1 if speed == 5 else 2
+    elif speed <= 8:
+        # Fast: 2 pixels, 15-10ms delay
+        delay = 0.015 - (speed - 7) * 0.005
+        pixels = 2
+    else:
+        # Very fast: 3 pixels, 8-5ms delay
+        delay = 0.008 - (speed - 9) * 0.003
+        pixels = 3
+
+    return (delay, pixels)
+
+
 class GameConfig:
     """Game-related configuration"""
     MAX_DAYS_TO_CHECK: int = 14
     GAME_CHECK_DELAY: int = 5  # seconds between game status checks
     NO_GAME_STANDINGS_DISPLAY_TIME: int = 15  # seconds
-    SCROLL_SPEED: float = 0.002  # seconds between scroll updates
+    SCROLL_SPEED: float = 0.002  # seconds between scroll updates (default)
     SCROLL_PIXELS: int = 1  # pixels to move per frame
     GAME_OVER_WAIT_TIME: int = 360  # seconds for doubleheader wait
     ERROR_RETRY_DELAY: int = 10  # seconds
@@ -165,6 +230,8 @@ class GameConfig:
     STOCKS_DISPLAY_DURATION: int = 2
     SPRING_TRAINING_DISPLAY_DURATION: int = 2
     FLIGHT_DISPLAY_DURATION: int = 2
+    BIBLE_DISPLAY_DURATION: int = 3
+    BIBLE_FACTS_DURATION: int = 2
 
     # Flight tracking settings
     FLIGHT_UPDATE_INTERVAL: int = 30  # seconds between API updates

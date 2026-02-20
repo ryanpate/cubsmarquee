@@ -120,10 +120,24 @@ def load_config():
         'enable_cubs_news': True,
         'enable_cubs_facts': True,
         'enable_bible': True,
+        'enable_bible_facts': True,
         'enable_newsmax': True,
         'enable_stocks': True,
         'enable_spring_training': True,
         'enable_flights': True,
+        'scroll_speed_bears': 5,
+        'scroll_speed_bears_news': 5,
+        'scroll_speed_pga': 5,
+        'scroll_speed_pga_news': 5,
+        'scroll_speed_pga_facts': 5,
+        'scroll_speed_cubs_facts': 5,
+        'scroll_speed_cubs_news': 5,
+        'scroll_speed_bible': 5,
+        'scroll_speed_bible_facts': 5,
+        'scroll_speed_newsmax': 5,
+        'scroll_speed_stocks': 5,
+        'scroll_speed_spring_training': 5,
+        'scroll_speed_flights': 5,
         'flight_tracking_latitude': None,
         'flight_tracking_longitude': None,
         'flight_tracking_address': '',
@@ -389,6 +403,64 @@ HTML_TEMPLATE = """
         .button-reboot:hover {
             background: #5a6268;
         }
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 5px;
+            padding: 8px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .speed-control label {
+            min-width: 80px;
+            margin-bottom: 0;
+            font-size: 13px;
+        }
+        .speed-slider {
+            flex: 1;
+            height: 6px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: #ddd;
+            border-radius: 3px;
+            outline: none;
+        }
+        .speed-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #0C2340;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        .speed-slider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            background: #0C2340;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+        .speed-value {
+            min-width: 60px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 12px;
+            color: #0C2340;
+        }
+        .scroll-speeds-section {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        .scroll-speeds-section h4 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #0C2340;
+        }
     </style>
 </head>
 <body>
@@ -517,6 +589,13 @@ HTML_TEMPLATE = """
 
             <div class="form-group">
                 <label>
+                    <input type="checkbox" id="enable_bible_facts">
+                    Enable Bible Facts display
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label>
                     <input type="checkbox" id="enable_newsmax">
                     Enable Newsmax news display
                 </label>
@@ -541,6 +620,89 @@ HTML_TEMPLATE = """
                     <input type="checkbox" id="enable_flights">
                     Enable Flight Tracking display
                 </label>
+            </div>
+
+            <div class="scroll-speeds-section">
+                <h4>Scroll Speed Settings</h4>
+                <p class="help-text" style="margin-bottom: 15px;">Adjust scrolling text speed for each display (1 = slowest, 10 = fastest):</p>
+
+                <div class="speed-control">
+                    <label>Bears:</label>
+                    <input type="range" class="speed-slider" id="scroll_speed_bears" min="1" max="10" value="5">
+                    <span class="speed-value" id="scroll_speed_bears_val">5</span>
+                </div>
+
+                <div class="speed-control">
+                    <label>Bears News:</label>
+                    <input type="range" class="speed-slider" id="scroll_speed_bears_news" min="1" max="10" value="5">
+                    <span class="speed-value" id="scroll_speed_bears_news_val">5</span>
+                </div>
+
+                <div class="speed-control">
+                    <label>PGA:</label>
+                    <input type="range" class="speed-slider" id="scroll_speed_pga" min="1" max="10" value="5">
+                    <span class="speed-value" id="scroll_speed_pga_val">5</span>
+                </div>
+
+                <div class="speed-control">
+                    <label>PGA News:</label>
+                    <input type="range" class="speed-slider" id="scroll_speed_pga_news" min="1" max="10" value="5">
+                    <span class="speed-value" id="scroll_speed_pga_news_val">5</span>
+                </div>
+
+                <div class="speed-control">
+                    <label>PGA Facts:</label>
+                    <input type="range" class="speed-slider" id="scroll_speed_pga_facts" min="1" max="10" value="5">
+                    <span class="speed-value" id="scroll_speed_pga_facts_val">5</span>
+                </div>
+
+                <div class="speed-control">
+                    <label>Cubs Facts:</label>
+                    <input type="range" class="speed-slider" id="scroll_speed_cubs_facts" min="1" max="10" value="5">
+                    <span class="speed-value" id="scroll_speed_cubs_facts_val">5</span>
+                </div>
+
+                <div class="speed-control">
+                    <label>Cubs News:</label>
+                    <input type="range" class="speed-slider" id="scroll_speed_cubs_news" min="1" max="10" value="5">
+                    <span class="speed-value" id="scroll_speed_cubs_news_val">5</span>
+                </div>
+
+                <div class="speed-control">
+                    <label>Bible Verse:</label>
+                    <input type="range" class="speed-slider" id="scroll_speed_bible" min="1" max="10" value="5">
+                    <span class="speed-value" id="scroll_speed_bible_val">5</span>
+                </div>
+
+                <div class="speed-control">
+                    <label>Bible Facts:</label>
+                    <input type="range" class="speed-slider" id="scroll_speed_bible_facts" min="1" max="10" value="5">
+                    <span class="speed-value" id="scroll_speed_bible_facts_val">5</span>
+                </div>
+
+                <div class="speed-control">
+                    <label>Newsmax:</label>
+                    <input type="range" class="speed-slider" id="scroll_speed_newsmax" min="1" max="10" value="5">
+                    <span class="speed-value" id="scroll_speed_newsmax_val">5</span>
+                </div>
+
+                <div class="speed-control">
+                    <label>Stocks:</label>
+                    <input type="range" class="speed-slider" id="scroll_speed_stocks" min="1" max="10" value="5">
+                    <span class="speed-value" id="scroll_speed_stocks_val">5</span>
+                </div>
+
+                <div class="speed-control">
+                    <label>Spring Training:</label>
+                    <input type="range" class="speed-slider" id="scroll_speed_spring_training" min="1" max="10" value="5">
+                    <span class="speed-value" id="scroll_speed_spring_training_val">5</span>
+                </div>
+
+                <div class="speed-control">
+                    <label>Flights:</label>
+                    <input type="range" class="speed-slider" id="scroll_speed_flights" min="1" max="10" value="5">
+                    <span class="speed-value" id="scroll_speed_flights_val">5</span>
+                </div>
             </div>
 
             <h3 style="margin-top: 20px; color: #0C2340;">Flight Tracking Location</h3>
@@ -676,6 +838,7 @@ HTML_TEMPLATE = """
             document.getElementById('enable_cubs_facts').checked = config.enable_cubs_facts !== false;
             document.getElementById('enable_cubs_news').checked = config.enable_cubs_news !== false;
             document.getElementById('enable_bible').checked = config.enable_bible !== false;
+            document.getElementById('enable_bible_facts').checked = config.enable_bible_facts !== false;
             document.getElementById('enable_newsmax').checked = config.enable_newsmax !== false;
             document.getElementById('enable_stocks').checked = config.enable_stocks !== false;
             document.getElementById('enable_spring_training').checked = config.enable_spring_training !== false;
@@ -694,6 +857,29 @@ HTML_TEMPLATE = """
 
             // Load AirLabs API key
             document.getElementById('airlabs_api_key').value = config.airlabs_api_key || '';
+
+            // Load scroll speed settings
+            const speedFields = [
+                'scroll_speed_bears', 'scroll_speed_bears_news',
+                'scroll_speed_pga', 'scroll_speed_pga_news', 'scroll_speed_pga_facts',
+                'scroll_speed_cubs_facts', 'scroll_speed_cubs_news',
+                'scroll_speed_bible', 'scroll_speed_bible_facts',
+                'scroll_speed_newsmax', 'scroll_speed_stocks',
+                'scroll_speed_spring_training', 'scroll_speed_flights'
+            ];
+
+            speedFields.forEach(field => {
+                const slider = document.getElementById(field);
+                const valueDisplay = document.getElementById(field + '_val');
+                const value = config[field] || 5;
+                slider.value = value;
+                valueDisplay.textContent = value;
+
+                // Add event listener to update display value
+                slider.addEventListener('input', function() {
+                    valueDisplay.textContent = this.value;
+                });
+            });
 
             updateServiceStatus();
         };
@@ -852,10 +1038,24 @@ HTML_TEMPLATE = """
                 enable_cubs_facts: document.getElementById('enable_cubs_facts').checked,
                 enable_cubs_news: document.getElementById('enable_cubs_news').checked,
                 enable_bible: document.getElementById('enable_bible').checked,
+                enable_bible_facts: document.getElementById('enable_bible_facts').checked,
                 enable_newsmax: document.getElementById('enable_newsmax').checked,
                 enable_stocks: document.getElementById('enable_stocks').checked,
                 enable_spring_training: document.getElementById('enable_spring_training').checked,
                 enable_flights: document.getElementById('enable_flights').checked,
+                scroll_speed_bears: parseInt(document.getElementById('scroll_speed_bears').value),
+                scroll_speed_bears_news: parseInt(document.getElementById('scroll_speed_bears_news').value),
+                scroll_speed_pga: parseInt(document.getElementById('scroll_speed_pga').value),
+                scroll_speed_pga_news: parseInt(document.getElementById('scroll_speed_pga_news').value),
+                scroll_speed_pga_facts: parseInt(document.getElementById('scroll_speed_pga_facts').value),
+                scroll_speed_cubs_facts: parseInt(document.getElementById('scroll_speed_cubs_facts').value),
+                scroll_speed_cubs_news: parseInt(document.getElementById('scroll_speed_cubs_news').value),
+                scroll_speed_bible: parseInt(document.getElementById('scroll_speed_bible').value),
+                scroll_speed_bible_facts: parseInt(document.getElementById('scroll_speed_bible_facts').value),
+                scroll_speed_newsmax: parseInt(document.getElementById('scroll_speed_newsmax').value),
+                scroll_speed_stocks: parseInt(document.getElementById('scroll_speed_stocks').value),
+                scroll_speed_spring_training: parseInt(document.getElementById('scroll_speed_spring_training').value),
+                scroll_speed_flights: parseInt(document.getElementById('scroll_speed_flights').value),
                 flight_tracking_address: document.getElementById('flight_tracking_address').value,
                 flight_tracking_latitude: latValue ? parseFloat(latValue) : null,
                 flight_tracking_longitude: lonValue ? parseFloat(lonValue) : null,
@@ -1307,10 +1507,24 @@ def save_config_route():
             'enable_cubs_facts': data.get('enable_cubs_facts', True),
             'enable_cubs_news': data.get('enable_cubs_news', True),
             'enable_bible': data.get('enable_bible', True),
+            'enable_bible_facts': data.get('enable_bible_facts', True),
             'enable_newsmax': data.get('enable_newsmax', True),
             'enable_stocks': data.get('enable_stocks', True),
             'enable_spring_training': data.get('enable_spring_training', True),
             'enable_flights': data.get('enable_flights', True),
+            'scroll_speed_bears': data.get('scroll_speed_bears', 5),
+            'scroll_speed_bears_news': data.get('scroll_speed_bears_news', 5),
+            'scroll_speed_pga': data.get('scroll_speed_pga', 5),
+            'scroll_speed_pga_news': data.get('scroll_speed_pga_news', 5),
+            'scroll_speed_pga_facts': data.get('scroll_speed_pga_facts', 5),
+            'scroll_speed_cubs_facts': data.get('scroll_speed_cubs_facts', 5),
+            'scroll_speed_cubs_news': data.get('scroll_speed_cubs_news', 5),
+            'scroll_speed_bible': data.get('scroll_speed_bible', 5),
+            'scroll_speed_bible_facts': data.get('scroll_speed_bible_facts', 5),
+            'scroll_speed_newsmax': data.get('scroll_speed_newsmax', 5),
+            'scroll_speed_stocks': data.get('scroll_speed_stocks', 5),
+            'scroll_speed_spring_training': data.get('scroll_speed_spring_training', 5),
+            'scroll_speed_flights': data.get('scroll_speed_flights', 5),
             'flight_tracking_address': data.get('flight_tracking_address', ''),
             'flight_tracking_latitude': data.get('flight_tracking_latitude'),
             'flight_tracking_longitude': data.get('flight_tracking_longitude'),

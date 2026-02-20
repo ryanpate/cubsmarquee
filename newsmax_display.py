@@ -8,7 +8,8 @@ import feedparser
 from PIL import Image
 from typing import TYPE_CHECKING, Any
 
-from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor
+import json
+from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, get_scroll_delay
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
@@ -34,6 +35,15 @@ class NewsmaxDisplay:
         self.newsmax_news: list[str] | None = None
         self.last_news_update: float | None = None
         self.news_update_interval: int = GameConfig.NEWS_UPDATE_INTERVAL
+
+        # Pre-generate cached background image for performance
+        self._newsmax_bg: Image.Image = self._create_newsmax_background()
+
+    def _create_newsmax_background(self) -> Image.Image:
+        """Pre-generate Newsmax white background image for performance"""
+        img = Image.new("RGB", (DisplayConfig.MATRIX_COLS, DisplayConfig.MATRIX_ROWS), self.NEWSMAX_WHITE)
+        print("Newsmax background cached")
+        return img
 
     def _load_newsmax_logo(self) -> Image.Image | None:
         """Load the Newsmax logo"""
@@ -182,11 +192,9 @@ class NewsmaxDisplay:
         return self.newsmax_news if self.newsmax_news else []
 
     def _draw_newsmax_header(self):
-        """Draw Newsmax header with white background and logo"""
-        # Fill entire background with white
-        for y in range(DisplayConfig.MATRIX_ROWS):
-            for x in range(DisplayConfig.MATRIX_COLS):
-                self.manager.draw_pixel(x, y, *self.NEWSMAX_WHITE)
+        """Draw Newsmax header with white background and logo using cached background"""
+        # Use pre-generated cached background for performance
+        self.manager.canvas.SetImage(self._newsmax_bg, 0, 0)
 
         # Draw Newsmax logo at top if available
         if self.newsmax_logo:
@@ -229,6 +237,17 @@ class NewsmaxDisplay:
         except Exception as e:
             print(f"Error drawing Newsmax logo: {e}")
 
+    def _load_scroll_config(self) -> dict:
+        """Load scroll speed settings from config file"""
+        config_path = '/home/pi/config.json'
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"Error loading config for scroll speed: {e}")
+        return {}
+
     def display_newsmax_news(self, duration: int = 180) -> None:
         """Display scrolling Newsmax news with header"""
         # Fetch live news headlines
@@ -252,10 +271,9 @@ class NewsmaxDisplay:
                 # Get current news headline
                 current_message = live_news[message_index]
 
-                # Scroll the message (smoother with 1px steps)
-                scroll_increment = 1
-                self.scroll_position -= scroll_increment
-                text_length = len(current_message) * 9
+                # Scroll smoothly 1 pixel at a time (like Spring Training)
+                self.scroll_position -= 1
+                text_length = len(current_message) * 10  # large_bold font width
 
                 if self.scroll_position + text_length < 0:
                     self.scroll_position = DisplayConfig.MATRIX_COLS
@@ -269,15 +287,17 @@ class NewsmaxDisplay:
                         if fresh_news:
                             live_news = fresh_news
 
-                # Draw scrolling Newsmax news in blue on white background
-                # Position at bottom of display area
+                # Draw scrolling text
                 self.manager.draw_text(
                     'large_bold', int(self.scroll_position), 44,
                     self.NEWSMAX_BLUE, current_message
                 )
 
                 self.manager.swap_canvas()
-                time.sleep(0.00067)  # 1.5x faster, still smooth with 1px steps
+                # Load config after drawing (like Spring Training)
+                config = self._load_scroll_config()
+                scroll_delay = get_scroll_delay(config.get('scroll_speed_newsmax', 5))
+                time.sleep(scroll_delay)
 
             except KeyboardInterrupt:
                 raise

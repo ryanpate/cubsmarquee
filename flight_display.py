@@ -7,9 +7,10 @@ import requests
 import json
 import os
 import math
+from PIL import Image
 from typing import TYPE_CHECKING, Any
 
-from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor
+from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, get_scroll_delay
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
@@ -54,6 +55,29 @@ class FlightDisplay:
         self.ALTITUDE_MED: RGBColor = Colors.FLIGHT_ALTITUDE_MED
         self.ALTITUDE_LOW: RGBColor = Colors.FLIGHT_ALTITUDE_LOW
 
+        # Pre-generate cached background image for performance
+        self._flight_header_bg: Image.Image = self._create_flight_header_background()
+
+    def _create_flight_header_background(self) -> Image.Image:
+        """Pre-generate flight header background image for performance"""
+        img = Image.new("RGB", (DisplayConfig.MATRIX_COLS, DisplayConfig.MATRIX_ROWS))
+        pixels = img.load()
+        for y in range(DisplayConfig.MATRIX_ROWS):
+            if y < 14:
+                # Header area - dark blue
+                for x in range(DisplayConfig.MATRIX_COLS):
+                    pixels[x, y] = self.FLIGHT_DARK_BLUE
+            else:
+                # Content area - slightly lighter blue
+                for x in range(DisplayConfig.MATRIX_COLS):
+                    pixels[x, y] = (20, 50, 100)
+        # Light blue bar at top (y=0-2) - sky highlight
+        for y in range(3):
+            for x in range(DisplayConfig.MATRIX_COLS):
+                pixels[x, y] = (100, 180, 255)
+        print("Flight header background cached")
+        return img
+
     def _load_config(self) -> None:
         """Load configuration from config file"""
         config_path = '/home/pi/config.json'
@@ -80,6 +104,17 @@ class FlightDisplay:
                         print("AirLabs API key not configured - destinations will show as UNKNOWN")
         except Exception as e:
             print(f"Error loading flight tracking config: {e}")
+
+    def _load_scroll_config(self) -> dict:
+        """Load scroll speed settings from config file"""
+        config_path = '/home/pi/config.json'
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"Error loading config for scroll speed: {e}")
+        return {}
 
     def _load_destination_cache(self) -> None:
         """Load cached destination data from file"""
@@ -500,22 +535,9 @@ class FlightDisplay:
             return self.ALTITUDE_LOW   # Green for low altitude
 
     def _draw_flight_header(self) -> None:
-        """Draw sky gradient header for flight display"""
-        # Sky gradient background - lighter blue at top, darker at bottom
-        for y in range(DisplayConfig.MATRIX_ROWS):
-            if y < 14:
-                # Header area - dark blue
-                for x in range(DisplayConfig.MATRIX_COLS):
-                    self.manager.draw_pixel(x, y, *self.FLIGHT_DARK_BLUE)
-            else:
-                # Content area - slightly lighter blue
-                for x in range(DisplayConfig.MATRIX_COLS):
-                    self.manager.draw_pixel(x, y, 20, 50, 100)
-
-        # Light blue bar at top (y=0-2) - sky highlight
-        for y in range(3):
-            for x in range(DisplayConfig.MATRIX_COLS):
-                self.manager.draw_pixel(x, y, 100, 180, 255)
+        """Draw sky gradient header for flight display using cached background"""
+        # Use pre-generated cached background for performance
+        self.manager.canvas.SetImage(self._flight_header_bg, 0, 0)
 
         # Draw thin white separator line below header
         for x in range(DisplayConfig.MATRIX_COLS):
@@ -548,19 +570,22 @@ class FlightDisplay:
             self.manager.clear_canvas()
             self._draw_flight_header()
 
-            # Scroll the message
-            scroll_increment = getattr(GameConfig, 'SCROLL_PIXELS', 1)
-            scroll_position -= scroll_increment
+            # Scroll smoothly 1 pixel at a time (like Spring Training)
+            scroll_position -= 1
             text_length = len(message) * 5
 
             if scroll_position + text_length < 0:
                 scroll_position = DisplayConfig.MATRIX_COLS
 
+            # Draw scrolling text
             self.manager.draw_text('tiny_bold', int(scroll_position), 32,
                                    self.FLIGHT_WHITE, message)
 
             self.manager.swap_canvas()
-            time.sleep(GameConfig.SCROLL_SPEED)
+            # Load config after drawing (like Spring Training)
+            config = self._load_scroll_config()
+            scroll_delay = get_scroll_delay(config.get('scroll_speed_flights', 5))
+            time.sleep(scroll_delay)
 
     def _display_no_flights(self, duration: int) -> None:
         """Display message when no flights are detected"""

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import time
+import json
 import pendulum
 from PIL import Image
 import os
 from typing import TYPE_CHECKING
 
-from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor
+from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, get_scroll_delay
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
@@ -46,6 +47,17 @@ class SpringTrainingDisplay:
                     print(f"Error loading Spring Training image: {e}")
         print("Spring Training image not found")
         return None
+
+    def _load_scroll_config(self) -> dict:
+        """Load scroll speed settings from config file"""
+        config_path = '/home/pi/config.json'
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"Error loading config for scroll speed: {e}")
+        return {}
 
     def _get_spring_training_date(self) -> pendulum.DateTime:
         """
@@ -172,7 +184,10 @@ class SpringTrainingDisplay:
                 )
 
                 self.manager.swap_canvas()
-                time.sleep(GameConfig.SCROLL_SPEED * 6)  # Slower scroll for countdown
+                # Use configurable scroll speed (Spring Training is intentionally slower)
+                config = self._load_scroll_config()
+                scroll_delay = get_scroll_delay(config.get('scroll_speed_spring_training', 5))
+                time.sleep(scroll_delay)
 
             except KeyboardInterrupt:
                 raise

@@ -12,7 +12,7 @@ import feedparser
 from PIL import Image
 from typing import TYPE_CHECKING, Any
 
-from scoreboard_config import Colors, GameConfig, DisplayConfig, Positions, RGBColor
+from scoreboard_config import Colors, GameConfig, DisplayConfig, Positions, RGBColor, get_scroll_delay
 from retry import retry_http_request
 
 if TYPE_CHECKING:
@@ -57,6 +57,116 @@ class PGADisplay:
         self.PGA_GOLD: RGBColor = Colors.PGA_GOLD
         self.PGA_WHITE: RGBColor = Colors.WHITE
         self.PGA_GREEN: RGBColor = Colors.PGA_GREEN
+
+        # Pre-generate cached background images for performance
+        self._pga_header_bg: Image.Image = self._create_pga_header_background()
+        self._pga_facts_bg: Image.Image = self._create_pga_facts_background()
+        self._pga_content_header_bg: Image.Image = self._create_pga_content_header_background()
+        self._pga_leaderboard_header_overlay: Image.Image = self._create_leaderboard_header_overlay()
+
+    def _create_pga_header_background(self) -> Image.Image:
+        """Pre-generate PGA header background image for performance"""
+        img = Image.new("RGB", (DisplayConfig.MATRIX_COLS, DisplayConfig.MATRIX_ROWS))
+        pixels = img.load()
+        for y in range(DisplayConfig.MATRIX_ROWS):
+            if y < 12:
+                # Header area - dark navy
+                for x in range(DisplayConfig.MATRIX_COLS):
+                    pixels[x, y] = self.PGA_NAVY
+            else:
+                # Content area - golf green gradient
+                green_val = max(60, 120 - y)
+                for x in range(DisplayConfig.MATRIX_COLS):
+                    pixels[x, y] = (20, green_val, 30)
+        # Gold header bar at top (y=0-2)
+        for y in range(3):
+            for x in range(DisplayConfig.MATRIX_COLS):
+                pixels[x, y] = self.PGA_GOLD
+        print("PGA header background cached")
+        return img
+
+    def _create_pga_facts_background(self) -> Image.Image:
+        """Pre-generate PGA facts background image for performance"""
+        img = Image.new("RGB", (DisplayConfig.MATRIX_COLS, DisplayConfig.MATRIX_ROWS))
+        pixels = img.load()
+        for y in range(DisplayConfig.MATRIX_ROWS):
+            # Golf course gradient - lighter green at top, darker at bottom
+            green_val = max(60, 100 - y)
+            for x in range(DisplayConfig.MATRIX_COLS):
+                pixels[x, y] = (15, green_val, 25)
+        # Gold header bar at top (y=0-2)
+        for y in range(3):
+            for x in range(DisplayConfig.MATRIX_COLS):
+                pixels[x, y] = self.PGA_GOLD
+        # Navy header area (y=3-11)
+        for y in range(3, 12):
+            for x in range(DisplayConfig.MATRIX_COLS):
+                pixels[x, y] = self.PGA_NAVY
+        print("PGA facts background cached")
+        return img
+
+    def _create_pga_content_header_background(self) -> Image.Image:
+        """Pre-generate PGA content header background image for performance"""
+        img = Image.new("RGB", (DisplayConfig.MATRIX_COLS, DisplayConfig.MATRIX_ROWS))
+        pixels = img.load()
+        # Golf green gradient
+        for y in range(DisplayConfig.MATRIX_ROWS):
+            green_val = max(50, 100 - y)
+            for x in range(DisplayConfig.MATRIX_COLS):
+                pixels[x, y] = (15, green_val, 25)
+        # Gold bar at top (y=0-2)
+        for y in range(3):
+            for x in range(DisplayConfig.MATRIX_COLS):
+                pixels[x, y] = self.PGA_GOLD
+        # Navy header area (y=3-25)
+        for y in range(3, 26):
+            for x in range(DisplayConfig.MATRIX_COLS):
+                pixels[x, y] = self.PGA_NAVY
+        # Gold separator line at row 25
+        for x in range(DisplayConfig.MATRIX_COLS):
+            pixels[x, 25] = self.PGA_GOLD
+        print("PGA content header background cached")
+        return img
+
+    def _create_leaderboard_header_overlay(self) -> Image.Image:
+        """Pre-generate leaderboard header overlay for masking scrolled text"""
+        # Create image for just the header area (y=0 to y=23)
+        leaderboard_top = 24
+        img = Image.new("RGB", (DisplayConfig.MATRIX_COLS, leaderboard_top))
+        pixels = img.load()
+        for y in range(leaderboard_top):
+            if y < 3:
+                # Gold bar at top
+                for x in range(DisplayConfig.MATRIX_COLS):
+                    pixels[x, y] = self.PGA_GOLD
+            elif y < 12:
+                # Header area - dark navy
+                for x in range(DisplayConfig.MATRIX_COLS):
+                    pixels[x, y] = self.PGA_NAVY
+            else:
+                # Area between header and leaderboard - golf green
+                green_val = max(60, 120 - y)
+                for x in range(DisplayConfig.MATRIX_COLS):
+                    pixels[x, y] = (20, green_val, 30)
+        # White separator line at y=11
+        for x in range(DisplayConfig.MATRIX_COLS):
+            pixels[x, 11] = (100, 100, 100)
+        # Gray separator line at y=22
+        for x in range(DisplayConfig.MATRIX_COLS):
+            pixels[x, 22] = (100, 100, 100)
+        print("PGA leaderboard header overlay cached")
+        return img
+
+    def _load_scroll_config(self) -> dict:
+        """Load scroll speed settings from config file"""
+        config_path = '/home/pi/config.json'
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"Error loading config for scroll speed: {e}")
+        return {}
 
     def _load_pga_logo(self) -> Image.Image | None:
         """Load the PGA golf flag logo"""
@@ -389,8 +499,9 @@ class PGADisplay:
                     # No end date, don't show completed tournament
                     return None
 
-            # For 'pre' state, check if we're within tournament dates or starting soon
+            # For 'pre' state, only show if we're within tournament dates
             # (Day 1 morning before play starts, API may still show 'pre')
+            # Do NOT show 'pre' tournaments that haven't started - they have empty data
             if state == 'pre':
                 start_date_str = event.get('date', '')
                 end_date_str = event.get('endDate', start_date_str)
@@ -399,16 +510,19 @@ class PGADisplay:
                     start_date = pendulum.parse(start_date_str)
                     end_date = pendulum.parse(end_date_str) if end_date_str else start_date
 
-                    # Show leaderboard if:
-                    # 1. Today is within tournament dates, OR
-                    # 2. Tournament starts within 24 hours (covers timezone edge cases)
-                    hours_until_start = (start_date - now).total_hours()
+                    # Only show leaderboard if today is within tournament dates
+                    # (don't show for tournaments that haven't started yet)
                     within_dates = start_date.date() <= now.date() <= end_date.date()
-                    starts_soon = hours_until_start <= 24 and hours_until_start >= -24
 
-                    if within_dates or starts_soon:
-                        print(f"Tournament '{event.get('name')}' starts in {hours_until_start:.1f} hours - showing leaderboard")
+                    if within_dates:
+                        hours_until_start = (start_date - now).total_hours()
+                        print(f"Tournament '{event.get('name')}' - within dates, {hours_until_start:.1f} hours until start - showing leaderboard")
                         return event
+                    else:
+                        # Tournament hasn't started yet - let it show as "upcoming" instead
+                        hours_until_start = (start_date - now).total_hours()
+                        print(f"Tournament '{event.get('name')}' starts in {hours_until_start:.1f} hours - showing as upcoming")
+                        return None
 
             return None
 
@@ -601,25 +715,9 @@ class PGADisplay:
             return None
 
     def _draw_pga_header(self):
-        """Draw unique PGA Tour header with golf course/leaderboard theme"""
-        # Golf course gradient background - dark green at bottom, lighter toward top
-        # This creates a fairway-to-sky effect unique to PGA display
-        for y in range(DisplayConfig.MATRIX_ROWS):
-            # Gradient: lighter green at top (sky), darker green at bottom (fairway)
-            if y < 12:
-                # Header area - dark navy (like a scoreboard)
-                for x in range(DisplayConfig.MATRIX_COLS):
-                    self.manager.draw_pixel(x, y, *self.PGA_NAVY)
-            else:
-                # Content area - golf green gradient
-                green_val = max(60, 120 - y)  # Darker as we go down
-                for x in range(DisplayConfig.MATRIX_COLS):
-                    self.manager.draw_pixel(x, y, 20, green_val, 30)
-
-        # Gold leaderboard-style header bar at top (y=0-2) - distinctive from Bears stripes
-        for y in range(3):
-            for x in range(DisplayConfig.MATRIX_COLS):
-                self.manager.draw_pixel(x, y, *self.PGA_GOLD)
+        """Draw unique PGA Tour header with golf course/leaderboard theme using cached background"""
+        # Use pre-generated cached background for performance
+        self.manager.canvas.SetImage(self._pga_header_bg, 0, 0)
 
         # Draw thin white separator line below header
         for x in range(DisplayConfig.MATRIX_COLS):
@@ -707,6 +805,7 @@ class PGADisplay:
             # Start with first player below screen, end when last player scrolls off top
             max_scroll = total_height + (screen_bottom - leaderboard_top)
             vertical_scroll_offset = 0  # Start at 0, players begin off-screen
+            vertical_scroll_counter = 0  # Counter to slow down vertical scroll
 
             while time.time() - start_time < duration:
                 # Update live scores periodically
@@ -776,36 +875,21 @@ class PGADisplay:
 
                         self.manager.draw_text('tiny', 74, y_pos, score_color, score)
 
-                    # Increment vertical scroll (scrolling upward)
-                    vertical_scroll_offset += 1
+                    # Increment vertical scroll (scrolling upward) - slower than horizontal
+                    vertical_scroll_counter += 1
+                    if vertical_scroll_counter >= 3:  # Only scroll every 3rd frame
+                        vertical_scroll_offset += 1
+                        vertical_scroll_counter = 0
 
                     # Reset scroll when all players have scrolled through
                     if vertical_scroll_offset >= max_scroll:
                         vertical_scroll_offset = 0
 
-                # Redraw header area to mask any leaderboard text that scrolled above
-                # This creates the line-by-line disappearing effect at the top
-                for y in range(leaderboard_top):
-                    if y < 12:
-                        # Header area - dark navy
-                        for x in range(DisplayConfig.MATRIX_COLS):
-                            self.manager.draw_pixel(x, y, *self.PGA_NAVY)
-                    else:
-                        # Area between header and leaderboard - golf green
-                        green_val = max(60, 120 - y)
-                        for x in range(DisplayConfig.MATRIX_COLS):
-                            self.manager.draw_pixel(x, y, 20, green_val, 30)
+                # Redraw header area using cached overlay to mask any leaderboard text that scrolled above
+                # This uses a pre-generated image instead of pixel-by-pixel drawing for performance
+                self.manager.canvas.SetImage(self._pga_leaderboard_header_overlay, 0, 0)
 
-                # Gold bar at top
-                for y in range(3):
-                    for x in range(DisplayConfig.MATRIX_COLS):
-                        self.manager.draw_pixel(x, y, *self.PGA_GOLD)
-
-                # White separator line
-                for x in range(DisplayConfig.MATRIX_COLS):
-                    self.manager.draw_pixel(x, 11, 100, 100, 100)
-
-                # Draw PGA logo
+                # Draw PGA logo on cached header
                 if self.pga_logo:
                     self._draw_logo(2, 3, self.pga_logo)
                     text_x = 20 + (76 - 40) // 2 - 5
@@ -814,10 +898,6 @@ class PGADisplay:
 
                 # "PGA TOUR" text
                 self.manager.draw_text('tiny_bold', text_x - 2, 10, self.PGA_WHITE, 'PGA TOUR')
-
-                # Separator line between title and leaderboard
-                for x in range(DisplayConfig.MATRIX_COLS):
-                    self.manager.draw_pixel(x, 22, 100, 100, 100)
 
                 # Tournament name with day - positioned below header (y=20)
                 # Use period directly if available, otherwise try to extract from status_detail
@@ -842,17 +922,20 @@ class PGADisplay:
 
                 title_width = len(full_title) * 5  # tiny font width
 
-                # Always scroll the title with day info
-                scroll_increment = getattr(GameConfig, 'SCROLL_PIXELS', 1)
-                scroll_position -= scroll_increment
+                # Always scroll the title with day info (1 pixel at a time like Spring Training)
+                scroll_position -= 1
                 if scroll_position + title_width < 0:
                     scroll_position = DisplayConfig.MATRIX_COLS
 
+                # Draw scrolling text
                 self.manager.draw_text('tiny', int(scroll_position), 20,
                                        self.PGA_GOLD, full_title)
 
                 self.manager.swap_canvas()
-                time.sleep(0.12)  # Slower vertical scroll speed
+                # Load config after drawing (like Spring Training)
+                config = self._load_scroll_config()
+                scroll_delay = get_scroll_delay(config.get('scroll_speed_pga', 5))
+                time.sleep(scroll_delay)
 
         except Exception as e:
             print(f"Error displaying PGA tournament: {e}")
@@ -878,19 +961,22 @@ class PGADisplay:
                 self.manager.clear_canvas()
                 self._draw_pga_header()
 
-                scroll_increment = getattr(GameConfig, 'SCROLL_PIXELS', 2)
-                scroll_position -= scroll_increment
+                # Scroll smoothly 1 pixel at a time (like Spring Training)
+                scroll_position -= 1
                 text_length = len(message) * 5
 
                 if scroll_position + text_length < 0:
                     scroll_position = 96
 
-                # Scrolling message in content area
+                # Draw scrolling text
                 self.manager.draw_text('tiny_bold', int(scroll_position), 32,
                                        self.PGA_WHITE, message)
 
                 self.manager.swap_canvas()
-                time.sleep(GameConfig.SCROLL_SPEED)
+                # Load config after drawing (like Spring Training)
+                config = self._load_scroll_config()
+                scroll_delay = get_scroll_delay(config.get('scroll_speed_pga', 5))
+                time.sleep(scroll_delay)
 
     def _display_upcoming_tournament(self, upcoming: dict[str, Any], duration: int):
         """Display upcoming tournament information with unique golf layout"""
@@ -925,12 +1011,12 @@ class PGADisplay:
             name_upper = tournament_name.upper()
             name_width = len(name_upper) * 5
             if name_width > 90:
-                # Scroll long names
-                scroll_increment = getattr(GameConfig, 'SCROLL_PIXELS', 1)
-                scroll_position -= scroll_increment
+                # Scroll long names (1 pixel at a time like Spring Training)
+                scroll_position -= 1
                 if scroll_position + name_width < 0:
                     scroll_position = DisplayConfig.MATRIX_COLS
 
+                # Draw scrolling text
                 self.manager.draw_text('tiny_bold', int(scroll_position), 26,
                                        self.PGA_GOLD, name_upper)
             else:
@@ -976,27 +1062,9 @@ class PGADisplay:
             time.sleep(1)
 
     def _draw_pga_content_header(self, subtitle: str):
-        """Draw header for PGA news or facts page with logo"""
-        # Fill background with golf green gradient
-        for y in range(DisplayConfig.MATRIX_ROWS):
-            # Darker green at bottom, lighter at top
-            green_val = max(50, 100 - y)
-            for x in range(DisplayConfig.MATRIX_COLS):
-                self.manager.draw_pixel(x, y, 15, green_val, 25)
-
-        # Gold bar at top (y=0-2) - matches main PGA header
-        for y in range(3):
-            for x in range(DisplayConfig.MATRIX_COLS):
-                self.manager.draw_pixel(x, y, *self.PGA_GOLD)
-
-        # Navy header area (y=3-25, extended 1 pixel)
-        for y in range(3, 26):
-            for x in range(DisplayConfig.MATRIX_COLS):
-                self.manager.draw_pixel(x, y, *self.PGA_NAVY)
-
-        # Gold separator line at bottom of header
-        for x in range(DisplayConfig.MATRIX_COLS):
-            self.manager.draw_pixel(x, 25, *self.PGA_GOLD)
+        """Draw header for PGA news or facts page with logo using cached background"""
+        # Use pre-generated cached background for performance
+        self.manager.canvas.SetImage(self._pga_content_header_bg, 0, 0)
 
         # Draw golfball logo on left if available (moved 2 pixels left)
         logo_x = 2
@@ -1046,9 +1114,8 @@ class PGADisplay:
                 # Get current news headline
                 current_message = live_news[message_index]
 
-                # Scroll the message
-                scroll_increment = getattr(GameConfig, 'SCROLL_PIXELS', 2)
-                self.scroll_position -= scroll_increment
+                # Scroll smoothly 1 pixel at a time (like Spring Training)
+                self.scroll_position -= 1
                 text_length = len(current_message) * 9
 
                 if self.scroll_position + text_length < 0:
@@ -1063,14 +1130,17 @@ class PGADisplay:
                         if fresh_news:
                             live_news = fresh_news
 
-                # Draw scrolling PGA news below header (y=44 like other news pages)
+                # Draw scrolling text
                 self.manager.draw_text(
                     'medium_bold', int(self.scroll_position), 44,
                     self.PGA_WHITE, current_message
                 )
 
                 self.manager.swap_canvas()
-                time.sleep(GameConfig.SCROLL_SPEED)
+                # Load config after drawing (like Spring Training)
+                config = self._load_scroll_config()
+                scroll_delay = get_scroll_delay(config.get('scroll_speed_pga_news', 5))
+                time.sleep(scroll_delay)
 
             except KeyboardInterrupt:
                 raise
@@ -1095,9 +1165,8 @@ class PGADisplay:
                 # Get current fact from persistent shuffled list
                 current_message = self.shuffled_pga_facts[self.pga_facts_index]
 
-                # Scroll the message
-                scroll_increment = getattr(GameConfig, 'SCROLL_PIXELS', 2)
-                self.scroll_position -= scroll_increment
+                # Scroll smoothly 1 pixel at a time (like Spring Training)
+                self.scroll_position -= 1
                 text_length = len(current_message) * 9
 
                 if self.scroll_position + text_length < 0:
@@ -1112,14 +1181,17 @@ class PGADisplay:
                         random.shuffle(self.shuffled_pga_facts)
                         self.pga_facts_index = 0
 
-                # Draw scrolling PGA facts below header (y=44 like other news pages)
+                # Draw scrolling text
                 self.manager.draw_text(
                     'medium_bold', int(self.scroll_position), 44,
                     self.PGA_WHITE, current_message
                 )
 
                 self.manager.swap_canvas()
-                time.sleep(GameConfig.SCROLL_SPEED)
+                # Load config after drawing (like Spring Training)
+                config = self._load_scroll_config()
+                scroll_delay = get_scroll_delay(config.get('scroll_speed_pga_facts', 5))
+                time.sleep(scroll_delay)
 
             except KeyboardInterrupt:
                 raise

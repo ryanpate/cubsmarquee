@@ -8,7 +8,8 @@ import requests
 from PIL import Image
 from typing import TYPE_CHECKING, Any
 
-from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor
+import json
+from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, get_scroll_delay
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
@@ -45,6 +46,20 @@ class StockDisplay:
             ('^IXIC', 'NASDAQ'),
             ('^RUT', 'RUSS'),
         ]
+
+        # Pre-generate cached background image for performance
+        self._stock_header_bg: Image.Image = self._create_stock_header_background()
+
+    def _create_stock_header_background(self) -> Image.Image:
+        """Pre-generate stock header background image for performance"""
+        img = Image.new("RGB", (DisplayConfig.MATRIX_COLS, DisplayConfig.MATRIX_ROWS), self.BG_COLOR)
+        pixels = img.load()
+        # Draw header bar background (first 18 rows)
+        for y in range(18):
+            for x in range(DisplayConfig.MATRIX_COLS):
+                pixels[x, y] = self.HEADER_BG
+        print("Stock header background cached")
+        return img
 
     def _load_stocks_icon(self) -> Image.Image | None:
         """Load the stocks icon"""
@@ -144,16 +159,9 @@ class StockDisplay:
         return self.stock_data if self.stock_data else []
 
     def _draw_header(self):
-        """Draw clean stock ticker header"""
-        # Fill background with black
-        for y in range(DisplayConfig.MATRIX_ROWS):
-            for x in range(DisplayConfig.MATRIX_COLS):
-                self.manager.draw_pixel(x, y, *self.BG_COLOR)
-
-        # Draw header bar background (extended to include text)
-        for y in range(18):
-            for x in range(DisplayConfig.MATRIX_COLS):
-                self.manager.draw_pixel(x, y, *self.HEADER_BG)
+        """Draw clean stock ticker header using cached background"""
+        # Use pre-generated cached background for performance
+        self.manager.canvas.SetImage(self._stock_header_bg, 0, 0)
 
         # Calculate positions for icon and "Markets" text centered together
         text_width = 7 * 9  # "Markets" = 7 chars * 9 pixels
@@ -175,6 +183,17 @@ class StockDisplay:
         # Draw thin separator line
         for x in range(DisplayConfig.MATRIX_COLS):
             self.manager.draw_pixel(x, 18, 60, 60, 80)
+
+    def _load_scroll_config(self) -> dict:
+        """Load scroll speed settings from config file"""
+        config_path = '/home/pi/config.json'
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"Error loading config for scroll speed: {e}")
+        return {}
 
     def display_stock_ticker(self, duration: int = 180) -> None:
         """Display scrolling stock ticker"""
@@ -200,13 +219,11 @@ class StockDisplay:
                     price = stock['price']
                     change_pct = stock['change_pct']
 
-                    # Format price
                     if price > 1000:
                         price_str = f"{price:,.0f}"
                     else:
                         price_str = f"{price:.2f}"
 
-                    # Determine color based on change
                     if change_pct > 0:
                         color = self.STOCK_GREEN
                         arrow = "+"
@@ -217,21 +234,18 @@ class StockDisplay:
                         color = self.STOCK_YELLOW
                         arrow = ""
 
-                    # Build text for this stock
-                    stock_text = f"{symbol} {price_str} {arrow}{change_pct:.1f}%"
+                    pct_text = f"{arrow}{change_pct:.1f}%"
 
-                    # Draw the stock info
                     self.manager.draw_text('medium_bold', x_pos, 42, self.STOCK_WHITE, symbol)
                     x_pos += len(symbol) * 9 + 4
 
                     self.manager.draw_text('medium_bold', x_pos, 42, self.STOCK_YELLOW, price_str)
                     x_pos += len(price_str) * 9 + 4
 
-                    pct_text = f"{arrow}{change_pct:.1f}%"
                     self.manager.draw_text('medium_bold', x_pos, 42, color, pct_text)
-                    x_pos += len(pct_text) * 9 + 20  # Extra spacing between stocks
+                    x_pos += len(pct_text) * 9 + 20
 
-                # Calculate total width and scroll
+                # Calculate total width and scroll smoothly 1 pixel at a time
                 total_width = x_pos - int(self.scroll_position)
                 self.scroll_position -= 1
 
@@ -244,7 +258,10 @@ class StockDisplay:
                         stocks = [{'symbol': 'DATA', 'price': 0, 'change': 0, 'change_pct': 0}]
 
                 self.manager.swap_canvas()
-                time.sleep(0.00067)
+                # Load config after drawing (like Spring Training)
+                config = self._load_scroll_config()
+                scroll_delay = get_scroll_delay(config.get('scroll_speed_stocks', 5))
+                time.sleep(scroll_delay)
 
             except KeyboardInterrupt:
                 raise
