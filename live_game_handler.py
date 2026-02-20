@@ -61,13 +61,13 @@ class LiveGameHandler:
             # Create base composite image with team logos
             base_image = Image.new("RGB", (96, 48))
 
-            # Add team logos
+            # Add team logos (resized to 15x15 to fit score boxes)
             cubs_image_pos = (1, 0)
             opp_image_pos = (1, 17)
-            base_image.paste(
-                self.manager.game_images['cubs'], cubs_image_pos)
-            base_image.paste(
-                self.manager.game_images['opponent'], opp_image_pos)
+            cubs_logo = self.manager.game_images['cubs'].resize((15, 15))
+            opp_logo = self.manager.game_images['opponent'].resize((15, 15))
+            base_image.paste(cubs_logo, cubs_image_pos)
+            base_image.paste(opp_logo, opp_image_pos)
 
             # Draw the base composite to get pixel buffer
             self.manager.canvas.SetImage(base_image.convert("RGB"), 0, 0)
