@@ -59,6 +59,13 @@ class SpringTrainingDisplay:
             print(f"Error loading config for scroll speed: {e}")
         return {}
 
+    def is_spring_training_active(self) -> bool:
+        """Check if Spring Training is currently underway (Feb 21 - Mar 31)."""
+        now = pendulum.now('America/Chicago')
+        start = pendulum.datetime(now.year, 2, 21, tz='America/Chicago')
+        end = pendulum.datetime(now.year, 3, 31, tz='America/Chicago')
+        return start <= now <= end
+
     def _get_spring_training_date(self) -> pendulum.DateTime:
         """
         Get the Spring Training start date for the current/upcoming year.

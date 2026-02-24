@@ -113,8 +113,8 @@ class GameStateHandler:
 
             self.manager.swap_canvas()
 
-            # Use consistent scroll speed
-            time.sleep(GameConfig.SCROLL_SPEED)
+            # Use slower scroll speed for warmup readability
+            time.sleep(0.03)
 
             # Exit if in split-squad mode and it's time to switch games
             if self.manager.split_squad_indicator:

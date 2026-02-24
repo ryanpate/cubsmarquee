@@ -701,9 +701,9 @@ class OffSeasonHandler:
         else:
             print("Skipping Cubs facts/custom message (disabled in config)")
 
-        # Display Spring Training countdown if enabled
+        # Display Spring Training countdown if enabled and ST hasn't started yet
         spring_training_enabled = self.config.get('enable_spring_training', True)
-        if spring_training_enabled:
+        if spring_training_enabled and not self.spring_training_display.is_spring_training_active():
             print("Displaying Spring Training countdown...")
             try:
                 self.spring_training_display.display_spring_training_countdown(
@@ -714,6 +714,8 @@ class OffSeasonHandler:
                 print(f"Error in Spring Training countdown: {e}")
                 import traceback
                 traceback.print_exc()
+        elif spring_training_enabled:
+            print("Skipping Spring Training countdown (Spring Training is active)")
         else:
             print("Skipping Spring Training countdown (disabled in config)")
 

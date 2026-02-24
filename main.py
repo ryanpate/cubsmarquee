@@ -59,6 +59,9 @@ class CubsScoreboard:
             self.off_season_handler: OffSeasonHandler = OffSeasonHandler(self.manager)
             logger.info("Off-season handler initialized")
 
+            # Give live handler access to off-season content for post-game cycling
+            self.live_handler.off_season_handler = self.off_season_handler
+
             self.current_game_index: int = 0
 
             # Split-squad game tracking
