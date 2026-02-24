@@ -10,6 +10,9 @@ from typing import TYPE_CHECKING, Any
 
 from scoreboard_config import Colors, Positions, GameConfig, TeamConfig, DisplayConfig
 from retry import retry_api_call
+from logger import get_logger
+
+logger = get_logger("live_game")
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
@@ -461,7 +464,8 @@ class LiveGameHandler:
             self.manager.swap_canvas()
 
     def display_game_over(self, game_data, game_index, gameid):
-        """Display game over screen - Cubs always on left, opponent always on right"""
+        """Display game over screen - Cubs always on left, opponent always on right.
+        Cycles between game-over display and off-season content rotation."""
         game_info = retry_api_call(statsapi.get, 'game', {'gamePk': gameid})
         boxscore = game_info['liveData']['boxscore']['teams']
         linescore = game_info['liveData']['linescore']
@@ -499,11 +503,11 @@ class LiveGameHandler:
             # Create blue background image
             output_image = Image.new("RGB", (96, 48), (0, 51, 102))
 
-            # Resize and paste team logos onto blue background
-            cubs_resized = self.manager.game_images['cubs'].resize((26, 26))
-            opp_resized = self.manager.game_images['opponent'].resize((26, 26))
-            output_image.paste(cubs_resized, Positions.CUBS_IMAGE_GAMEOVER)
-            output_image.paste(opp_resized, Positions.OPP_IMAGE_GAMEOVER)
+            # Resize and paste team logos onto blue background (use alpha mask for transparency)
+            cubs_resized = self.manager.game_images['cubs'].resize((26, 26)).convert('RGBA')
+            opp_resized = self.manager.game_images['opponent'].resize((26, 26)).convert('RGBA')
+            output_image.paste(cubs_resized, Positions.CUBS_IMAGE_GAMEOVER, cubs_resized)
+            output_image.paste(opp_resized, Positions.OPP_IMAGE_GAMEOVER, opp_resized)
 
             # Set the image with blue background
             self.manager.canvas.SetImage(output_image.convert("RGB"), 0, 0)
@@ -554,7 +558,7 @@ class LiveGameHandler:
         def display_w_flag_cycle():
             try:
                 # Load the W flag GIF
-                w_flag = Image.open('./logos/W.gif')
+                w_flag = Image.open('./W.gif')
 
                 # Get all frames from the GIF
                 frames = []
@@ -636,3 +640,17 @@ class LiveGameHandler:
                 # If flag failed to load, just continue with game over screen only
                 if not flag_success:
                     cubs_won = False  # Don't try to show flag again
+
+            # Cycle through off-season content (weather, Bears, PGA, etc.)
+            has_handler = getattr(self, 'off_season_handler', None) is not None
+            logger.info(f"Game over loop: has off_season_handler={has_handler}, cubs_won={cubs_won}")
+            if has_handler:
+                try:
+                    logger.info("Starting off-season rotation cycle from game-over screen")
+                    self.off_season_handler._display_rotation_cycle()
+                    logger.info("Off-season rotation cycle completed, returning to game-over")
+                except Exception as e:
+                    logger.error(f"Error in post-game rotation cycle: {e}")
+                    import traceback
+                    logger.debug(traceback.format_exc())
+                    time.sleep(10)
