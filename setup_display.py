@@ -3,8 +3,17 @@ from __future__ import annotations
 
 import os
 import subprocess
+import time
+from typing import TYPE_CHECKING
+
+from PIL import Image, ImageDraw, ImageFont
 
 from logger import get_logger
+from scoreboard_config import Colors, DisplayConfig
+
+if TYPE_CHECKING:
+    from scoreboard_manager import ScoreboardManager
+
 
 logger = get_logger("setup_display")
 
@@ -30,17 +39,6 @@ def needs_setup() -> bool:
     except Exception as e:
         logger.warning("iwgetid check failed, assuming setup needed: %s", e)
         return True
-
-
-import time
-from typing import TYPE_CHECKING
-
-from PIL import Image, ImageDraw, ImageFont
-
-from scoreboard_config import Colors, DisplayConfig
-
-if TYPE_CHECKING:
-    from scoreboard_manager import ScoreboardManager
 
 
 def is_shutdown_requested() -> bool:
@@ -111,6 +109,6 @@ class SetupDisplay:
                 last_check = now
 
             img = self._render_frame()
-            self.manager.matrix.SetImage(img)
-            self.manager.matrix.SwapOnVSync(self.manager.matrix)
+            self.manager.canvas.SetImage(img)
+            self.manager.canvas = self.manager.matrix.SwapOnVSync(self.manager.canvas)
             time.sleep(0.03)
