@@ -15,6 +15,7 @@ from game_state_handler import GameStateHandler
 from live_game_handler import LiveGameHandler
 from off_season_handler import OffSeasonHandler
 from scoreboard_config import GameConfig, TeamConfig
+from setup_display import SetupDisplay, needs_setup
 from logger import setup_logging, get_logger
 from config_validator import validate_config_on_startup
 
@@ -88,6 +89,16 @@ class CubsScoreboard:
             logger.info("Display cleared and ready")
         except Exception as e:
             logger.warning(f"Could not clear display at startup: {e}")
+
+        # Show setup display if unit is unconfigured (first boot, missing config, or no WiFi)
+        if needs_setup():
+            logger.info("Unit unconfigured - showing setup display")
+            try:
+                SetupDisplay(self.manager).run_until_configured()
+            except Exception as e:
+                logger.error(f"SetupDisplay failed: {e}")
+            if is_shutdown_requested():
+                return
 
         # Wait a moment for system to stabilize
         time.sleep(2)
