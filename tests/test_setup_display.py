@@ -38,3 +38,34 @@ class TestNeedsSetup:
         with patch("setup_display.CONFIG_PATH", str(cfg)):
             with patch("setup_display.subprocess.run", side_effect=FileNotFoundError):
                 assert needs_setup() is True
+
+
+class TestSetupDisplayRunLoop:
+    def test_run_until_configured_exits_when_setup_complete(self):
+        from setup_display import SetupDisplay
+
+        mock_manager = MagicMock()
+        display = SetupDisplay(mock_manager, poll_interval=0.01)
+
+        call_count = {"n": 0}
+
+        def fake_needs_setup():
+            call_count["n"] += 1
+            return call_count["n"] < 3
+
+        with patch("setup_display.needs_setup", side_effect=fake_needs_setup):
+            with patch("setup_display.is_shutdown_requested", return_value=False):
+                display.run_until_configured()
+
+        assert call_count["n"] >= 3
+        assert mock_manager.matrix.SwapOnVSync.called
+
+    def test_run_until_configured_exits_on_shutdown(self):
+        from setup_display import SetupDisplay
+
+        mock_manager = MagicMock()
+        display = SetupDisplay(mock_manager, poll_interval=0.01)
+
+        with patch("setup_display.needs_setup", return_value=True):
+            with patch("setup_display.is_shutdown_requested", return_value=True):
+                display.run_until_configured()
