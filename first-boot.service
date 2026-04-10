@@ -1,0 +1,16 @@
+[Unit]
+Description=Cubs Marquee first-boot identity reset
+DefaultDependencies=no
+After=local-fs.target
+Before=cubs-scoreboard.service wifi-manager.service network-pre.target
+ConditionPathExists=!/home/pi/.first-boot-complete
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/first_boot.sh
+RemainAfterExit=no
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
