@@ -27,6 +27,7 @@ class TestNeedsSetup:
         cfg.write_text("{}")
         with patch("setup_display.CONFIG_PATH", str(cfg)):
             mock_result = MagicMock()
+            mock_result.returncode = 0
             mock_result.stdout = "MyHomeWiFi\n"
             with patch("setup_display.subprocess.run", return_value=mock_result):
                 assert needs_setup() is False

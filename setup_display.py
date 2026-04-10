@@ -4,6 +4,10 @@ from __future__ import annotations
 import os
 import subprocess
 
+from logger import get_logger
+
+logger = get_logger("setup_display")
+
 CONFIG_PATH = "/home/pi/config.json"
 
 
@@ -22,6 +26,7 @@ def needs_setup() -> bool:
             text=True,
             timeout=5,
         )
-        return not result.stdout.strip()
-    except Exception:
+        return result.returncode != 0 or not result.stdout.strip()
+    except Exception as e:
+        logger.warning("iwgetid check failed, assuming setup needed: %s", e)
         return True
