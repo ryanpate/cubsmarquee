@@ -236,7 +236,12 @@ class GameConfig:
     # Flight tracking settings
     FLIGHT_UPDATE_INTERVAL: int = 30  # seconds between API updates
     FLIGHT_BOUNDING_BOX_SIZE: float = 0.125  # degrees lat/long around center point (~7-8 mile radius)
-    ADSB_RECEIVER_URL: str = 'http://piaware.local/skyaware/data/aircraft.json'
+    # Empty ADSB_RECEIVER_URL means "use adsb.lol public API". Set to a local readsb/PiAware URL
+    # (e.g. http://piaware.local/skyaware/data/aircraft.json) to use a local receiver instead.
+    ADSB_RECEIVER_URL: str = ''
+    ADSB_LOL_BASE_URL: str = 'https://api.adsb.lol'
+    ROUTE_CACHE_DB_PATH: str = '/home/pi/flight_routes.db'
+    ROUTE_CACHE_TTL_HOURS: int = 24
     FLIGHT_MAX_RANGE_NM: int = 50  # nautical miles max range for local receiver
     FLIGHT_REFRESH_INTERVAL: int = 30  # seconds between data refreshes during display
 
