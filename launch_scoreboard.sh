@@ -46,20 +46,34 @@ rotate_logs() {
     echo "Log rotation complete."
 }
 
-# Cleanup function to kill Python process on exit
-cleanup() {
-    echo "Cleanup: Stopping scoreboard processes..."
-    if [ -n "$PYTHON_PID" ]; then
-        sudo kill $PYTHON_PID 2>/dev/null
-        wait $PYTHON_PID 2>/dev/null
+# Aggressively kill any existing scoreboard Python processes before
+# starting a new one. Handles the case where a prior systemctl stop
+# did not cleanly terminate the old instance (e.g., because it escaped
+# the cgroup via sudo / rgbmatrix's privilege drop to daemon).
+kill_existing_scoreboard() {
+    local attempts=0
+    while pgrep -f "python.*main\.py" >/dev/null 2>&1; do
+        if [ $attempts -eq 0 ]; then
+            echo "Found existing scoreboard processes - sending SIGTERM..."
+            sudo pkill -TERM -f "python.*main\.py" 2>/dev/null
+        elif [ $attempts -eq 3 ]; then
+            echo "Scoreboard still running after SIGTERM - sending SIGKILL..."
+            sudo pkill -KILL -f "python.*main\.py" 2>/dev/null
+        fi
+        attempts=$((attempts + 1))
+        if [ $attempts -gt 10 ]; then
+            echo "ERROR: failed to clear existing scoreboard processes"
+            return 1
+        fi
+        sleep 1
+    done
+    if [ $attempts -gt 0 ]; then
+        echo "Existing scoreboard processes cleared after $attempts attempt(s)"
     fi
-    # Also kill any remaining scoreboard Python processes
-    sudo pkill -f "python.*main.py" 2>/dev/null
-    echo "Cleanup complete"
 }
 
-# Set up trap to catch termination signals
-trap cleanup SIGTERM SIGINT EXIT
+# Kill any existing scoreboard processes before starting a new one
+kill_existing_scoreboard
 
 # Rotate old logs before starting
 rotate_logs
@@ -155,17 +169,11 @@ else
     echo "⚠ Warning: Could not set Python capabilities (will still work with sudo)" | tee -a "$LOG_FILE"
 fi
 
-# Launch the scoreboard with proper permissions for GPIO access
+# Launch the scoreboard with proper permissions for GPIO access.
+# Use exec so the shell is REPLACED by the sudo/python process — this
+# keeps a single process in the systemd cgroup, so SIGTERM from
+# `systemctl stop` reaches main.py directly and the signal handler can
+# shut down gracefully. No more backgrounded-process escape from the
+# cgroup.
 echo "Launching scoreboard application..." | tee -a "$LOG_FILE"
-
-# Run Python in background and capture PID
-sudo -E "$PYTHON_PATH" main.py >> "$LOG_FILE" 2>> "$ERROR_LOG" &
-PYTHON_PID=$!
-
-echo "Scoreboard running with PID: $PYTHON_PID" | tee -a "$LOG_FILE"
-
-# Wait for the Python process to finish (or be killed)
-wait $PYTHON_PID
-
-# If the scoreboard exits, log the event and rotate logs
-echo "Scoreboard exited at $(date)" | tee -a "$LOG_FILE"
+exec sudo -E "$PYTHON_PATH" main.py >> "$LOG_FILE" 2>> "$ERROR_LOG"

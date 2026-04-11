@@ -31,13 +31,15 @@ StandardError=journal
 # Give the service time to startup
 TimeoutStartSec=120
 
-# FIXED: Kill all processes in the service's control group
-# This ensures child processes (like the Python script) are also stopped
-KillMode=control-group
+# Kill mode: SIGTERM to the main process, then SIGKILL to any remaining
+# cgroup members after TimeoutStopSec. More reliable than control-group
+# for our sudo -> python privilege-drop chain.
+KillMode=mixed
 KillSignal=SIGTERM
+SendSIGKILL=yes
 
-# Give processes time to clean up before force killing
-TimeoutStopSec=30
+# Short stop timeout so stubborn processes get force-killed quickly
+TimeoutStopSec=10
 
 [Install]
 WantedBy=multi-user.target
