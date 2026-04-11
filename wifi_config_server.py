@@ -126,6 +126,7 @@ def load_config():
         'enable_spring_training': True,
         'enable_flights': True,
         'enable_flight_radar': True,
+        'flights_between_displays': False,
         'scroll_speed_bears': 5,
         'scroll_speed_bears_news': 5,
         'scroll_speed_pga': 5,
@@ -634,6 +635,13 @@ HTML_TEMPLATE = """
                 </label>
             </div>
 
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="flights_between_displays">
+                    Show flight display between every screen (~45s interstitial)
+                </label>
+            </div>
+
             <div class="scroll-speeds-section">
                 <h4>Scroll Speed Settings</h4>
                 <p class="help-text" style="margin-bottom: 15px;">Adjust scrolling text speed for each display (1 = slowest, 10 = fastest):</p>
@@ -890,6 +898,7 @@ HTML_TEMPLATE = """
             document.getElementById('enable_spring_training').checked = config.enable_spring_training !== false;
             document.getElementById('enable_flights').checked = config.enable_flights !== false;
             document.getElementById('enable_flight_radar').checked = config.enable_flight_radar !== false;
+            document.getElementById('flights_between_displays').checked = config.flights_between_displays === true;
 
             // Load flight tracking location
             document.getElementById('flight_tracking_address').value = config.flight_tracking_address || '';
@@ -1106,6 +1115,7 @@ HTML_TEMPLATE = """
                 enable_spring_training: document.getElementById('enable_spring_training').checked,
                 enable_flights: document.getElementById('enable_flights').checked,
                 enable_flight_radar: document.getElementById('enable_flight_radar').checked,
+                flights_between_displays: document.getElementById('flights_between_displays').checked,
                 scroll_speed_bears: parseInt(document.getElementById('scroll_speed_bears').value),
                 scroll_speed_bears_news: parseInt(document.getElementById('scroll_speed_bears_news').value),
                 scroll_speed_pga: parseInt(document.getElementById('scroll_speed_pga').value),
@@ -1579,6 +1589,7 @@ def save_config_route():
             'enable_spring_training': data.get('enable_spring_training', True),
             'enable_flights': data.get('enable_flights', True),
             'enable_flight_radar': data.get('enable_flight_radar', True),
+            'flights_between_displays': data.get('flights_between_displays', False),
             'scroll_speed_bears': data.get('scroll_speed_bears', 5),
             'scroll_speed_bears_news': data.get('scroll_speed_bears_news', 5),
             'scroll_speed_pga': data.get('scroll_speed_pga', 5),

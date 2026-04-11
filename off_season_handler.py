@@ -162,10 +162,14 @@ class OffSeasonHandler:
             'enable_stocks': True,  # Enable/disable Stock Exchange ticker
             'enable_spring_training': True,  # Enable/disable Spring Training countdown
             'enable_flights': True,  # Enable/disable Flight Tracking display
+            'enable_flight_radar': True,  # Enable/disable radar scope view
+            'flights_between_displays': False,  # Show flight interstitial between every rotation segment
             'flight_tracking_latitude': None,  # Latitude for flight tracking center
             'flight_tracking_longitude': None,  # Longitude for flight tracking center
             'flight_tracking_address': '',  # Address for flight tracking location
-            'airlabs_api_key': ''  # AirLabs API key for flight destinations
+            'airlabs_api_key': '',  # AirLabs API key for flight destinations (optional)
+            'adsb_receiver_url': GameConfig.ADSB_RECEIVER_URL,  # Local ADS-B receiver URL
+            'flight_max_range_nm': GameConfig.FLIGHT_MAX_RANGE_NM  # Max range in nautical miles
         }
 
         try:
@@ -514,8 +518,11 @@ class OffSeasonHandler:
                 else:  # auto mode
                     self._display_rotation_cycle()
 
+                # Skip season check when user has forced no-games mode
+                if display_mode == 'no_games':
+                    print("Display mode 'no_games' - skipping season check")
                 # Only check if season has started once per day
-                if self._should_check_season():
+                elif self._should_check_season():
                     print("Checking for new season (24hr check)...")
 
                     if self._check_season_started():
@@ -573,9 +580,35 @@ class OffSeasonHandler:
             self.last_season_check = time.time()
             return False
 
-    def _display_rotation_cycle(self):
-        """Rotate between different content types"""
+    def _display_rotation_cycle(self, between_callback=None):
+        """Rotate between different content types.
+
+        If between_callback is provided, it's called after each segment.
+        When it returns True, the rotation exits early.
+        """
         print("=== Starting rotation cycle ===")
+
+        # If the user enabled "flights between every screen", show a brief
+        # flight interstitial between each rotation segment (in addition to
+        # the normal flight slot at the end of the cycle).
+        flights_between = self.config.get('flights_between_displays', False)
+        flights_enabled = self.config.get('enable_flights', True)
+        flight_interstitial_sec = 45
+
+        def _tick():
+            """Run the between-segment interstitial (if enabled) and
+            optionally invoke the external between_callback. Returns True
+            to abort the rotation."""
+            if flights_between and flights_enabled:
+                try:
+                    self.flight_display.display_flight_info(
+                        duration=flight_interstitial_sec
+                    )
+                except Exception as e:
+                    print(f"Flight interstitial error: {e}")
+            if between_callback is not None:
+                return bool(between_callback())
+            return False
 
         # Display Bears info if it's football season and enabled
         bears_enabled = self.config.get('enable_bears', True)
@@ -596,6 +629,9 @@ class OffSeasonHandler:
             else:
                 print("Skipping Bears display (disabled in config)")
 
+        if _tick():
+            return
+
         # Display weather (between Bears schedule and Bears news)
         weather_enabled = self.config.get('enable_weather', True)
         if weather_enabled:
@@ -612,6 +648,9 @@ class OffSeasonHandler:
         else:
             print("Skipping weather display (disabled in config)")
 
+        if _tick():
+            return
+
         # Display Bears breaking news if enabled
         bears_news_enabled = self.config.get('enable_bears_news', True)
         if bears_news_enabled:
@@ -627,6 +666,9 @@ class OffSeasonHandler:
                 traceback.print_exc()
         else:
             print("Skipping Bears news (disabled in config)")
+
+        if _tick():
+            return
 
         # Display PGA Tour info if it's golf season and enabled
         pga_enabled = self.config.get('enable_pga', True)
@@ -647,6 +689,9 @@ class OffSeasonHandler:
             else:
                 print("Skipping PGA display (disabled in config)")
 
+        if _tick():
+            return
+
         # Display PGA Tour news if it's golf season and enabled
         pga_news_enabled = self.config.get('enable_pga_news', True)
         if self._is_golf_season() and pga_news_enabled:
@@ -665,6 +710,9 @@ class OffSeasonHandler:
                 print("Skipping PGA news (not golf season)")
             else:
                 print("Skipping PGA news (disabled in config)")
+
+        if _tick():
+            return
 
         # Display PGA Tour facts if it's golf season and enabled
         pga_facts_enabled = self.config.get('enable_pga_facts', True)
@@ -685,6 +733,9 @@ class OffSeasonHandler:
             else:
                 print("Skipping PGA facts (disabled in config)")
 
+        if _tick():
+            return
+
         # Display custom message with Cubs facts
         cubs_facts_enabled = self.config.get('enable_cubs_facts', True)
         if cubs_facts_enabled:
@@ -700,6 +751,9 @@ class OffSeasonHandler:
                 traceback.print_exc()
         else:
             print("Skipping Cubs facts/custom message (disabled in config)")
+
+        if _tick():
+            return
 
         # Display Spring Training countdown if enabled and ST hasn't started yet
         spring_training_enabled = self.config.get('enable_spring_training', True)
@@ -719,6 +773,9 @@ class OffSeasonHandler:
         else:
             print("Skipping Spring Training countdown (disabled in config)")
 
+        if _tick():
+            return
+
         # Display weather (between Cubs facts and Cubs news)
         if weather_enabled:
             print("Displaying weather...")
@@ -733,6 +790,9 @@ class OffSeasonHandler:
                 traceback.print_exc()
         else:
             print("Skipping weather display (disabled in config)")
+
+        if _tick():
+            return
 
         # Display Cubs breaking news if enabled
         cubs_news_enabled = self.config.get('enable_cubs_news', True)
@@ -750,6 +810,9 @@ class OffSeasonHandler:
         else:
             print("Skipping Cubs news (disabled in config)")
 
+        if _tick():
+            return
+
         # Display Bible Verse of the Day if enabled
         bible_enabled = self.config.get('enable_bible', True)
         if bible_enabled:
@@ -765,6 +828,9 @@ class OffSeasonHandler:
                 traceback.print_exc()
         else:
             print("Skipping Bible verse (disabled in config)")
+
+        if _tick():
+            return
 
         # Display Bible Facts if enabled
         bible_facts_enabled = self.config.get('enable_bible_facts', True)
@@ -782,6 +848,9 @@ class OffSeasonHandler:
         else:
             print("Skipping Bible facts (disabled in config)")
 
+        if _tick():
+            return
+
         # Display Newsmax news if enabled
         newsmax_enabled = self.config.get('enable_newsmax', True)
         if newsmax_enabled:
@@ -797,6 +866,9 @@ class OffSeasonHandler:
                 traceback.print_exc()
         else:
             print("Skipping Newsmax news (disabled in config)")
+
+        if _tick():
+            return
 
         # Display Stock Exchange ticker if enabled
         stocks_enabled = self.config.get('enable_stocks', True)
@@ -814,6 +886,9 @@ class OffSeasonHandler:
         else:
             print("Skipping Stock ticker (disabled in config)")
 
+        if _tick():
+            return
+
         # Display Flight Tracking if enabled
         flights_enabled = self.config.get('enable_flights', True)
         if flights_enabled:
@@ -829,6 +904,9 @@ class OffSeasonHandler:
                 traceback.print_exc()
         else:
             print("Skipping Flight tracking (disabled in config)")
+
+        if _tick():
+            return
 
         print("=== Rotation cycle complete ===")
 
