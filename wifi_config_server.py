@@ -125,6 +125,7 @@ def load_config():
         'enable_stocks': True,
         'enable_spring_training': True,
         'enable_flights': True,
+        'enable_flight_radar': True,
         'scroll_speed_bears': 5,
         'scroll_speed_bears_news': 5,
         'scroll_speed_pga': 5,
@@ -141,6 +142,8 @@ def load_config():
         'flight_tracking_latitude': None,
         'flight_tracking_longitude': None,
         'flight_tracking_address': '',
+        'adsb_receiver_url': '',
+        'flight_max_range_nm': 50,
         'airlabs_api_key': ''
     }
 
@@ -517,7 +520,8 @@ HTML_TEMPLATE = """
                 <select id="display_mode">
                     <option value="auto">Automatic (Games during season, off-season content otherwise)</option>
                     <option value="game">Always show game (if available)</option>
-                    <option value="offseason">Always show off-season content</option>
+                    <option value="offseason">Game schedule + off-season content rotation</option>
+                    <option value="no_games">Off-season content only (never interrupt with game info)</option>
                 </select>
             </div>
 
@@ -622,6 +626,13 @@ HTML_TEMPLATE = """
                 </label>
             </div>
 
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="enable_flight_radar">
+                    Enable Flight Radar View (full-screen radar scope)
+                </label>
+            </div>
+
             <div class="scroll-speeds-section">
                 <h4>Scroll Speed Settings</h4>
                 <p class="help-text" style="margin-bottom: 15px;">Adjust scrolling text speed for each display (1 = slowest, 10 = fastest):</p>
@@ -706,29 +717,54 @@ HTML_TEMPLATE = """
             </div>
 
             <h3 style="margin-top: 20px; color: #0C2340;">Flight Tracking Location</h3>
-            <p class="help-text" style="margin-bottom: 15px;">Set your location to track flights overhead (uses OpenSky Network API):</p>
+            <p class="help-text" style="margin-bottom: 15px;">Set your location to track flights overhead. Enter coordinates directly or use address lookup:</p>
 
             <div class="form-group">
-                <label for="flight_tracking_address">Location Address:</label>
-                <input type="text" id="flight_tracking_address" placeholder="e.g., Chicago, IL or 1060 W Addison St, Chicago">
-                <div class="help-text">Enter a city, state or full address</div>
+                <label for="flight_tracking_latitude">Latitude:</label>
+                <input type="text" id="flight_tracking_latitude" placeholder="e.g., 39.7500" style="width: 200px;">
             </div>
 
-            <button type="button" onclick="geocodeAddress()" class="button-secondary" style="margin-bottom: 15px;">Calculate Coordinates</button>
-
             <div class="form-group">
-                <label>Calculated Coordinates:</label>
-                <div class="info-box" id="coordinates-display">
-                    <span id="coords-text">Not configured</span>
+                <label for="flight_tracking_longitude">Longitude:</label>
+                <input type="text" id="flight_tracking_longitude" placeholder="e.g., -89.6653" style="width: 200px;">
+                <div class="help-text">Enter decimal coordinates directly, or use address lookup below to auto-fill</div>
+            </div>
+
+            <div class="form-group" style="margin-top: 10px; padding: 10px; background: #f0f4f8; border-radius: 8px;">
+                <label for="flight_tracking_address">Address Lookup (optional):</label>
+                <input type="text" id="flight_tracking_address" placeholder="e.g., Rochester, IL">
+                <div class="help-text">Enter a city/state or full address, then click Calculate to auto-fill lat/lon above</div>
+                <button type="button" onclick="geocodeAddress()" class="button-secondary" style="margin-top: 8px;">Calculate Coordinates</button>
+                <div id="coordinates-display" style="margin-top: 5px;">
+                    <span id="coords-text" class="help-text"></span>
                 </div>
-                <input type="hidden" id="flight_tracking_latitude">
-                <input type="hidden" id="flight_tracking_longitude">
+            </div>
+
+            <details style="margin-top: 15px; padding: 10px; background: #f5f5f5; border-radius: 5px;">
+                <summary style="cursor: pointer; font-weight: bold; color: #0C2340;">Advanced: Local ADS-B Receiver</summary>
+                <div class="form-group" style="margin-top: 10px;">
+                    <label for="adsb_receiver_url">Local Receiver URL:</label>
+                    <input type="text" id="adsb_receiver_url"
+                           placeholder="Leave blank to use adsb.lol (recommended)"
+                           value="{{ config.adsb_receiver_url }}">
+                    <small style="display: block; margin-top: 5px; color: #666;">
+                        Leave blank to use the free adsb.lol public API (recommended).
+                        Only set this if you run your own PiAware or readsb receiver on your network.
+                        Example: <code>http://piaware.local/skyaware/data/aircraft.json</code>
+                    </small>
+                </div>
+            </details>
+
+            <div class="form-group">
+                <label for="flight_max_range_nm">Max Range (NM): <span id="flight_range_val">{{ config.flight_max_range_nm or 50 }}</span></label>
+                <input type="range" id="flight_max_range_nm" min="10" max="100" value="{{ config.flight_max_range_nm or 50 }}" oninput="document.getElementById('flight_range_val').textContent=this.value">
+                <div class="help-text">Maximum range in nautical miles for flight tracking (10-100 NM)</div>
             </div>
 
             <div class="form-group">
-                <label for="airlabs_api_key">AirLabs API Key (for flight destinations):</label>
-                <input type="text" id="airlabs_api_key" placeholder="Get free API key from airlabs.co" value="{{ config.airlabs_api_key }}">
-                <div class="help-text">Free tier: 1,000 calls/month. Get key at <a href="https://airlabs.co" target="_blank">airlabs.co</a>. Without this, destinations show as "UNKNOWN".</div>
+                <label for="airlabs_api_key">AirLabs API Key (optional, for flight destinations):</label>
+                <input type="text" id="airlabs_api_key" placeholder="Optional - destinations auto-lookup via airplanes.live" value="{{ config.airlabs_api_key }}">
+                <div class="help-text">Optional. Destinations are now looked up free via airplanes.live. AirLabs is a secondary fallback.</div>
             </div>
 
             <div class="form-group">
@@ -843,17 +879,17 @@ HTML_TEMPLATE = """
             document.getElementById('enable_stocks').checked = config.enable_stocks !== false;
             document.getElementById('enable_spring_training').checked = config.enable_spring_training !== false;
             document.getElementById('enable_flights').checked = config.enable_flights !== false;
+            document.getElementById('enable_flight_radar').checked = config.enable_flight_radar !== false;
 
             // Load flight tracking location
             document.getElementById('flight_tracking_address').value = config.flight_tracking_address || '';
-            document.getElementById('flight_tracking_latitude').value = config.flight_tracking_latitude || '';
-            document.getElementById('flight_tracking_longitude').value = config.flight_tracking_longitude || '';
+            document.getElementById('flight_tracking_latitude').value = config.flight_tracking_latitude != null ? config.flight_tracking_latitude : '';
+            document.getElementById('flight_tracking_longitude').value = config.flight_tracking_longitude != null ? config.flight_tracking_longitude : '';
 
-            // Display coordinates if configured
-            if (config.flight_tracking_latitude && config.flight_tracking_longitude) {
-                document.getElementById('coords-text').textContent =
-                    `Lat: ${config.flight_tracking_latitude.toFixed(4)}, Lon: ${config.flight_tracking_longitude.toFixed(4)}`;
-            }
+            // Load ADS-B receiver config
+            document.getElementById('adsb_receiver_url').value = config.adsb_receiver_url || '';
+            document.getElementById('flight_max_range_nm').value = config.flight_max_range_nm || 50;
+            document.getElementById('flight_range_val').textContent = config.flight_max_range_nm || 50;
 
             // Load AirLabs API key
             document.getElementById('airlabs_api_key').value = config.airlabs_api_key || '';
@@ -1010,8 +1046,8 @@ HTML_TEMPLATE = """
                     document.getElementById('flight_tracking_latitude').value = data.latitude;
                     document.getElementById('flight_tracking_longitude').value = data.longitude;
                     document.getElementById('coords-text').textContent =
-                        `Lat: ${data.latitude.toFixed(4)}, Lon: ${data.longitude.toFixed(4)}`;
-                    showStatus('config-status', 'Coordinates calculated! Click Save Configuration to save.', true);
+                        `Found: ${data.latitude.toFixed(4)}, ${data.longitude.toFixed(4)} — verify these are correct, then Save`;
+                    showStatus('config-status', 'Coordinates filled in above. Verify they look right, then click Save Configuration.', true);
                 } else {
                     showStatus('config-status', 'Geocoding error: ' + data.message, false);
                 }
@@ -1043,6 +1079,7 @@ HTML_TEMPLATE = """
                 enable_stocks: document.getElementById('enable_stocks').checked,
                 enable_spring_training: document.getElementById('enable_spring_training').checked,
                 enable_flights: document.getElementById('enable_flights').checked,
+                enable_flight_radar: document.getElementById('enable_flight_radar').checked,
                 scroll_speed_bears: parseInt(document.getElementById('scroll_speed_bears').value),
                 scroll_speed_bears_news: parseInt(document.getElementById('scroll_speed_bears_news').value),
                 scroll_speed_pga: parseInt(document.getElementById('scroll_speed_pga').value),
@@ -1059,6 +1096,8 @@ HTML_TEMPLATE = """
                 flight_tracking_address: document.getElementById('flight_tracking_address').value,
                 flight_tracking_latitude: latValue ? parseFloat(latValue) : null,
                 flight_tracking_longitude: lonValue ? parseFloat(lonValue) : null,
+                adsb_receiver_url: document.getElementById('adsb_receiver_url').value,
+                flight_max_range_nm: parseInt(document.getElementById('flight_max_range_nm').value),
                 airlabs_api_key: document.getElementById('airlabs_api_key').value
             };
 
@@ -1512,6 +1551,7 @@ def save_config_route():
             'enable_stocks': data.get('enable_stocks', True),
             'enable_spring_training': data.get('enable_spring_training', True),
             'enable_flights': data.get('enable_flights', True),
+            'enable_flight_radar': data.get('enable_flight_radar', True),
             'scroll_speed_bears': data.get('scroll_speed_bears', 5),
             'scroll_speed_bears_news': data.get('scroll_speed_bears_news', 5),
             'scroll_speed_pga': data.get('scroll_speed_pga', 5),
@@ -1528,6 +1568,8 @@ def save_config_route():
             'flight_tracking_address': data.get('flight_tracking_address', ''),
             'flight_tracking_latitude': data.get('flight_tracking_latitude'),
             'flight_tracking_longitude': data.get('flight_tracking_longitude'),
+            'adsb_receiver_url': data.get('adsb_receiver_url', ''),
+            'flight_max_range_nm': data.get('flight_max_range_nm', 50),
             'airlabs_api_key': data.get('airlabs_api_key', '')
         })
 
