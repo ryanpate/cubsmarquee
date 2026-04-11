@@ -117,15 +117,20 @@ from route_cache import RouteCache, RouteInfo
 
 
 def _parse_iata_pair(airport_codes_iata: Optional[str]) -> tuple[Optional[str], Optional[str]]:
-    """Split 'ORD-RSW' into ('ORD', 'RSW'). Return (None, None) if invalid."""
+    """Parse an adsb.lol route string into (origin, destination).
+
+    Handles simple two-leg routes ('ORD-RSW') and multi-leg routes like
+    round trips ('ORD-LIT-ORD') or sequential stops ('ATL-MSP-ORD') by
+    treating the first segment as the current leg: origin = first code,
+    destination = second code. For a round trip A-B-A, this gives A -> B,
+    which is the useful non-home destination.
+    """
     if not airport_codes_iata or "-" not in airport_codes_iata:
         return (None, None)
-    parts = airport_codes_iata.split("-", 1)
-    if len(parts) != 2:
+    parts = [p.strip() for p in airport_codes_iata.split("-") if p.strip()]
+    if len(parts) < 2:
         return (None, None)
-    origin = parts[0].strip() or None
-    dest = parts[1].strip() or None
-    return (origin, dest)
+    return (parts[0] or None, parts[1] or None)
 
 
 def enrich_routes(
