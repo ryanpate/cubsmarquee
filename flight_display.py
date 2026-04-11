@@ -32,7 +32,7 @@ class FlightDisplay:
     SUMMARY_DISPLAY_TIME: int = 5
 
     # Cache file for destination lookups
-    DESTINATION_CACHE_FILE: str = '/home/pi/flight_destination_cache.json'
+    DESTINATION_CACHE_FILE: str = '/var/tmp/flight_destination_cache.json'
     DESTINATION_CACHE_FILE_ALT: str = './flight_destination_cache.json'
 
     # Cache expiry time (7 days in seconds) - flight routes don't change often
@@ -51,6 +51,7 @@ class FlightDisplay:
         self.latitude: float | None = None
         self.longitude: float | None = None
         self.airlabs_api_key: str | None = None
+        self.flight_source: str = ''
         self.adsb_receiver_url: str = GameConfig.ADSB_RECEIVER_URL
         self.flight_max_range_nm: int = GameConfig.FLIGHT_MAX_RANGE_NM
         self.enable_flight_radar: bool = True
@@ -59,7 +60,12 @@ class FlightDisplay:
             ttl_hours=GameConfig.ROUTE_CACHE_TTL_HOURS,
         )
         self._load_config()
-        self.use_adsb_lol: bool = not (self.adsb_receiver_url or "").strip()
+        # Prefer the explicit `flight_source` admin setting; fall back to the
+        # legacy behavior (empty adsb_receiver_url means use adsb.lol).
+        if self.flight_source in ('adsb_lol', 'local'):
+            self.use_adsb_lol: bool = (self.flight_source == 'adsb_lol')
+        else:
+            self.use_adsb_lol = not (self.adsb_receiver_url or "").strip()
         print(
             f"Flight data source: "
             f"{'adsb.lol' if self.use_adsb_lol else f'local ({self.adsb_receiver_url})'}"
@@ -114,6 +120,7 @@ class FlightDisplay:
                     self.latitude = config.get('flight_tracking_latitude')
                     self.longitude = config.get('flight_tracking_longitude')
                     self.airlabs_api_key = config.get('airlabs_api_key', '')
+                    self.flight_source = config.get('flight_source', '')
                     self.adsb_receiver_url = config.get(
                         'adsb_receiver_url', GameConfig.ADSB_RECEIVER_URL)
                     self.flight_max_range_nm = config.get(
@@ -744,6 +751,18 @@ class FlightDisplay:
         )
         if fetch_ok:
             self.last_fetch_time = time.time()
+            # Enrich with route info via adsb.lol /api/0/routeset (free, no key).
+            # The adsb.lol path already calls this internally, but the local
+            # readsb path does not, so we call it here for the local case.
+            if not self.use_adsb_lol and self.flight_data:
+                try:
+                    adsb_lol_enrich_routes(
+                        base_url=GameConfig.ADSB_LOL_BASE_URL,
+                        flights=self.flight_data,
+                        cache=self.route_cache,
+                    )
+                except Exception as e:
+                    print(f"Route enrichment failed (non-fatal): {e}")
             return True
 
         # Fall back to OpenSky

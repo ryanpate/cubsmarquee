@@ -142,6 +142,7 @@ def load_config():
         'flight_tracking_latitude': None,
         'flight_tracking_longitude': None,
         'flight_tracking_address': '',
+        'flight_source': 'adsb_lol',
         'adsb_receiver_url': '',
         'flight_max_range_nm': 50,
         'airlabs_api_key': ''
@@ -740,20 +741,29 @@ HTML_TEMPLATE = """
                 </div>
             </div>
 
-            <details style="margin-top: 15px; padding: 10px; background: #f5f5f5; border-radius: 5px;">
-                <summary style="cursor: pointer; font-weight: bold; color: #0C2340;">Advanced: Local ADS-B Receiver</summary>
-                <div class="form-group" style="margin-top: 10px;">
-                    <label for="adsb_receiver_url">Local Receiver URL:</label>
+            <div class="form-group" style="margin-top: 15px; padding: 10px; background: #f5f5f5; border-radius: 5px;">
+                <label style="font-weight: bold; color: #0C2340;">Flight Data Source:</label>
+                <div style="margin-top: 8px;">
+                    <label style="display: block; font-weight: normal; margin-bottom: 6px;">
+                        <input type="radio" name="flight_source" id="flight_source_adsb_lol" value="adsb_lol">
+                        adsb.lol (recommended &mdash; no setup)
+                    </label>
+                    <label style="display: block; font-weight: normal;">
+                        <input type="radio" name="flight_source" id="flight_source_local" value="local">
+                        Local ADS-B receiver
+                    </label>
+                </div>
+                <div id="local_receiver_url_wrapper" style="margin-top: 10px; padding-left: 22px; display: none;">
+                    <label for="adsb_receiver_url" style="font-weight: normal;">Local Receiver URL:</label>
                     <input type="text" id="adsb_receiver_url"
-                           placeholder="Leave blank to use adsb.lol (recommended)"
+                           placeholder="http://piaware.local/skyaware/data/aircraft.json"
                            value="{{ config.adsb_receiver_url }}">
                     <small style="display: block; margin-top: 5px; color: #666;">
-                        Leave blank to use the free adsb.lol public API (recommended).
-                        Only set this if you run your own PiAware or readsb receiver on your network.
+                        Enter the URL of your PiAware / readsb aircraft.json endpoint.
                         Example: <code>http://piaware.local/skyaware/data/aircraft.json</code>
                     </small>
                 </div>
-            </details>
+            </div>
 
             <div class="form-group">
                 <label for="flight_max_range_nm">Max Range (NM): <span id="flight_range_val">{{ config.flight_max_range_nm or 50 }}</span></label>
@@ -888,6 +898,22 @@ HTML_TEMPLATE = """
 
             // Load ADS-B receiver config
             document.getElementById('adsb_receiver_url').value = config.adsb_receiver_url || '';
+            // Load flight source radio (default 'adsb_lol')
+            var flightSource = config.flight_source || 'adsb_lol';
+            if (flightSource === 'local') {
+                document.getElementById('flight_source_local').checked = true;
+                document.getElementById('local_receiver_url_wrapper').style.display = 'block';
+            } else {
+                document.getElementById('flight_source_adsb_lol').checked = true;
+                document.getElementById('local_receiver_url_wrapper').style.display = 'none';
+            }
+            // Toggle the URL field visibility when the radio changes
+            document.getElementById('flight_source_adsb_lol').addEventListener('change', function() {
+                document.getElementById('local_receiver_url_wrapper').style.display = 'none';
+            });
+            document.getElementById('flight_source_local').addEventListener('change', function() {
+                document.getElementById('local_receiver_url_wrapper').style.display = 'block';
+            });
             document.getElementById('flight_max_range_nm').value = config.flight_max_range_nm || 50;
             document.getElementById('flight_range_val').textContent = config.flight_max_range_nm || 50;
 
@@ -1096,6 +1122,7 @@ HTML_TEMPLATE = """
                 flight_tracking_address: document.getElementById('flight_tracking_address').value,
                 flight_tracking_latitude: latValue ? parseFloat(latValue) : null,
                 flight_tracking_longitude: lonValue ? parseFloat(lonValue) : null,
+                flight_source: document.querySelector('input[name="flight_source"]:checked').value,
                 adsb_receiver_url: document.getElementById('adsb_receiver_url').value,
                 flight_max_range_nm: parseInt(document.getElementById('flight_max_range_nm').value),
                 airlabs_api_key: document.getElementById('airlabs_api_key').value
@@ -1568,6 +1595,7 @@ def save_config_route():
             'flight_tracking_address': data.get('flight_tracking_address', ''),
             'flight_tracking_latitude': data.get('flight_tracking_latitude'),
             'flight_tracking_longitude': data.get('flight_tracking_longitude'),
+            'flight_source': data.get('flight_source', 'adsb_lol'),
             'adsb_receiver_url': data.get('adsb_receiver_url', ''),
             'flight_max_range_nm': data.get('flight_max_range_nm', 50),
             'airlabs_api_key': data.get('airlabs_api_key', '')
