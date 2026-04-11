@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import signal
 import time
@@ -110,12 +111,24 @@ class CubsScoreboard:
                     if is_shutdown_requested():
                         break
 
-                    # Check if it's off-season
+                    # Check user-forced off-season modes first. 'no_games' means
+                    # the user wants pure off-season cycling regardless of schedule.
+                    # Otherwise fall back to the auto season detection.
+                    display_mode = self._get_display_mode()
+                    if display_mode == 'no_games':
+                        logger.info(
+                            "display_mode=no_games - forcing pure off-season display")
+                        self.off_season_handler.display_off_season_content()
+                        if is_shutdown_requested():
+                            break
+                        # display_off_season_content loops internally; if it returns
+                        # we just fall through and will re-enter on the next iteration.
+                        continue
+
                     if self.is_off_season():
                         logger.info(
                             "Off-season detected - entering off-season display mode")
                         self.off_season_handler.display_off_season_content()
-                        # After off-season handler exits (season started), continue with game cycle
                         if is_shutdown_requested():
                             break
 
@@ -338,6 +351,19 @@ class CubsScoreboard:
         self, game_data: list[dict[str, Any]], gameid: int, status: str
     ) -> None:
         """Route to appropriate display based on game status"""
+        # Hybrid off-season mode: for any pre-game / post-game / delay state,
+        # show a single brief pass of the pre-game display then rotate through
+        # off-season content (weather, flights, facts). Only live In Progress
+        # games bypass the hybrid cycling and go to normal game display.
+        display_mode = self._get_display_mode()
+        if display_mode == 'offseason' and status != 'In Progress':
+            logger.info(f"display_mode=offseason, status={status} - hybrid cycling")
+            self.state_handler.display_no_game(
+                game_data, self.current_game_index, cycle_content=True)
+            if not is_shutdown_requested():
+                self.off_season_handler._display_rotation_cycle()
+            return
+
         # Get lineup if needed
         lineup: str | None = None
         if status in ['Warmup', 'Pre-Game', 'In Progress', 'Delayed', 'Postponed']:
@@ -345,25 +371,13 @@ class CubsScoreboard:
 
         # Route based on status
         if status == 'Scheduled':
+            self.state_handler.display_no_game(
+                game_data, self.current_game_index)
+            # For spring training, cycle through off-season content between game displays
             game_type = game_data[self.current_game_index].get('game_type', 'R')
-            display_mode = self._get_display_mode()
-
-            if display_mode == 'offseason' and game_type == 'R':
-                # User opted in to hybrid off-season cycling during regular-season
-                # scheduled games: show pre-game once, then rotate through
-                # off-season content (weather, flights, facts, etc.)
-                logger.info("display_mode=offseason - hybrid cycling through off-season content")
-                self.state_handler.display_no_game(
-                    game_data, self.current_game_index, cycle_content=True)
-                if not is_shutdown_requested():
-                    self.off_season_handler._display_rotation_cycle()
-            else:
-                self.state_handler.display_no_game(
-                    game_data, self.current_game_index)
-                # For spring training, cycle through off-season content between game displays
-                if game_type in ('S', 'E'):
-                    logger.info("Spring training scheduled game - cycling through off-season content")
-                    self.off_season_handler._display_rotation_cycle()
+            if game_type in ('S', 'E'):
+                logger.info("Spring training scheduled game - cycling through off-season content")
+                self.off_season_handler._display_rotation_cycle()
 
         elif status in ['Warmup', 'Pre-Game']:
             self.state_handler.display_warmup(
