@@ -647,27 +647,36 @@ class PGADisplay:
 
             competition = competitions[0]
 
-            # Get competitors (players) and sort by position
+            # Get competitors (players) and sort by actual score (lowest = best
+            # in golf). We sort by score rather than ESPN's `position` field
+            # because during a live round ESPN's positions can lag the latest
+            # scores — we want the lowest-to-highest score order.
             competitors = competition.get('competitors', [])
 
-            # Sort competitors by their position/ranking
-            def get_position_sort_key(player):
+            def get_score_sort_key(player):
                 try:
-                    # Try displayValue first (e.g., "1", "T2", "T10")
-                    pos_obj = player.get('status', {}).get('position', {})
-                    pos_str = pos_obj.get('displayValue', '') or pos_obj.get('id', '')
-
-                    if not pos_str:
-                        return 999
-
-                    # Remove 'T' prefix for tied positions and convert to int
-                    pos_clean = str(pos_str).replace('T', '').strip()
-                    return int(pos_clean) if pos_clean.isdigit() else 999
+                    score_obj = player.get('score')
+                    # Prefer numeric value if available
+                    if isinstance(score_obj, dict):
+                        val = score_obj.get('value')
+                        if val is not None:
+                            return float(val)
+                        display = score_obj.get('displayValue', 'E')
+                    else:
+                        display = str(score_obj) if score_obj else 'E'
+                    display = display.strip()
+                    if display in ('E', ''):
+                        return 0.0
+                    if display.startswith('+'):
+                        return float(display[1:])
+                    if display.startswith('-'):
+                        return -float(display[1:])
+                    return float(display)
                 except (ValueError, TypeError):
-                    return 999
+                    return 999.0
 
-            sorted_competitors = sorted(competitors, key=get_position_sort_key)
-            print(f"Sorted {len(sorted_competitors)} competitors")
+            sorted_competitors = sorted(competitors, key=get_score_sort_key)
+            print(f"Sorted {len(sorted_competitors)} competitors by score")
 
             # Get top 25 leaders
             leaders = []
@@ -917,8 +926,6 @@ class PGADisplay:
                     full_title = f"{tournament_name} - {day_text}".upper()
                 else:
                     full_title = tournament_name.upper()
-
-                print(f"Title: {full_title}, period: {period}, status_detail: {status_detail}")
 
                 title_width = len(full_title) * 5  # tiny font width
 
