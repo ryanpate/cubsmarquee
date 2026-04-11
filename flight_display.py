@@ -762,6 +762,14 @@ class FlightDisplay:
         else:
             return self.ALTITUDE_LOW   # Green for low altitude
 
+    def _format_type_or_route(self, flight: dict[str, Any]) -> str:
+        """Return 'ORIG->DEST' if route is known, otherwise the ICAO aircraft type."""
+        origin = flight.get("origin_iata")
+        dest = flight.get("dest_iata")
+        if origin and dest:
+            return f"{origin}->{dest}"
+        return flight.get("aircraft_type", "") or ""
+
     def _draw_flight_header(self, header_text: str = 'OVERHEAD FLIGHT') -> None:
         """Draw sky gradient header for flight display using cached background"""
         self.manager.canvas.SetImage(self._flight_header_bg, 0, 0)
@@ -1061,7 +1069,7 @@ class FlightDisplay:
         callsign = flight['callsign']
         altitude_ft = flight['altitude_ft']
         velocity_mph = flight['velocity_mph']
-        aircraft_type = flight.get('aircraft_type', '')
+        aircraft_type = self._format_type_or_route(flight)
         registration = flight.get('registration', '')
         vertical_rate = flight.get('vertical_rate')
         heading = flight.get('heading')
