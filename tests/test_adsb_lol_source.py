@@ -114,3 +114,118 @@ class TestFetchAircraft:
                 min_altitude_ft=500,
             )
         assert flights == []
+
+
+class TestEnrichRoutes:
+    def _make_flight(self, callsign, lat=41.9, lon=-87.6):
+        return {
+            "callsign": callsign,
+            "altitude_ft": 35000,
+            "velocity_mph": 500,
+            "distance": 10.0,
+            "latitude": lat,
+            "longitude": lon,
+            "aircraft_type": "A21N",
+            "registration": "N1",
+            "vertical_rate": 0,
+            "heading": 90.0,
+            "icao_hex": "abc123",
+            "destination": "UNKNOWN",
+            "origin_iata": None,
+            "dest_iata": None,
+            "airline_code": None,
+        }
+
+    def test_enrich_uses_cache_and_posts_only_uncached(self):
+        from adsb_lol_source import enrich_routes
+        from route_cache import RouteInfo
+        import time as _t
+
+        mock_cache = MagicMock()
+
+        def fake_get(cs):
+            if cs == "UAL1":
+                return RouteInfo("UAL1", "ORD", "LAX", "UAL", True, int(_t.time()))
+            return None
+
+        mock_cache.get.side_effect = fake_get
+
+        mock_post_resp = MagicMock()
+        mock_post_resp.status_code = 200
+        mock_post_resp.json.return_value = [
+            {
+                "callsign": "UAL2",
+                "airline_code": "UAL",
+                "number": "2",
+                "_airport_codes_iata": "DEN-SEA",
+                "plausible": True,
+            }
+        ]
+
+        flights = [self._make_flight("UAL1"), self._make_flight("UAL2")]
+
+        with patch("adsb_lol_source.requests.post", return_value=mock_post_resp) as mock_post:
+            enrich_routes("https://api.adsb.lol", flights, mock_cache)
+
+        assert flights[0]["origin_iata"] == "ORD"
+        assert flights[0]["dest_iata"] == "LAX"
+        assert flights[1]["origin_iata"] == "DEN"
+        assert flights[1]["dest_iata"] == "SEA"
+        assert mock_post.call_count == 1
+        body = mock_post.call_args.kwargs["json"]
+        assert len(body["planes"]) == 1
+        assert body["planes"][0]["callsign"] == "UAL2"
+
+    def test_enrich_stores_negative_cache_for_missing_routes(self):
+        from adsb_lol_source import enrich_routes
+
+        mock_cache = MagicMock()
+        mock_cache.get.return_value = None
+
+        mock_post_resp = MagicMock()
+        mock_post_resp.status_code = 200
+        mock_post_resp.json.return_value = []
+
+        flights = [self._make_flight("UAL3")]
+
+        with patch("adsb_lol_source.requests.post", return_value=mock_post_resp):
+            enrich_routes("https://api.adsb.lol", flights, mock_cache)
+
+        assert flights[0]["origin_iata"] is None
+        assert flights[0]["dest_iata"] is None
+        mock_cache.put_many.assert_called_once()
+        rows = mock_cache.put_many.call_args.args[0]
+        assert len(rows) == 1
+        assert rows[0].callsign == "UAL3"
+        assert rows[0].origin_iata is None
+        assert rows[0].plausible is False
+
+    def test_enrich_on_network_error_leaves_fields_none(self):
+        from adsb_lol_source import enrich_routes
+
+        mock_cache = MagicMock()
+        mock_cache.get.return_value = None
+
+        flights = [self._make_flight("UAL4")]
+
+        with patch("adsb_lol_source.requests.post", side_effect=requests.RequestException("boom")):
+            enrich_routes("https://api.adsb.lol", flights, mock_cache)
+
+        assert flights[0]["origin_iata"] is None
+        assert flights[0]["dest_iata"] is None
+
+    def test_enrich_skips_flights_with_empty_callsign(self):
+        from adsb_lol_source import enrich_routes
+
+        mock_cache = MagicMock()
+        mock_cache.get.return_value = None
+        mock_post_resp = MagicMock()
+        mock_post_resp.status_code = 200
+        mock_post_resp.json.return_value = []
+
+        flights = [self._make_flight("")]
+
+        with patch("adsb_lol_source.requests.post", return_value=mock_post_resp) as mock_post:
+            enrich_routes("https://api.adsb.lol", flights, mock_cache)
+
+        assert mock_post.call_count == 0

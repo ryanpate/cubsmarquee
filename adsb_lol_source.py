@@ -109,3 +109,124 @@ def fetch_aircraft(
 
     flights.sort(key=lambda x: x["distance"])
     return flights[:15]
+
+
+import time as _time
+
+from route_cache import RouteCache, RouteInfo
+
+
+def _parse_iata_pair(airport_codes_iata: Optional[str]) -> tuple[Optional[str], Optional[str]]:
+    """Split 'ORD-RSW' into ('ORD', 'RSW'). Return (None, None) if invalid."""
+    if not airport_codes_iata or "-" not in airport_codes_iata:
+        return (None, None)
+    parts = airport_codes_iata.split("-", 1)
+    if len(parts) != 2:
+        return (None, None)
+    origin = parts[0].strip() or None
+    dest = parts[1].strip() or None
+    return (origin, dest)
+
+
+def enrich_routes(
+    base_url: str,
+    flights: list[dict[str, Any]],
+    cache: RouteCache,
+) -> None:
+    """Populate origin_iata, dest_iata, airline_code on each flight dict.
+
+    Checks the cache first; only POSTs callsigns that are not cached. Negative
+    results (no route found) are stored in the cache to avoid re-querying.
+    Errors are logged and silently skipped — the display is never blocked.
+    """
+    if not flights:
+        return
+
+    uncached: list[dict[str, Any]] = []
+
+    for f in flights:
+        callsign = (f.get("callsign") or "").strip()
+        if not callsign:
+            continue
+        cached = cache.get(callsign)
+        if cached is not None:
+            f["origin_iata"] = cached.origin_iata
+            f["dest_iata"] = cached.dest_iata
+            f["airline_code"] = cached.airline_code
+        else:
+            uncached.append(f)
+
+    if not uncached:
+        return
+
+    payload = {
+        "planes": [
+            {
+                "callsign": (f["callsign"] or "").strip(),
+                "lat": f["latitude"],
+                "lng": f["longitude"],
+            }
+            for f in uncached
+        ]
+    }
+
+    try:
+        response = requests.post(
+            f"{base_url}/api/0/routeset",
+            json=payload,
+            timeout=ROUTESET_TIMEOUT_SEC,
+        )
+        if response.status_code != 200:
+            logger.warning("routeset returned HTTP %s", response.status_code)
+            return
+        results = response.json()
+    except requests.Timeout:
+        logger.warning("routeset request timed out")
+        return
+    except requests.RequestException as e:
+        logger.warning("routeset request failed: %s", e)
+        return
+    except ValueError as e:
+        logger.warning("routeset returned invalid JSON: %s", e)
+        return
+
+    now = int(_time.time())
+    by_callsign: dict[str, dict[str, Any]] = {}
+    for item in results or []:
+        cs = (item.get("callsign") or "").strip()
+        if cs:
+            by_callsign[cs] = item
+
+    rows_to_cache: list[RouteInfo] = []
+    for f in uncached:
+        cs = (f["callsign"] or "").strip()
+        item = by_callsign.get(cs)
+        if item and item.get("plausible"):
+            origin, dest = _parse_iata_pair(item.get("_airport_codes_iata"))
+            airline = item.get("airline_code")
+            f["origin_iata"] = origin
+            f["dest_iata"] = dest
+            f["airline_code"] = airline
+            rows_to_cache.append(
+                RouteInfo(
+                    callsign=cs,
+                    origin_iata=origin,
+                    dest_iata=dest,
+                    airline_code=airline,
+                    plausible=True,
+                    fetched_at=now,
+                )
+            )
+        else:
+            rows_to_cache.append(
+                RouteInfo(
+                    callsign=cs,
+                    origin_iata=None,
+                    dest_iata=None,
+                    airline_code=None,
+                    plausible=False,
+                    fetched_at=now,
+                )
+            )
+
+    cache.put_many(rows_to_cache)
