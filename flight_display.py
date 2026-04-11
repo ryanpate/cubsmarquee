@@ -1092,7 +1092,9 @@ class FlightDisplay:
         registration = flight.get('registration', '')
         vertical_rate = flight.get('vertical_rate')
         heading = flight.get('heading')
-        dest_code = flight.get('destination', 'UNKNOWN')
+        # Prefer destination from adsb.lol route enrichment, fall back to
+        # the legacy destination-lookup field.
+        dest_code = flight.get('dest_iata') or flight.get('destination', 'UNKNOWN')
 
         # Convert airport code to city name
         destination = self._get_airport_city(dest_code)
