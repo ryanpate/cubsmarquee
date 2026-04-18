@@ -13,9 +13,12 @@ from scoreboard_config import (
 from typing import Any
 from retry import retry_api_call
 import json
+from logger import get_logger
 
 # Config file location for runtime settings. Module-level so tests can patch it.
-BRIGHTNESS_CONFIG_PATH = '/home/pi/config.json'
+USER_CONFIG_PATH = '/home/pi/config.json'
+
+_logger = get_logger("scoreboard")
 
 
 class ScoreboardManager:
@@ -45,11 +48,15 @@ class ScoreboardManager:
         not a valid integer.
         """
         try:
-            with open(BRIGHTNESS_CONFIG_PATH, 'r') as f:
+            with open(USER_CONFIG_PATH, 'r') as f:
                 config = json.load(f)
             raw = config.get('brightness', DisplayConfig.BRIGHTNESS_DEFAULT)
             value = int(raw)
-        except (FileNotFoundError, json.JSONDecodeError, ValueError, TypeError):
+        except (FileNotFoundError, json.JSONDecodeError, ValueError, TypeError) as e:
+            _logger.warning(
+                "Could not load brightness from %s (%s); falling back to %d",
+                USER_CONFIG_PATH, e, DisplayConfig.BRIGHTNESS_DEFAULT,
+            )
             return DisplayConfig.BRIGHTNESS_DEFAULT
         return max(
             DisplayConfig.BRIGHTNESS_MIN,

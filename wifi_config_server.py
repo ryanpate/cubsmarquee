@@ -10,6 +10,8 @@ import json
 import time
 import re
 
+from scoreboard_config import DisplayConfig
+
 app = Flask(__name__)
 
 CONFIG_PATH = '/home/pi/config.json'
@@ -1583,6 +1585,22 @@ def geocode_address():
         return jsonify({'success': False, 'message': str(e)})
 
 
+def _clamp_brightness(raw) -> int:
+    """Coerce and clamp an incoming brightness value to the allowed range.
+
+    Returns BRIGHTNESS_DEFAULT if the value is missing or non-numeric, so a
+    bad brightness field doesn't prevent the rest of the config from saving.
+    """
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return DisplayConfig.BRIGHTNESS_DEFAULT
+    return max(
+        DisplayConfig.BRIGHTNESS_MIN,
+        min(DisplayConfig.BRIGHTNESS_MAX, value)
+    )
+
+
 @app.route('/save_config', methods=['POST'])
 def save_config_route():
     """Save display configuration"""
@@ -1632,7 +1650,7 @@ def save_config_route():
             'adsb_receiver_url': data.get('adsb_receiver_url', ''),
             'flight_max_range_nm': data.get('flight_max_range_nm', 50),
             'airlabs_api_key': data.get('airlabs_api_key', ''),
-            'brightness': max(10, min(100, int(data.get('brightness', 100))))
+            'brightness': _clamp_brightness(data.get('brightness'))
         })
 
         if save_config(current_config):
