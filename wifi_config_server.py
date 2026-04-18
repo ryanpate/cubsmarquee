@@ -517,7 +517,17 @@ HTML_TEMPLATE = """
 
         <div id="config-tab" class="tab-content">
             <h2>Display Configuration</h2>
-            
+
+            <div class="scroll-speeds-section">
+                <h4>Display Settings</h4>
+                <div class="speed-control">
+                    <label>Brightness:</label>
+                    <input type="range" class="speed-slider" id="brightness" min="10" max="100" value="100">
+                    <span class="speed-value" id="brightness_val">100%</span>
+                </div>
+                <p class="help-text" style="margin-top: 8px;">Controls LED matrix brightness (10% = dim, 100% = full). Restart the service for changes to take effect.</p>
+            </div>
+
             <div class="form-group">
                 <label for="display_mode">Display Mode:</label>
                 <select id="display_mode">
@@ -901,6 +911,16 @@ HTML_TEMPLATE = """
             document.getElementById('enable_flight_radar').checked = config.enable_flight_radar !== false;
             document.getElementById('flights_between_displays').checked = config.flights_between_displays === true;
 
+            // Load brightness setting
+            const brightnessSlider = document.getElementById('brightness');
+            const brightnessVal = document.getElementById('brightness_val');
+            const brightnessValue = config.brightness != null ? config.brightness : 100;
+            brightnessSlider.value = brightnessValue;
+            brightnessVal.textContent = brightnessValue + '%';
+            brightnessSlider.addEventListener('input', function() {
+                brightnessVal.textContent = this.value + '%';
+            });
+
             // Load flight tracking location
             document.getElementById('flight_tracking_address').value = config.flight_tracking_address || '';
             document.getElementById('flight_tracking_latitude').value = config.flight_tracking_latitude != null ? config.flight_tracking_latitude : '';
@@ -1136,7 +1156,8 @@ HTML_TEMPLATE = """
                 flight_source: document.querySelector('input[name="flight_source"]:checked').value,
                 adsb_receiver_url: document.getElementById('adsb_receiver_url').value,
                 flight_max_range_nm: parseInt(document.getElementById('flight_max_range_nm').value),
-                airlabs_api_key: document.getElementById('airlabs_api_key').value
+                airlabs_api_key: document.getElementById('airlabs_api_key').value,
+                brightness: parseInt(document.getElementById('brightness').value)
             };
 
             const button = event.target;
