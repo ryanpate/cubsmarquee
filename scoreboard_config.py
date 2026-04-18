@@ -19,6 +19,9 @@ class DisplayConfig:
     CHAIN_LENGTH: int = 1
     PARALLEL: int = 1
     HARDWARE_MAPPING: str = 'regular'
+    BRIGHTNESS_DEFAULT: int = 100
+    BRIGHTNESS_MIN: int = 10
+    BRIGHTNESS_MAX: int = 100
 
 
 class TeamConfig:
