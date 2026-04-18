@@ -12,6 +12,10 @@ from scoreboard_config import (
 )
 from typing import Any
 from retry import retry_api_call
+import json
+
+# Config file location for runtime settings. Module-level so tests can patch it.
+BRIGHTNESS_CONFIG_PATH = '/home/pi/config.json'
 
 
 class ScoreboardManager:
@@ -32,6 +36,26 @@ class ScoreboardManager:
         self.split_squad_indicator: str = ""  # e.g., "1/2" or "2/2"
         self.split_squad_switch_time: float = 0.0  # When to switch to next game
 
+    def _load_brightness(self) -> int:
+        """
+        Load brightness percentage from config.json.
+
+        Returns an int in [BRIGHTNESS_MIN, BRIGHTNESS_MAX]. Falls back to
+        BRIGHTNESS_DEFAULT if the file is missing, malformed, or the value is
+        not a valid integer.
+        """
+        try:
+            with open(BRIGHTNESS_CONFIG_PATH, 'r') as f:
+                config = json.load(f)
+            raw = config.get('brightness', DisplayConfig.BRIGHTNESS_DEFAULT)
+            value = int(raw)
+        except (FileNotFoundError, json.JSONDecodeError, ValueError, TypeError):
+            return DisplayConfig.BRIGHTNESS_DEFAULT
+        return max(
+            DisplayConfig.BRIGHTNESS_MIN,
+            min(DisplayConfig.BRIGHTNESS_MAX, value)
+        )
+
     def _setup_matrix(self) -> RGBMatrix:
         """Configure and initialize the RGB matrix"""
         options = RGBMatrixOptions()
@@ -40,6 +64,7 @@ class ScoreboardManager:
         options.chain_length = DisplayConfig.CHAIN_LENGTH
         options.parallel = DisplayConfig.PARALLEL
         options.hardware_mapping = DisplayConfig.HARDWARE_MAPPING
+        options.brightness = self._load_brightness()
         return RGBMatrix(options=options)
 
     def _load_fonts(self) -> dict[str, graphics.Font]:
