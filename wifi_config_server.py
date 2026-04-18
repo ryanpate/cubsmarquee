@@ -146,7 +146,8 @@ def load_config():
         'flight_source': 'adsb_lol',
         'adsb_receiver_url': '',
         'flight_max_range_nm': 50,
-        'airlabs_api_key': ''
+        'airlabs_api_key': '',
+        'brightness': 100
     }
 
     try:
@@ -1609,7 +1610,8 @@ def save_config_route():
             'flight_source': data.get('flight_source', 'adsb_lol'),
             'adsb_receiver_url': data.get('adsb_receiver_url', ''),
             'flight_max_range_nm': data.get('flight_max_range_nm', 50),
-            'airlabs_api_key': data.get('airlabs_api_key', '')
+            'airlabs_api_key': data.get('airlabs_api_key', ''),
+            'brightness': max(10, min(100, int(data.get('brightness', 100))))
         })
 
         if save_config(current_config):
