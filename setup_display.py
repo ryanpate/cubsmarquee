@@ -50,7 +50,7 @@ def is_shutdown_requested() -> bool:
         return False
 
 
-SETUP_MESSAGE = "Connect phone to WiFi: CubsMarquee-Setup    Open: cubsmarquee.local/admin"
+SETUP_MESSAGE = "Connect phone to WiFi: CubsMarquee-Setup  (password: gocubsgo2024)    Open: cubsmarquee.local/admin"
 HEADER_TEXT = "SETUP"
 
 

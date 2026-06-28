@@ -4,7 +4,7 @@
 
 SCRIPT_DIR="/home/pi"
 HOSTNAME=$(hostname)
-AP_SSID="CubsScoreboard-Setup"
+AP_SSID="CubsMarquee-Setup"
 AP_PASSWORD="gocubsgo2024"
 AP_IP="10.0.0.1"
 MAX_WIFI_ATTEMPTS=60
@@ -115,7 +115,7 @@ EOF
 interface=wlan0
 dhcp-range=10.0.0.10,10.0.0.50,255.255.255.0,24h
 domain=local
-address=/cubsscoreboard.local/${AP_IP}
+address=/cubsmarquee.local/${AP_IP}
 address=/${HOSTNAME}.local/${AP_IP}
 EOF
     
