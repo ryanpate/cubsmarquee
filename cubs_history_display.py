@@ -14,9 +14,9 @@ if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
 
 HISTORY_PATHS = ['./cubs_history.json', '/home/pi/cubs_history.json']
-SEPIA_BG = (32, 22, 10)
-SEPIA_BAND = (168, 124, 48)
-SEPIA_TEXT = (235, 215, 170)
+MARQUEE_RED = (196, 30, 58)
+CUBS_BLUE = (0, 51, 102)
+STORY_WHITE = (225, 232, 240)
 
 
 class CubsHistoryDisplay:
@@ -58,20 +58,20 @@ class CubsHistoryDisplay:
         return lines
 
     def _draw_entry_frame(self, entry: dict[str, Any]) -> None:
-        """Vintage gold-on-sepia card for one historical moment"""
+        """Marquee-style card for one historical moment"""
         self.manager.clear_canvas()
         background = Image.new(
             'RGB', (DisplayConfig.MATRIX_COLS, DisplayConfig.MATRIX_ROWS),
-            SEPIA_BG)
+            CUBS_BLUE)
         self.manager.set_image(background, 0, 0)
 
-        # Gold band with the screen title
+        # Marquee red band with the screen title
         for y in range(0, 9):
             for x in range(DisplayConfig.MATRIX_COLS):
-                self.manager.draw_pixel(x, y, *SEPIA_BAND)
+                self.manager.draw_pixel(x, y, *MARQUEE_RED)
         title = 'CUBS HISTORY'
         title_x = (DisplayConfig.MATRIX_COLS - len(title) * 4) // 2
-        self.manager.draw_text('micro', title_x, 7, SEPIA_BG, title)
+        self.manager.draw_text('micro', title_x, 7, Colors.WHITE, title)
 
         # The year, big, with the story wrapped beneath
         year = str(entry.get('year', ''))
@@ -83,7 +83,7 @@ class CubsHistoryDisplay:
         for line, baseline in zip(lines, (26, 33, 40, 47)):
             line_x = (DisplayConfig.MATRIX_COLS - len(line) * 4) // 2
             self.manager.draw_text(
-                'micro', max(0, line_x), baseline, SEPIA_TEXT, line)
+                'micro', max(0, line_x), baseline, STORY_WHITE, line)
 
         self.manager.swap_canvas()
 

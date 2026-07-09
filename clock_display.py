@@ -61,7 +61,7 @@ class WrigleyClockDisplay:
                 self.manager.draw_pixel(x, y, *MARQUEE_RED)
         title = 'WRIGLEY FIELD'
         title_x = max(0, (DisplayConfig.MATRIX_COLS - len(title) * 6) // 2)
-        self.manager.draw_text('small_bold', title_x, 9, Colors.WHITE, title)
+        self.manager.draw_text('small_bold', title_x, 10, Colors.WHITE, title)
 
         # Analog face
         cx, cy, radius = 24, 29, 15
