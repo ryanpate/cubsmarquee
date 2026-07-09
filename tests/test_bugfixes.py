@@ -318,7 +318,11 @@ class TestSpringTrainingRollover:
         monkeypatch.setattr(
             std.pendulum, 'now', lambda tz=None: frozen
         )
-        return std.SpringTrainingDisplay.__new__(std.SpringTrainingDisplay)
+        display = std.SpringTrainingDisplay.__new__(std.SpringTrainingDisplay)
+        display._opening_day_cache = None
+        display._opening_day_cached_on = None
+        display._get_opening_day = lambda: None  # keep tests off the network
+        return display
 
     def test_early_april_counts_down_to_next_year(self, monkeypatch) -> None:
         frozen = pendulum.datetime(2026, 4, 5, tz='America/Chicago')

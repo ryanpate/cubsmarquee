@@ -191,6 +191,102 @@ class TestAutoDimAdminConfig:
 
 
 # ============================================================================
+# Countdown milestones: Spring Training then Opening Day
+# ============================================================================
+
+class TestCountdownMilestones:
+    def _display(self, monkeypatch, frozen, opening='unset'):
+        import spring_training_display as std
+
+        monkeypatch.setattr(std.pendulum, 'now', lambda tz=None: frozen)
+        display = std.SpringTrainingDisplay.__new__(std.SpringTrainingDisplay)
+        display._opening_day_cache = None
+        display._opening_day_cached_on = None
+        if opening != 'unset':
+            display._get_opening_day = Mock(return_value=opening)
+        return display
+
+    def test_january_targets_spring_training(self, monkeypatch) -> None:
+        frozen = pendulum.datetime(2026, 1, 15, tz='America/Chicago')
+        display = self._display(monkeypatch, frozen, opening=None)
+
+        label, target = display._get_countdown_target()
+
+        assert label == 'Spring Training'
+        assert (target.year, target.month, target.day) == (2026, 2, 21)
+
+    def test_during_spring_training_targets_opening_day(
+        self, monkeypatch
+    ) -> None:
+        frozen = pendulum.datetime(2026, 3, 1, tz='America/Chicago')
+        opening = pendulum.datetime(2026, 3, 26, 13, 20, tz='America/Chicago')
+        display = self._display(monkeypatch, frozen, opening=opening)
+
+        label, target = display._get_countdown_target()
+
+        assert label == 'Opening Day'
+        assert target == opening
+
+    def test_after_opening_day_targets_next_spring_training(
+        self, monkeypatch
+    ) -> None:
+        frozen = pendulum.datetime(2026, 7, 8, tz='America/Chicago')
+        opening = pendulum.datetime(2026, 3, 26, 13, 20, tz='America/Chicago')
+        display = self._display(monkeypatch, frozen, opening=opening)
+
+        label, target = display._get_countdown_target()
+
+        assert label == 'Spring Training'
+        assert (target.year, target.month, target.day) == (2027, 2, 21)
+
+    def test_api_failure_in_march_estimates_late_march(
+        self, monkeypatch
+    ) -> None:
+        frozen = pendulum.datetime(2026, 3, 1, tz='America/Chicago')
+        display = self._display(monkeypatch, frozen, opening=None)
+
+        label, target = display._get_countdown_target()
+
+        assert label == 'Opening Day'
+        assert (target.month, target.day) == (3, 26)  # typical opening day
+
+    def test_countdown_message_names_opening_day(self, monkeypatch) -> None:
+        frozen = pendulum.datetime(2026, 3, 1, tz='America/Chicago')
+        opening = pendulum.datetime(2026, 3, 26, 13, 20, tz='America/Chicago')
+        display = self._display(monkeypatch, frozen, opening=opening)
+
+        countdown = display._calculate_countdown()
+        message = display._get_countdown_message(countdown)
+
+        assert message == '25 Days till Opening Day'
+
+    def test_get_opening_day_parses_first_regular_game(
+        self, monkeypatch
+    ) -> None:
+        import spring_training_display as std
+
+        frozen = pendulum.datetime(2026, 3, 1, tz='America/Chicago')
+        monkeypatch.setattr(std.pendulum, 'now', lambda tz=None: frozen)
+        schedule = Mock(return_value=[
+            {'game_type': 'S', 'game_datetime': '2026-03-24T20:05:00Z'},
+            {'game_type': 'R', 'game_datetime': '2026-03-26T18:20:00Z'},
+            {'game_type': 'R', 'game_datetime': '2026-03-28T18:20:00Z'},
+        ])
+        monkeypatch.setattr(std.statsapi, 'schedule', schedule)
+
+        display = std.SpringTrainingDisplay.__new__(std.SpringTrainingDisplay)
+        display._opening_day_cache = None
+        display._opening_day_cached_on = None
+
+        opening = display._get_opening_day()
+
+        assert (opening.year, opening.month, opening.day) == (2026, 3, 26)
+        # Second call is served from the daily cache
+        display._get_opening_day()
+        assert schedule.call_count == 1
+
+
+# ============================================================================
 # Playoff race display
 # ============================================================================
 

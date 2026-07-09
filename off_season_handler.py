@@ -757,23 +757,22 @@ class OffSeasonHandler:
         if _tick():
             return
 
-        # Display Spring Training countdown if enabled and ST hasn't started yet
+        # Display milestone countdown (Spring Training, then Opening Day
+        # once Spring Training is underway) if enabled
         spring_training_enabled = self.config.get('enable_spring_training', True)
-        if spring_training_enabled and not self.spring_training_display.is_spring_training_active():
-            print("Displaying Spring Training countdown...")
+        if spring_training_enabled:
+            print("Displaying season countdown...")
             try:
                 self.spring_training_display.display_spring_training_countdown(
                     duration=self.rotation_schedule['spring_training'] * 60
                 )
-                print("Spring Training countdown finished")
+                print("Season countdown finished")
             except Exception as e:
-                print(f"Error in Spring Training countdown: {e}")
+                print(f"Error in season countdown: {e}")
                 import traceback
                 traceback.print_exc()
-        elif spring_training_enabled:
-            print("Skipping Spring Training countdown (Spring Training is active)")
         else:
-            print("Skipping Spring Training countdown (disabled in config)")
+            print("Skipping season countdown (disabled in config)")
 
         if _tick():
             return

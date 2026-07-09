@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import time
 import pendulum
+import statsapi
 from PIL import Image
 import os
 from typing import TYPE_CHECKING
 
-from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, get_scroll_delay, load_user_config
+from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, TeamConfig, get_scroll_delay, load_user_config
+from retry import retry_api_call
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
@@ -29,6 +31,10 @@ class SpringTrainingDisplay:
 
         # Load and cache Spring Training header image
         self._header_image: Image.Image | None = self._load_header_image()
+
+        # Daily cache for the Opening Day lookup
+        self._opening_day_cache: pendulum.DateTime | None = None
+        self._opening_day_cached_on: str | None = None
 
     def _load_header_image(self) -> Image.Image | None:
         """Load Spring Training header image"""
@@ -77,15 +83,58 @@ class SpringTrainingDisplay:
 
         return spring_training
 
+    def _get_opening_day(self) -> pendulum.DateTime | None:
+        """First regular-season game of the current year (cached daily)"""
+        today = pendulum.now('America/Chicago').format('YYYY-MM-DD')
+        if self._opening_day_cached_on == today:
+            return self._opening_day_cache
+
+        year = pendulum.now('America/Chicago').year
+        try:
+            games = retry_api_call(
+                statsapi.schedule,
+                start_date=f'03/01/{year}', end_date=f'04/15/{year}',
+                team=TeamConfig.CUBS_TEAM_ID,
+            )
+            for game in games:
+                if game.get('game_type') == 'R':
+                    self._opening_day_cache = pendulum.parse(
+                        game['game_datetime']).in_timezone('America/Chicago')
+                    self._opening_day_cached_on = today
+                    return self._opening_day_cache
+        except Exception as e:
+            print(f"Could not fetch Opening Day: {e}")
+        return None
+
+    def _get_countdown_target(self) -> tuple[str, pendulum.DateTime]:
+        """The next milestone to count down to: Spring Training, then
+        Opening Day, then next year's Spring Training."""
+        now = pendulum.now('America/Chicago')
+        spring_training = pendulum.datetime(
+            now.year, 2, 21, tz='America/Chicago')
+        if now < spring_training:
+            return ('Spring Training', spring_training)
+
+        opening_day = self._get_opening_day()
+        if opening_day and now < opening_day:
+            return ('Opening Day', opening_day)
+        if opening_day is None and now.month <= 3:
+            # Schedule not published: opening day is typically late March
+            return ('Opening Day',
+                    pendulum.datetime(now.year, 3, 26, tz='America/Chicago'))
+
+        return ('Spring Training',
+                pendulum.datetime(now.year + 1, 2, 21, tz='America/Chicago'))
+
     def _calculate_countdown(self) -> dict[str, int]:
         """
-        Calculate the countdown to Spring Training.
-        Returns dict with days, hours, minutes.
+        Calculate the countdown to the next milestone.
+        Returns dict with days, hours, minutes, and the milestone label.
         """
         now = pendulum.now('America/Chicago')
-        spring_training = self._get_spring_training_date()
+        label, target = self._get_countdown_target()
 
-        diff = spring_training - now
+        diff = target - now
 
         # Calculate components
         total_seconds = max(0, int(diff.total_seconds()))
@@ -97,7 +146,8 @@ class SpringTrainingDisplay:
             'days': days,
             'hours': hours,
             'minutes': minutes,
-            'year': spring_training.year
+            'year': target.year,
+            'label': label
         }
 
     def _get_countdown_message(self, countdown: dict[str, int]) -> str:
@@ -105,18 +155,19 @@ class SpringTrainingDisplay:
         days = countdown['days']
         hours = countdown['hours']
         minutes = countdown['minutes']
+        label = countdown.get('label', 'Spring Training')
 
         if days > 0:
             day_word = "Day" if days == 1 else "Days"
-            return f"{days} {day_word} till Spring Training"
+            return f"{days} {day_word} till {label}"
         elif hours > 0:
             hour_word = "Hour" if hours == 1 else "Hours"
-            return f"{hours} {hour_word} till Spring Training"
+            return f"{hours} {hour_word} till {label}"
         elif minutes > 0:
             minute_word = "Minute" if minutes == 1 else "Minutes"
-            return f"{minutes} {minute_word} till Spring Training"
+            return f"{minutes} {minute_word} till {label}"
         else:
-            return "Spring Training is HERE!"
+            return f"{label} is HERE!"
 
     def _draw_header(self) -> None:
         """Draw the Spring Training header image at the top, centered with Cubs blue background"""
