@@ -1110,3 +1110,67 @@ class TestRadarSweepFlare:
         flare = display._sweep_flare
         assert 0.5 < flare(5, 350) < 1.0        # beam at 5, dot at 350
         assert flare(350, 5) == 0.0             # dot ahead of the beam
+
+
+# ============================================================================
+# Stock screen redesign: dashboard, market hours, sparkline
+# ============================================================================
+
+class TestStockDashboard:
+    def _display(self):
+        from stock_display import StockDisplay
+
+        return StockDisplay.__new__(StockDisplay)
+
+    def test_market_open_during_trading_hours(self) -> None:
+        display = self._display()
+
+        open_check = display._is_market_open
+        # Thursday 2026-07-09
+        assert open_check(pendulum.datetime(
+            2026, 7, 9, 13, 0, tz='America/New_York')) is True
+        assert open_check(pendulum.datetime(
+            2026, 7, 9, 9, 30, tz='America/New_York')) is True
+        assert open_check(pendulum.datetime(
+            2026, 7, 9, 8, 0, tz='America/New_York')) is False
+        assert open_check(pendulum.datetime(
+            2026, 7, 9, 16, 0, tz='America/New_York')) is False
+        # Saturday
+        assert open_check(pendulum.datetime(
+            2026, 7, 11, 13, 0, tz='America/New_York')) is False
+
+    def test_view_schedule_dashboard_then_sparklines(self) -> None:
+        display = self._display()
+
+        view = display._view_for_tick
+        assert view(0.0, 4) == ('dashboard', None)
+        assert view(14.9, 4) == ('dashboard', None)
+        assert view(15.0, 4) == ('sparkline', 0)
+        assert view(23.5, 4) == ('sparkline', 1)
+        assert view(46.9, 4) == ('sparkline', 3)
+        assert view(47.0, 4) == ('dashboard', None)  # cycle wraps
+
+    def test_view_schedule_without_indices_stays_on_dashboard(self) -> None:
+        display = self._display()
+
+        assert display._view_for_tick(99.0, 0) == ('dashboard', None)
+
+    def test_parse_chart_points_filters_gaps(self) -> None:
+        display = self._display()
+
+        data = {'chart': {'result': [{'indicators': {'quote': [
+            {'close': [100.0, None, 101.5, 102.0, None]}]}}]}}
+        assert display._parse_chart_points(data) == [100.0, 101.5, 102.0]
+        assert display._parse_chart_points({}) == []
+
+    def test_scale_points_maps_to_pixel_box(self) -> None:
+        display = self._display()
+
+        pts = display._scale_points([1.0, 2.0, 3.0], 0, 0, 3, 3)
+        assert pts == [(0, 2), (1, 1), (2, 0)]
+
+    def test_scale_points_flat_series_draws_midline(self) -> None:
+        display = self._display()
+
+        pts = display._scale_points([5.0, 5.0], 10, 20, 2, 4)
+        assert pts == [(10, 22), (11, 22)]

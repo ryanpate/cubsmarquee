@@ -894,7 +894,6 @@ class TestCachedConfigLoader:
         import newsmax_display
         import pga_display
         import spring_training_display
-        import stock_display
 
         for module, cls_name in [
             (spring_training_display, 'SpringTrainingDisplay'),
@@ -902,7 +901,6 @@ class TestCachedConfigLoader:
             (pga_display, 'PGADisplay'),
             (newsmax_display, 'NewsmaxDisplay'),
             (bible_display, 'BibleDisplay'),
-            (stock_display, 'StockDisplay'),
             (flight_display, 'FlightDisplay'),
         ]:
             cls = getattr(module, cls_name)
