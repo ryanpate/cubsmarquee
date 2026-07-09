@@ -9,8 +9,9 @@ from PIL import Image, ImageDraw
 from rgbmatrix import graphics
 from typing import TYPE_CHECKING, Any
 
-from scoreboard_config import Colors, Positions, GameConfig, TeamConfig, RGBColor, DisplayConfig, get_scroll_delay
+from scoreboard_config import Colors, Positions, GameConfig, TeamConfig, RGBColor, DisplayConfig, get_scroll_delay, load_user_config
 from retry import retry_api_call
+from playoff_race_display import PlayoffRaceDisplay
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
@@ -24,6 +25,7 @@ class GameStateHandler:
         self.manager = scoreboard_manager
         self.scroll_position: int = 96  # For scrolling text
         self.rain_drops: list[dict[str, Any]] = []  # Lazy-initialized
+        self.playoff_race: PlayoffRaceDisplay = PlayoffRaceDisplay(scoreboard_manager)
 
     def display_warmup(
         self,
@@ -394,6 +396,7 @@ class GameStateHandler:
                     # Still show standings/playoff info before breaking
                     if cycle_content and game_type == 'R':
                         self._display_standings()
+                        self._maybe_display_playoff_race()
                     elif cycle_content and game_type not in ('S', 'E', 'R'):
                         self._display_playoff_info(game_data, game_index)
                     break
@@ -401,6 +404,7 @@ class GameStateHandler:
                 # Show standings for regular season, playoff info for postseason
                 if game_type == 'R':
                     self._display_standings()
+                    self._maybe_display_playoff_race()
                 else:
                     self._display_playoff_info(game_data, game_index)
 
@@ -434,6 +438,17 @@ class GameStateHandler:
             if self.manager.split_squad_indicator:
                 if time.time() >= self.manager.split_squad_switch_time:
                     break
+
+    def _maybe_display_playoff_race(self) -> None:
+        """Show the playoff race screen after standings during the race"""
+        if not PlayoffRaceDisplay.is_race_season():
+            return
+        if not load_user_config().get('enable_playoff_race', True):
+            return
+        try:
+            self.playoff_race.display_playoff_race()
+        except Exception as e:
+            print(f"Error in playoff race display: {e}")
 
     def _display_standings(self) -> None:
         """Display division standings"""

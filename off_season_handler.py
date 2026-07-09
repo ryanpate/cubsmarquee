@@ -19,7 +19,6 @@ from bible_display import BibleDisplay
 from newsmax_display import NewsmaxDisplay
 from stock_display import StockDisplay
 from spring_training_display import SpringTrainingDisplay
-from playoff_race_display import PlayoffRaceDisplay
 from flight_display import FlightDisplay
 
 if TYPE_CHECKING:
@@ -39,7 +38,6 @@ class OffSeasonHandler:
         self.newsmax_display: NewsmaxDisplay = NewsmaxDisplay(scoreboard_manager)
         self.stock_display: StockDisplay = StockDisplay(scoreboard_manager)
         self.spring_training_display: SpringTrainingDisplay = SpringTrainingDisplay(scoreboard_manager)
-        self.playoff_race_display: PlayoffRaceDisplay = PlayoffRaceDisplay(scoreboard_manager)
         self.flight_display: FlightDisplay = FlightDisplay(scoreboard_manager)
         self.scroll_position: int = DisplayConfig.MATRIX_COLS
 
@@ -84,7 +82,6 @@ class OffSeasonHandler:
             'newsmax': GameConfig.NEWSMAX_DISPLAY_DURATION if hasattr(GameConfig, 'NEWSMAX_DISPLAY_DURATION') else 2,
             'stocks': GameConfig.STOCKS_DISPLAY_DURATION if hasattr(GameConfig, 'STOCKS_DISPLAY_DURATION') else 2,
             'spring_training': GameConfig.SPRING_TRAINING_DISPLAY_DURATION if hasattr(GameConfig, 'SPRING_TRAINING_DISPLAY_DURATION') else 2,
-            'playoff_race': 2,
             'flights': GameConfig.FLIGHT_DISPLAY_DURATION if hasattr(GameConfig, 'FLIGHT_DISPLAY_DURATION') else 2
         }
 
@@ -810,28 +807,6 @@ class OffSeasonHandler:
                 traceback.print_exc()
         else:
             print("Skipping Cubs news (disabled in config)")
-
-        if _tick():
-            return
-
-        # Display playoff race if it's the season's second half and enabled
-        playoff_race_enabled = self.config.get('enable_playoff_race', True)
-        if self.playoff_race_display.is_race_season() and playoff_race_enabled:
-            print("Displaying playoff race...")
-            try:
-                self.playoff_race_display.display_playoff_race(
-                    duration=self.rotation_schedule['playoff_race'] * 60
-                )
-                print("Playoff race display finished")
-            except Exception as e:
-                print(f"Error in playoff race display: {e}")
-                import traceback
-                traceback.print_exc()
-        else:
-            if not self.playoff_race_display.is_race_season():
-                print("Skipping playoff race (not race season)")
-            else:
-                print("Skipping playoff race (disabled in config)")
 
         if _tick():
             return

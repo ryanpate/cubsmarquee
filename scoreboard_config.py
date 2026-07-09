@@ -246,6 +246,7 @@ class GameConfig:
     MAX_DAYS_TO_CHECK: int = 14
     GAME_CHECK_DELAY: int = 5  # seconds between game status checks
     NO_GAME_STANDINGS_DISPLAY_TIME: int = 15  # seconds
+    PLAYOFF_RACE_DISPLAY_TIME: int = 15  # seconds, shown right after standings
     SCROLL_SPEED: float = 0.002  # seconds between scroll updates (default)
     SCROLL_PIXELS: int = 1  # pixels to move per frame
     GAME_OVER_WAIT_TIME: int = 360  # seconds for doubleheader wait

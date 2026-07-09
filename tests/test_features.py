@@ -325,6 +325,7 @@ class TestPlayoffRace:
         assert race == {
             'div_rank': 2, 'gb': '6.0', 'wc_rank': 1, 'wc_gb': '+1.5',
             'magic': None, 'wins': 52, 'losses': 40,
+            'leader_id': 158,
         }
 
     def test_parse_returns_none_without_cubs(self) -> None:
@@ -332,34 +333,119 @@ class TestPlayoffRace:
 
         assert display._parse_race_data({'records': []}) is None
 
-    def test_format_wildcard_leader(self) -> None:
+    def test_format_rows_wildcard_leader(self) -> None:
         display = self._display()
         race = display._parse_race_data(STANDINGS_FIXTURE)
 
-        assert display._format_race_lines(race) == [
-            'NL CENT: 2ND -6.0',
-            'WILD CARD: 1ST +1.5',
-            'RECORD: 52-40',
+        assert display._format_race_rows(race) == [
+            ('NL CENT', '2ND', '6.0'),
+            ('WILDCARD', '1ST', '+1.5'),
+            ('RECORD', '52-40', ''),
         ]
 
-    def test_format_division_leader_shows_magic_number(self) -> None:
+    def test_format_rows_division_leader_shows_magic_number(self) -> None:
         display = self._display()
         race = {'div_rank': 1, 'gb': '-', 'wc_rank': None, 'wc_gb': '-',
-                'magic': '12', 'wins': 90, 'losses': 60}
+                'magic': '12', 'wins': 90, 'losses': 60, 'leader_id': 112}
 
-        assert display._format_race_lines(race) == [
-            'NL CENT: 1ST',
-            'MAGIC NUMBER: 12',
-            'RECORD: 90-60',
+        assert display._format_race_rows(race) == [
+            ('NL CENT', '1ST', ''),
+            ('MAGIC #', '12', ''),
+            ('RECORD', '90-60', ''),
         ]
 
-    def test_format_trailing_wildcard(self) -> None:
+    def test_format_rows_leader_without_magic_number(self) -> None:
+        display = self._display()
+        race = {'div_rank': 1, 'gb': '-', 'wc_rank': None, 'wc_gb': '-',
+                'magic': None, 'wins': 50, 'losses': 40, 'leader_id': 112}
+
+        assert display._format_race_rows(race)[1] == ('MAGIC #', '--', '')
+
+    def test_format_rows_trailing_wildcard(self) -> None:
         display = self._display()
         race = {'div_rank': 3, 'gb': '9.5', 'wc_rank': 4, 'wc_gb': '2.0',
-                'magic': None, 'wins': 48, 'losses': 43}
+                'magic': None, 'wins': 48, 'losses': 43, 'leader_id': 158}
 
-        lines = display._format_race_lines(race)
-        assert lines[1] == 'WILD CARD: 4TH -2.0'
+        rows = display._format_race_rows(race)
+        assert rows[1] == ('WILDCARD', '4TH', '2.0')
+
+    def test_format_rows_out_of_wildcard(self) -> None:
+        display = self._display()
+        race = {'div_rank': 4, 'gb': '12.5', 'wc_rank': None, 'wc_gb': '-',
+                'magic': None, 'wins': 44, 'losses': 48, 'leader_id': 158}
+
+        rows = display._format_race_rows(race)
+        assert rows[1] == ('WILDCARD', 'OUT', '')
+
+    def test_format_rows_hopeless_wildcard_shows_out(self) -> None:
+        display = self._display()
+        base = {'div_rank': 4, 'gb': '15.0', 'magic': None,
+                'wins': 40, 'losses': 55, 'leader_id': 158}
+
+        # Double-digit deficit reads as OUT (also keeps the row on screen)
+        race = dict(base, wc_rank=5, wc_gb='11.0')
+        assert display._format_race_rows(race)[1] == ('WILDCARD', 'OUT', '')
+
+        # Double-digit rank reads as OUT
+        race = dict(base, wc_rank=10, wc_gb='8.0')
+        assert display._format_race_rows(race)[1] == ('WILDCARD', 'OUT', '')
+
+    def test_in_playoff_position(self) -> None:
+        display = self._display()
+
+        in_position = display._in_playoff_position
+        assert in_position({'div_rank': 1, 'wc_rank': None}) is True
+        assert in_position({'div_rank': 2, 'wc_rank': 1}) is True
+        assert in_position({'div_rank': 2, 'wc_rank': 3}) is True
+        assert in_position({'div_rank': 3, 'wc_rank': 4}) is False
+        assert in_position({'div_rank': 4, 'wc_rank': None}) is False
+
+    def test_leader_abbreviation_fetched_once(self, monkeypatch) -> None:
+        import playoff_race_display as prd
+
+        display = self._display()
+        display._abbr_cache = {}
+        get = Mock(return_value={'teams': [{'abbreviation': 'MIL'}]})
+        monkeypatch.setattr(prd.statsapi, 'get', get)
+
+        assert display._leader_abbr(158) == 'MIL'
+        assert display._leader_abbr(158) == 'MIL'
+        assert get.call_count == 1
+
+    def test_leader_abbreviation_none_on_api_failure(self, monkeypatch) -> None:
+        import playoff_race_display as prd
+
+        display = self._display()
+        display._abbr_cache = {}
+        monkeypatch.setattr(
+            prd, 'retry_api_call', Mock(side_effect=Exception('down')))
+
+        assert display._leader_abbr(158) is None
+
+    def test_chase_strip_alternates_only_when_chasing(self) -> None:
+        display = self._display()
+
+        chasing = {'div_rank': 2, 'wc_rank': 1, 'leader_id': 158}
+        leading = {'div_rank': 1, 'wc_rank': None, 'leader_id': 112}
+
+        # Chaser: status strip first, chase strip on the alternate beat
+        assert display._chase_strip_visible(chasing, tick=0) is False
+        assert display._chase_strip_visible(chasing, tick=5) is True
+        assert display._chase_strip_visible(chasing, tick=10) is False
+
+        # Division leader chases no one
+        assert display._chase_strip_visible(leading, tick=5) is False
+
+    def test_race_screen_is_short_like_standings(self) -> None:
+        import inspect
+        from playoff_race_display import PlayoffRaceDisplay
+        from scoreboard_config import GameConfig
+
+        default = inspect.signature(
+            PlayoffRaceDisplay.display_playoff_race
+        ).parameters['duration'].default
+        assert default == GameConfig.PLAYOFF_RACE_DISPLAY_TIME
+        assert GameConfig.PLAYOFF_RACE_DISPLAY_TIME <= 20
 
     def test_race_season_gating(self, monkeypatch) -> None:
         import playoff_race_display as prd
@@ -378,6 +464,81 @@ class TestPlayoffRace:
         display.display_playoff_race(duration=1)
 
         display.manager.swap_canvas.assert_not_called()
+
+
+class TestPlayoffRaceInNoGameRotation:
+    """The race screen rides along with the next-game/standings cycle"""
+
+    def _handler(self):
+        from game_state_handler import GameStateHandler
+
+        handler = GameStateHandler.__new__(GameStateHandler)
+        handler.manager = Mock()
+        handler.playoff_race = Mock()
+        return handler
+
+    def test_shows_race_during_race_season(self, monkeypatch) -> None:
+        import game_state_handler as gsh
+
+        monkeypatch.setattr(
+            gsh.PlayoffRaceDisplay, 'is_race_season', staticmethod(lambda: True))
+        monkeypatch.setattr(gsh, 'load_user_config', lambda: {})
+        handler = self._handler()
+
+        handler._maybe_display_playoff_race()
+
+        handler.playoff_race.display_playoff_race.assert_called_once_with()
+
+    def test_skipped_outside_race_season(self, monkeypatch) -> None:
+        import game_state_handler as gsh
+
+        monkeypatch.setattr(
+            gsh.PlayoffRaceDisplay, 'is_race_season', staticmethod(lambda: False))
+        monkeypatch.setattr(gsh, 'load_user_config', lambda: {})
+        handler = self._handler()
+
+        handler._maybe_display_playoff_race()
+
+        handler.playoff_race.display_playoff_race.assert_not_called()
+
+    def test_skipped_when_disabled_in_config(self, monkeypatch) -> None:
+        import game_state_handler as gsh
+
+        monkeypatch.setattr(
+            gsh.PlayoffRaceDisplay, 'is_race_season', staticmethod(lambda: True))
+        monkeypatch.setattr(
+            gsh, 'load_user_config', lambda: {'enable_playoff_race': False})
+        handler = self._handler()
+
+        handler._maybe_display_playoff_race()
+
+        handler.playoff_race.display_playoff_race.assert_not_called()
+
+    def test_race_errors_do_not_break_rotation(self, monkeypatch) -> None:
+        import game_state_handler as gsh
+
+        monkeypatch.setattr(
+            gsh.PlayoffRaceDisplay, 'is_race_season', staticmethod(lambda: True))
+        monkeypatch.setattr(gsh, 'load_user_config', lambda: {})
+        handler = self._handler()
+        handler.playoff_race.display_playoff_race.side_effect = Exception('api down')
+
+        handler._maybe_display_playoff_race()  # must not raise
+
+    def test_handler_owns_a_playoff_race_display(self) -> None:
+        from game_state_handler import GameStateHandler
+        from playoff_race_display import PlayoffRaceDisplay
+
+        handler = GameStateHandler(Mock())
+
+        assert isinstance(handler.playoff_race, PlayoffRaceDisplay)
+
+    def test_offseason_rotation_no_longer_owns_the_race_segment(self) -> None:
+        import inspect
+        import off_season_handler
+
+        source = inspect.getsource(off_season_handler)
+        assert 'display_playoff_race' not in source
 
 
 # ============================================================================
