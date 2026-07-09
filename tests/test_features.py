@@ -957,3 +957,122 @@ class TestFlightVisualHelpers:
         assert text == 'LVL' and direction == 'level'
         text, color, direction = indicator(None)
         assert text == '' and direction == 'level'
+
+
+# ============================================================================
+# Game-over screen interleaved with the post-game rotation
+# ============================================================================
+
+class _FakeTime:
+    """time.time/time.sleep stand-in so display loops finish instantly"""
+
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def time(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.now += seconds
+
+
+class _FakePendulum:
+    """pendulum.now() stand-in with a mutable date for loop-exit control"""
+
+    def __init__(self, date: str = '2026-07-09', hhmm: str = '20:00') -> None:
+        self.date = date
+        self.hhmm = hhmm
+
+    def now(self, *args, **kwargs):
+        return self
+
+    def format(self, fmt: str) -> str:
+        return self.date if 'YYYY' in fmt else self.hhmm
+
+
+class TestGameOverInterleave:
+    """The FINAL screen reappears between every post-game rotation segment"""
+
+    def _game_info(self):
+        # Cubs away, lost 2-3 (loss avoids the W-flag path)
+        return {
+            'liveData': {
+                'boxscore': {'teams': {
+                    'home': {'teamStats': {
+                        'batting': {'runs': 3, 'hits': 8},
+                        'fielding': {'errors': 0}}},
+                    'away': {'teamStats': {
+                        'batting': {'runs': 2, 'hits': 5},
+                        'fielding': {'errors': 1}}},
+                }},
+                'linescore': {'currentInning': 9},
+            },
+            'gameData': {'teams': {'home': {'id': 110}}},
+        }
+
+    def _handler(self, monkeypatch, fake_pendulum):
+        from PIL import Image
+        import live_game_handler as lgh
+        from live_game_handler import LiveGameHandler
+
+        monkeypatch.setattr(lgh, 'time', _FakeTime())
+        monkeypatch.setattr(lgh, 'pendulum', fake_pendulum)
+        monkeypatch.setattr(
+            lgh, 'retry_api_call', lambda *a, **k: self._game_info())
+
+        handler = LiveGameHandler.__new__(LiveGameHandler)
+        handler.manager = Mock()
+        handler.manager.game_images = {
+            'cubs': Image.new('RGBA', (26, 26)),
+            'opponent': Image.new('RGBA', (26, 26)),
+        }
+        handler.off_season_handler = Mock()
+        return handler
+
+    def _run_one_cycle(self, monkeypatch):
+        """Run display_game_over through one rotation, capturing the
+        callback it hands to the rotation cycle."""
+        fake_pendulum = _FakePendulum()
+        handler = self._handler(monkeypatch, fake_pendulum)
+        captured = {}
+
+        def fake_rotation(between_callback=None):
+            captured['callback'] = between_callback
+            captured['final_drawn_before_rotation'] = any(
+                'FINAL' in str(c)
+                for c in handler.manager.draw_text.call_args_list)
+            fake_pendulum.date = '2026-07-10'  # exit the game-over loop
+
+        handler.off_season_handler._display_rotation_cycle = fake_rotation
+        handler.display_game_over([{'doubleheader': 'N'}], 0, 12345)
+        return handler, captured, fake_pendulum
+
+    def test_interlude_duration_configured(self) -> None:
+        from scoreboard_config import GameConfig
+
+        assert 30 <= GameConfig.GAME_OVER_INTERLUDE_TIME <= 120
+
+    def test_rotation_receives_game_over_callback(self, monkeypatch) -> None:
+        _, captured, _ = self._run_one_cycle(monkeypatch)
+
+        assert callable(captured['callback'])
+
+    def test_final_screen_shown_before_first_rotation(self, monkeypatch) -> None:
+        _, captured, _ = self._run_one_cycle(monkeypatch)
+
+        assert captured['final_drawn_before_rotation'] is True
+
+    def test_callback_redraws_final_between_segments(self, monkeypatch) -> None:
+        handler, captured, fake_pendulum = self._run_one_cycle(monkeypatch)
+
+        fake_pendulum.date = '2026-07-09'  # back to game day
+        handler.manager.draw_text.reset_mock()
+        assert captured['callback']() is False
+        assert any('FINAL' in str(c)
+                   for c in handler.manager.draw_text.call_args_list)
+
+    def test_callback_signals_exit_when_day_rolls_over(self, monkeypatch) -> None:
+        handler, captured, fake_pendulum = self._run_one_cycle(monkeypatch)
+
+        fake_pendulum.date = '2026-07-10'
+        assert captured['callback']() is True

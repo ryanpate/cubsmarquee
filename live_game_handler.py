@@ -779,8 +779,37 @@ class LiveGameHandler:
                 print(f"Error displaying W flag: {e}")
                 return False
 
-        # Main loop - cycle between game over screen and W flag (if Cubs won)
+        # Main loop - final score interleaved between rotation segments
         current_date = pendulum.now().format('YYYY-MM-DD')
+
+        def show_game_over_interlude():
+            """Show the game over screen (and W flag on wins) for the
+            interlude period. Returns True when the loop should exit."""
+            nonlocal cubs_won
+            screen_start = time.time()
+            while time.time() - screen_start < GameConfig.GAME_OVER_INTERLUDE_TIME:
+                draw_game_over_screen()
+                time.sleep(0.5)
+
+                # Check exit conditions during game over screen display
+                if pendulum.now().format('YYYY-MM-DD') != current_date:
+                    return True
+                if pendulum.now().format('HH:MM') == '04:00':
+                    return True
+                if game_data[game_index]['doubleheader'] == 'S':
+                    return True
+
+            # If Cubs won, show W flag for 15 seconds
+            if cubs_won:
+                flag_success = display_w_flag_cycle()
+                # If flag failed to load, just continue with game over screen only
+                if not flag_success:
+                    cubs_won = False  # Don't try to show flag again
+            return False
+
+        # Show the final score right away; afterwards the rotation's
+        # between-segment callback keeps bringing it back
+        show_game_over_interlude()
 
         while True:
             # Check if it's time to exit
@@ -795,37 +824,20 @@ class LiveGameHandler:
                 time.sleep(GameConfig.GAME_OVER_WAIT_TIME)
                 break
 
-            # Show game over screen for 15 seconds
-            screen_start = time.time()
-            while time.time() - screen_start < 15:
-                draw_game_over_screen()
-                time.sleep(0.5)
-
-                # Check exit conditions during game over screen display
-                if pendulum.now().format('YYYY-MM-DD') != current_date:
-                    return
-                if pendulum.now().format('HH:MM') == '04:00':
-                    return
-                if game_data[game_index]['doubleheader'] == 'S':
-                    return
-
-            # If Cubs won, show W flag for 15 seconds
-            if cubs_won:
-                flag_success = display_w_flag_cycle()
-                # If flag failed to load, just continue with game over screen only
-                if not flag_success:
-                    cubs_won = False  # Don't try to show flag again
-
             # Cycle through off-season content (weather, Bears, PGA, etc.)
+            # with the game over screen between every segment
             has_handler = getattr(self, 'off_season_handler', None) is not None
             logger.info(f"Game over loop: has off_season_handler={has_handler}, cubs_won={cubs_won}")
             if has_handler:
                 try:
-                    logger.info("Starting off-season rotation cycle from game-over screen")
-                    self.off_season_handler._display_rotation_cycle()
-                    logger.info("Off-season rotation cycle completed, returning to game-over")
+                    logger.info("Starting post-game rotation with game-over interludes")
+                    self.off_season_handler._display_rotation_cycle(
+                        between_callback=show_game_over_interlude)
+                    logger.info("Post-game rotation cycle completed")
                 except Exception as e:
                     logger.error(f"Error in post-game rotation cycle: {e}")
                     import traceback
                     logger.debug(traceback.format_exc())
                     time.sleep(10)
+            elif show_game_over_interlude():
+                break

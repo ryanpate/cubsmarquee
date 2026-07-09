@@ -250,6 +250,7 @@ class GameConfig:
     SCROLL_SPEED: float = 0.002  # seconds between scroll updates (default)
     SCROLL_PIXELS: int = 1  # pixels to move per frame
     GAME_OVER_WAIT_TIME: int = 360  # seconds for doubleheader wait
+    GAME_OVER_INTERLUDE_TIME: int = 45  # seconds of FINAL screen between rotation segments
     ERROR_RETRY_DELAY: int = 10  # seconds
 
     # Animation timing
