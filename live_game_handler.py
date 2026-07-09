@@ -195,6 +195,47 @@ class LiveGameHandler:
                     # Return to main loop to switch to next game
                     break
 
+    # Compact labels for common play events (micro font fits ~24 chars)
+    PLAY_EVENT_ABBREVIATIONS: dict[str, str] = {
+        'Strikeout': 'K',
+        'Single': '1B',
+        'Double': '2B',
+        'Triple': '3B',
+        'Home Run': 'HR',
+        'Walk': 'BB',
+        'Intent Walk': 'IBB',
+        'Hit By Pitch': 'HBP',
+        'Grounded Into DP': 'GDP',
+        'Sac Fly': 'SF',
+        'Sac Bunt': 'SAC',
+        'Field Error': 'E',
+        'Groundout': 'GO',
+        'Flyout': 'FO',
+        'Lineout': 'LO',
+        'Pop Out': 'PO',
+        'Forceout': 'FC',
+        'Fielders Choice': 'FC',
+    }
+
+    def _get_last_play_text(self, play_data) -> str | None:
+        """Compact 'LAST: <event> <batter>' line for the latest finished play"""
+        try:
+            for play in reversed(play_data.get('allPlays', [])):
+                event = play.get('result', {}).get('event')
+                if not event:
+                    continue  # at-bat still in progress
+                abbr = self.PLAY_EVENT_ABBREVIATIONS.get(event, event.upper())
+                batter = play['matchup']['batter']['fullName']
+                last_name = batter.split()[-1].upper()
+                rbi = play.get('result', {}).get('rbi', 0)
+                text = f"LAST: {abbr} {last_name}"
+                if rbi:
+                    text += f" +{rbi}"
+                return text[:24]  # 96px wide at 4px per micro-font char
+        except (KeyError, IndexError, AttributeError):
+            pass
+        return None
+
     @staticmethod
     def _get_review_banner(status: str) -> str | None:
         """Banner text for replay challenge / umpire review game states"""
@@ -470,9 +511,13 @@ class LiveGameHandler:
         self.manager.draw_text('tiny', 72, 30, count_color, out_text)
         self.manager.draw_text('micro', 75, 29, count_color, out_text_a)
 
-        # Batter text
-        batter_text = f"BAT: {matchup['batter']['fullName']}"
-        self.manager.draw_text('micro', 2, 45, run_color, batter_text)
+        # Batter text, alternating with the last completed play every 8s
+        last_play = self._get_last_play_text(play_data)
+        if last_play and int(time.time() / 8) % 2:
+            self.manager.draw_text('micro', 2, 45, Colors.YELLOW, last_play)
+        else:
+            batter_text = f"BAT: {matchup['batter']['fullName']}"
+            self.manager.draw_text('micro', 2, 45, run_color, batter_text)
 
         # Pitcher text
         pitching_text = matchup['pitcher']['fullName']

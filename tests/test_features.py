@@ -191,6 +191,85 @@ class TestAutoDimAdminConfig:
 
 
 # ============================================================================
+# Last-play ticker on the live game screen
+# ============================================================================
+
+def _play(event, batter, rbi=0, complete=True):
+    play = {
+        'matchup': {'batter': {'fullName': batter}},
+        'about': {'isComplete': complete},
+    }
+    if complete:
+        play['result'] = {'event': event, 'rbi': rbi}
+    else:
+        play['result'] = {}
+    return play
+
+
+class TestLastPlayTicker:
+    def _handler(self):
+        from live_game_handler import LiveGameHandler
+
+        handler = LiveGameHandler.__new__(LiveGameHandler)
+        handler.manager = Mock()
+        return handler
+
+    def test_home_run_with_rbi(self) -> None:
+        handler = self._handler()
+        play_data = {'allPlays': [_play('Home Run', 'Seiya Suzuki', rbi=2)]}
+
+        assert handler._get_last_play_text(play_data) == 'LAST: HR SUZUKI +2'
+
+    def test_strikeout_abbreviated(self) -> None:
+        handler = self._handler()
+        play_data = {'allPlays': [_play('Strikeout', 'Dansby Swanson')]}
+
+        assert handler._get_last_play_text(play_data) == 'LAST: K SWANSON'
+
+    def test_common_outs_abbreviated(self) -> None:
+        handler = self._handler()
+
+        cases = [
+            ('Groundout', 'Adley Rutschman', 'LAST: GO RUTSCHMAN'),
+            ('Flyout', 'Ian Happ', 'LAST: FO HAPP'),
+            ('Lineout', 'Alex Bregman', 'LAST: LO BREGMAN'),
+        ]
+        for event, batter, expected in cases:
+            play_data = {'allPlays': [_play(event, batter)]}
+            assert handler._get_last_play_text(play_data) == expected
+
+    def test_unmapped_event_uses_event_name(self) -> None:
+        handler = self._handler()
+        play_data = {'allPlays': [_play('Balk', 'Ian Happ')]}
+
+        assert handler._get_last_play_text(play_data) == 'LAST: BALK HAPP'
+
+    def test_skips_in_progress_at_bat(self) -> None:
+        handler = self._handler()
+        play_data = {'allPlays': [
+            _play('Double', 'Nico Hoerner'),
+            _play('', 'Michael Busch', complete=False),  # at bat now
+        ]}
+
+        assert handler._get_last_play_text(play_data) == 'LAST: 2B HOERNER'
+
+    def test_no_plays_yet_returns_none(self) -> None:
+        handler = self._handler()
+
+        assert handler._get_last_play_text({'allPlays': []}) is None
+        assert handler._get_last_play_text({}) is None
+
+    def test_fits_the_96px_micro_font_row(self) -> None:
+        handler = self._handler()
+        play_data = {'allPlays': [
+            _play('Grounded Into DP', 'Pete Crow-Armstrong', rbi=1),
+        ]}
+
+        text = handler._get_last_play_text(play_data)
+        assert len(text) <= 24  # 96px / 4px-per-char micro font
+
+
+# ============================================================================
 # Scoreboard status heartbeat
 # ============================================================================
 
