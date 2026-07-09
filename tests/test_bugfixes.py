@@ -586,6 +586,46 @@ class TestAdsbLolRobustness:
 
 
 # ============================================================================
+# Replay challenge / umpire review banner on the live game screen
+# ============================================================================
+
+class TestReviewBanner:
+    """Challenge/review states must be visible on the live display"""
+
+    def _make_handler(self):
+        from live_game_handler import LiveGameHandler
+
+        handler = LiveGameHandler.__new__(LiveGameHandler)
+        handler.manager = Mock()
+        return handler
+
+    def test_banner_text_for_review_states(self) -> None:
+        handler = self._make_handler()
+
+        assert handler._get_review_banner('Player challenge') == 'PLAYER CHALLENGE'
+        assert handler._get_review_banner('Manager challenge') == 'MANAGER CHALLENGE'
+        assert handler._get_review_banner('Umpire review') == 'UMPIRE REVIEW'
+
+    def test_no_banner_for_normal_play(self) -> None:
+        handler = self._make_handler()
+
+        assert handler._get_review_banner('In Progress') is None
+        assert handler._get_review_banner('Final') is None
+
+    def test_draw_review_banner_renders_text(self) -> None:
+        handler = self._make_handler()
+
+        handler._draw_review_banner('UMPIRE REVIEW')
+
+        # Banner background fills the batter strip
+        assert handler.manager.draw_pixel.call_count > 0
+        # Text is drawn centered-ish with the banner content
+        (font, x, y, color, text), _ = handler.manager.draw_text.call_args
+        assert text == 'UMPIRE REVIEW'
+        assert 0 <= x <= 96 - len(text) * 5
+
+
+# ============================================================================
 # Efficiency: batched lineup fetch
 # ============================================================================
 

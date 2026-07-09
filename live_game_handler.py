@@ -8,7 +8,7 @@ import statsapi
 from PIL import Image
 from typing import TYPE_CHECKING, Any
 
-from scoreboard_config import Colors, Positions, GameConfig, TeamConfig, DisplayConfig
+from scoreboard_config import Colors, Fonts, Positions, GameConfig, TeamConfig, DisplayConfig
 from retry import retry_api_call
 from logger import get_logger
 from flight_display import FlightDisplay
@@ -175,6 +175,11 @@ class LiveGameHandler:
             if self.manager.split_squad_indicator:
                 self._draw_split_squad_indicator()
 
+            # Show replay challenge / umpire review over the batter strip
+            banner = self._get_review_banner(current_status)
+            if banner:
+                self._draw_review_banner(banner)
+
             self.manager.swap_canvas()
 
             # Show brief flight summary on inning transitions (Mid/End states)
@@ -189,6 +194,24 @@ class LiveGameHandler:
                 if time.time() >= self.manager.split_squad_switch_time:
                     # Return to main loop to switch to next game
                     break
+
+    @staticmethod
+    def _get_review_banner(status: str) -> str | None:
+        """Banner text for replay challenge / umpire review game states"""
+        lowered = status.lower()
+        if 'challenge' in lowered or 'review' in lowered:
+            return status.upper()
+        return None
+
+    def _draw_review_banner(self, text: str) -> None:
+        """Overlay a red challenge/review banner on the batter info strip"""
+        for y in range(39, 48):
+            for x in range(0, 96):
+                self.manager.draw_pixel(x, y, 180, 0, 0)
+
+        # Center in tiny_bold (5px per char)
+        text_x = max(0, (96 - len(text) * Fonts.CHAR_WIDTH_TINY) // 2)
+        self.manager.draw_text('tiny_bold', text_x, 46, Colors.WHITE, text)
 
     def _draw_batting_indicator_overlay(self, inning_state):
         """Draw batting indicator by overlaying on the current pixel buffer"""
