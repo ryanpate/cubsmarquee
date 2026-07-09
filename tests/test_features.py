@@ -1076,3 +1076,37 @@ class TestGameOverInterleave:
 
         fake_pendulum.date = '2026-07-10'
         assert captured['callback']() is True
+
+
+class TestRadarSweepFlare:
+    """Dots flare up as the radar sweep passes over them"""
+
+    def _display(self):
+        from flight_display import FlightDisplay
+
+        return FlightDisplay.__new__(FlightDisplay)
+
+    def test_dot_bearing_cardinal_directions(self) -> None:
+        display = self._display()
+
+        bearing = display._dot_bearing
+        assert bearing(48, 20, 48, 10) == 0     # due north of center
+        assert bearing(48, 20, 58, 20) == 90    # due east
+        assert bearing(48, 20, 48, 30) == 180   # due south
+        assert bearing(48, 20, 38, 20) == 270   # due west
+
+    def test_flare_full_at_sweep_and_decays_behind(self) -> None:
+        display = self._display()
+
+        flare = display._sweep_flare
+        assert flare(90, 90) == pytest.approx(1.0)
+        assert 0.5 < flare(100, 90) < 1.0       # 10 degrees behind the beam
+        assert flare(90, 100) == 0.0            # ahead of the beam: no flare
+        assert flare(90, 200) == 0.0            # long since passed: faded out
+
+    def test_flare_wraps_past_north(self) -> None:
+        display = self._display()
+
+        flare = display._sweep_flare
+        assert 0.5 < flare(5, 350) < 1.0        # beam at 5, dot at 350
+        assert flare(350, 5) == 0.0             # dot ahead of the beam

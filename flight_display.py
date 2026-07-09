@@ -496,6 +496,20 @@ class FlightDisplay:
         """Radar sweep bearing in degrees; one revolution every 4 seconds"""
         return int((elapsed % 4.0) * 90) % 360
 
+    @staticmethod
+    def _dot_bearing(cx: int, cy: int, px: int, py: int) -> float:
+        """Bearing in degrees from radar center to a dot, screen-north up"""
+        return math.degrees(math.atan2(px - cx, cy - py)) % 360
+
+    @staticmethod
+    def _sweep_flare(sweep_deg: float, bearing_deg: float) -> float:
+        """How brightly a dot flares after the sweep passes it: 1.0 right
+        at the beam, fading to 0.0 over the 45 degrees behind it"""
+        behind = (sweep_deg - bearing_deg) % 360
+        if behind >= 45:
+            return 0.0
+        return 1.0 - behind / 45
+
     def _get_vertical_rate_indicator(
         self, vertical_rate: int | None
     ) -> tuple[str, RGBColor, str]:
@@ -843,8 +857,8 @@ class FlightDisplay:
         if int(tick * 2) % 2:
             self.manager.draw_pixel(cx - 5, cy, 255, 60, 60)
 
-        # Header text
-        self.manager.draw_text('tiny_bold', 19, 11, self.FLIGHT_WHITE, header_text)
+        # Header text, centered between the top edge and the separator
+        self.manager.draw_text('tiny_bold', 19, 9, self.FLIGHT_WHITE, header_text)
 
     def _display_no_location(self, duration: int) -> None:
         """Display message when location is not configured"""
@@ -999,12 +1013,14 @@ class FlightDisplay:
                 if 0 <= rx < radar_w and 0 <= ry < radar_h:
                     self.manager.draw_pixel(rx, ry, *ring_color)
 
-            # Rotating radar sweep with a fading afterglow trail
+            # Rotating radar sweep with a fading afterglow trail,
+            # extending past the range ring to the edge of the scope
             sweep_base = self._sweep_angle(time.time() - start_time)
+            sweep_reach = int(math.hypot(cx, cy)) + 1
             for trail in range(5):
                 angle = math.radians(sweep_base - trail * 7)
                 level = 190 - trail * 38
-                for r in range(3, usable_radius + 1):
+                for r in range(3, sweep_reach):
                     rx = int(cx + r * math.sin(angle))
                     ry = int(cy - r * math.cos(angle))
                     if 0 <= rx < radar_w and 0 <= ry < radar_h:
@@ -1097,9 +1113,19 @@ class FlightDisplay:
                     self.manager.draw_text('micro', label_x, label_y,
                                            (200, 200, 200), cs)
                 else:
-                    # Dim 1-pixel dot for other aircraft
+                    # Dim 1-pixel dot that blips bright and grows as the
+                    # sweep passes over it, then fades back down
                     dim_color = (alt_color[0] // 2, alt_color[1] // 2, alt_color[2] // 2)
-                    self.manager.draw_pixel(px, py, *dim_color)
+                    flare = self._sweep_flare(
+                        sweep_base, self._dot_bearing(cx, cy, px, py))
+                    dot_color = tuple(
+                        int(d + (255 - d) * flare) for d in dim_color)
+                    self.manager.draw_pixel(px, py, *dot_color)
+                    if flare > 0.4:
+                        for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0)):
+                            nx, ny = px + dx, py + dy
+                            if 0 <= nx < radar_w and 0 <= ny < radar_h:
+                                self.manager.draw_pixel(nx, ny, *alt_color)
 
             # Info bar at bottom - highlighted flight details
             # Separator line
