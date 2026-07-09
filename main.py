@@ -371,14 +371,20 @@ class CubsScoreboard:
         """Route to appropriate display based on game status"""
         write_status_heartbeat(
             status, game_data[self.current_game_index].get('game_date', ''))
-        # Hybrid off-season mode: for any pre-game / post-game / delay state,
-        # show a single brief pass of the pre-game display then rotate through
-        # off-season content (weather, flights, facts). Only live In Progress
-        # games bypass the hybrid cycling and go to normal game display.
+        # Hybrid off-season mode: for pre-game / delay states, show a single
+        # brief pass of the pre-game display then rotate through off-season
+        # content (weather, flights, facts). Live games (including replay
+        # challenges/reviews) go to the normal live display, and finished
+        # games go to the game-over screen, which alternates the result with
+        # off-season content on its own.
         display_mode = self._get_display_mode()
         if (display_mode == 'offseason'
-                and status not in ('In Progress', 'Warmup', 'Pre-Game', 'Postponed')
-                and not status.startswith('Delayed')):
+                and status not in ('In Progress', 'Warmup', 'Pre-Game',
+                                   'Postponed', 'Final', 'Game Over')
+                and not status.startswith('Delayed')
+                and not status.startswith('Completed Early')
+                and 'challenge' not in status.lower()
+                and 'review' not in status.lower()):
             logger.info(f"display_mode=offseason, status={status} - hybrid cycling")
             self.state_handler.display_no_game(
                 game_data, self.current_game_index, cycle_content=True)
@@ -433,7 +439,7 @@ class CubsScoreboard:
             # After game ends, cycle continues
             self.process_game_cycle()
 
-        elif status in ['Final', 'Game Over']:
+        elif status in ['Final', 'Game Over'] or status.startswith('Completed Early'):
             self.live_handler.display_game_over(
                 game_data, self.current_game_index, gameid
             )

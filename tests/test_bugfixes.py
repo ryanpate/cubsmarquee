@@ -55,6 +55,56 @@ class TestSuspendedCancelledRouting:
             game_data, 0, None, 12345
         )
 
+    def test_offseason_mode_finished_game_shows_game_over_screen(self) -> None:
+        # Regression: hybrid 'offseason' mode showed the NEXT GAME screen
+        # for a game that had already finished instead of the result
+        sb = _make_scoreboard()
+        sb._get_display_mode = Mock(return_value='offseason')
+        game_data = [{'game_type': 'R'}]
+
+        with patch('main.time.sleep'):
+            sb.route_by_status(game_data, 12345, 'Game Over')
+
+        sb.live_handler.display_game_over.assert_called_once_with(
+            game_data, 0, 12345
+        )
+        sb.state_handler.display_no_game.assert_not_called()
+
+    def test_offseason_mode_live_challenge_stays_on_live_display(self) -> None:
+        sb = _make_scoreboard()
+        sb._get_display_mode = Mock(return_value='offseason')
+        game_data = [{'game_type': 'R'}]
+
+        with patch('main.time.sleep'):
+            sb.route_by_status(game_data, 12345, 'Player challenge')
+
+        sb.live_handler.display_game_on.assert_called_once()
+        sb.state_handler.display_no_game.assert_not_called()
+
+    def test_offseason_mode_scheduled_game_still_hybrid_cycles(self) -> None:
+        sb = _make_scoreboard()
+        sb._get_display_mode = Mock(return_value='offseason')
+        game_data = [{'game_type': 'R'}]
+
+        with patch('main.time.sleep'):
+            sb.route_by_status(game_data, 12345, 'Scheduled')
+
+        sb.state_handler.display_no_game.assert_called_once_with(
+            game_data, 0, cycle_content=True
+        )
+        sb.off_season_handler._display_rotation_cycle.assert_called_once()
+
+    def test_completed_early_routes_to_game_over(self) -> None:
+        sb = _make_scoreboard()
+        game_data = [{'game_type': 'R'}]
+
+        with patch('main.time.sleep'):
+            sb.route_by_status(game_data, 12345, 'Completed Early: Rain')
+
+        sb.live_handler.display_game_over.assert_called_once_with(
+            game_data, 0, 12345
+        )
+
     @pytest.mark.parametrize('status', [
         'Player challenge', 'Manager challenge', 'Umpire review',
     ])
