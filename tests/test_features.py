@@ -191,6 +191,99 @@ class TestAutoDimAdminConfig:
 
 
 # ============================================================================
+# Playoff race display
+# ============================================================================
+
+STANDINGS_FIXTURE = {
+    'records': [{
+        'teamRecords': [
+            {'team': {'id': 158, 'name': 'Milwaukee Brewers'},
+             'divisionRank': '1', 'gamesBack': '-',
+             'wildCardRank': None, 'wildCardGamesBack': '-',
+             'magicNumber': '65', 'wins': 58, 'losses': 34},
+            {'team': {'id': 112, 'name': 'Chicago Cubs'},
+             'divisionRank': '2', 'gamesBack': '6.0',
+             'wildCardRank': '1', 'wildCardGamesBack': '+1.5',
+             'magicNumber': None, 'wins': 52, 'losses': 40},
+        ],
+    }],
+}
+
+
+class TestPlayoffRace:
+    def _display(self):
+        from playoff_race_display import PlayoffRaceDisplay
+
+        display = PlayoffRaceDisplay.__new__(PlayoffRaceDisplay)
+        display.manager = Mock()
+        display._race_cache = None
+        display._race_cached_at = 0.0
+        return display
+
+    def test_parse_extracts_cubs_race(self) -> None:
+        display = self._display()
+
+        race = display._parse_race_data(STANDINGS_FIXTURE)
+
+        assert race == {
+            'div_rank': 2, 'gb': '6.0', 'wc_rank': 1, 'wc_gb': '+1.5',
+            'magic': None, 'wins': 52, 'losses': 40,
+        }
+
+    def test_parse_returns_none_without_cubs(self) -> None:
+        display = self._display()
+
+        assert display._parse_race_data({'records': []}) is None
+
+    def test_format_wildcard_leader(self) -> None:
+        display = self._display()
+        race = display._parse_race_data(STANDINGS_FIXTURE)
+
+        assert display._format_race_lines(race) == [
+            'NL CENT: 2ND -6.0',
+            'WILD CARD: 1ST +1.5',
+            'RECORD: 52-40',
+        ]
+
+    def test_format_division_leader_shows_magic_number(self) -> None:
+        display = self._display()
+        race = {'div_rank': 1, 'gb': '-', 'wc_rank': None, 'wc_gb': '-',
+                'magic': '12', 'wins': 90, 'losses': 60}
+
+        assert display._format_race_lines(race) == [
+            'NL CENT: 1ST',
+            'MAGIC NUMBER: 12',
+            'RECORD: 90-60',
+        ]
+
+    def test_format_trailing_wildcard(self) -> None:
+        display = self._display()
+        race = {'div_rank': 3, 'gb': '9.5', 'wc_rank': 4, 'wc_gb': '2.0',
+                'magic': None, 'wins': 48, 'losses': 43}
+
+        lines = display._format_race_lines(race)
+        assert lines[1] == 'WILD CARD: 4TH -2.0'
+
+    def test_race_season_gating(self, monkeypatch) -> None:
+        import playoff_race_display as prd
+
+        for month, expected in [(5, False), (7, True), (9, True), (11, False)]:
+            monkeypatch.setattr(
+                prd.pendulum, 'now',
+                lambda tz=None, m=month: pendulum.datetime(
+                    2026, m, 15, tz='America/Chicago'))
+            assert prd.PlayoffRaceDisplay.is_race_season() is expected
+
+    def test_display_skips_when_no_data(self) -> None:
+        display = self._display()
+        display._get_race_data = Mock(return_value=None)
+
+        display.display_playoff_race(duration=1)
+
+        display.manager.swap_canvas.assert_not_called()
+
+
+# ============================================================================
 # Last-play ticker on the live game screen
 # ============================================================================
 

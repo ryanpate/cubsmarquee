@@ -155,6 +155,7 @@ def load_config():
         'enable_newsmax': True,
         'enable_stocks': True,
         'enable_spring_training': True,
+        'enable_playoff_race': True,
         'enable_flights': True,
         'enable_flight_radar': True,
         'flights_between_displays': False,
@@ -698,6 +699,13 @@ HTML_TEMPLATE = """
 
             <div class="form-group">
                 <label>
+                    <input type="checkbox" id="enable_playoff_race">
+                    Enable playoff race display (July-September)
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label>
                     <input type="checkbox" id="enable_flights">
                     Enable Flight Tracking display
                 </label>
@@ -999,6 +1007,7 @@ HTML_TEMPLATE = """
             document.getElementById('enable_newsmax').checked = config.enable_newsmax !== false;
             document.getElementById('enable_stocks').checked = config.enable_stocks !== false;
             document.getElementById('enable_spring_training').checked = config.enable_spring_training !== false;
+            document.getElementById('enable_playoff_race').checked = config.enable_playoff_race !== false;
             document.getElementById('enable_flights').checked = config.enable_flights !== false;
             document.getElementById('enable_flight_radar').checked = config.enable_flight_radar !== false;
             document.getElementById('flights_between_displays').checked = config.flights_between_displays === true;
@@ -1247,6 +1256,7 @@ HTML_TEMPLATE = """
                 enable_newsmax: document.getElementById('enable_newsmax').checked,
                 enable_stocks: document.getElementById('enable_stocks').checked,
                 enable_spring_training: document.getElementById('enable_spring_training').checked,
+                enable_playoff_race: document.getElementById('enable_playoff_race').checked,
                 enable_flights: document.getElementById('enable_flights').checked,
                 enable_flight_radar: document.getElementById('enable_flight_radar').checked,
                 flights_between_displays: document.getElementById('flights_between_displays').checked,
@@ -1783,6 +1793,7 @@ def save_config_route():
             'enable_newsmax': data.get('enable_newsmax', True),
             'enable_stocks': data.get('enable_stocks', True),
             'enable_spring_training': data.get('enable_spring_training', True),
+            'enable_playoff_race': data.get('enable_playoff_race', True),
             'enable_flights': data.get('enable_flights', True),
             'enable_flight_radar': data.get('enable_flight_radar', True),
             'flights_between_displays': data.get('flights_between_displays', False),
