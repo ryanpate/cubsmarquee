@@ -7,11 +7,11 @@ import json
 import os
 import random
 import pendulum
-import feedparser
 from PIL import Image
 from typing import TYPE_CHECKING, Any
 
-from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, get_scroll_delay
+from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, get_scroll_delay, load_user_config
+from rss_fetch import fetch_feed
 from weather_display import WeatherDisplay
 from bears_display import BearsDisplay
 from pga_display import PGADisplay
@@ -141,8 +141,6 @@ class OffSeasonHandler:
 
     def _load_config(self) -> dict[str, Any]:
         """Load configuration from JSON file"""
-        config_path: str = '/home/pi/config.json'
-
         default_config: dict[str, Any] = {
             'zip_code': '',
             'weather_api_key': '',
@@ -172,15 +170,8 @@ class OffSeasonHandler:
             'flight_max_range_nm': GameConfig.FLIGHT_MAX_RANGE_NM  # Max range in nautical miles
         }
 
-        try:
-            if os.path.exists(config_path):
-                with open(config_path, 'r') as f:
-                    loaded_config: dict[str, Any] = json.load(f)
-                    # Merge with defaults
-                    default_config.update(loaded_config)
-        except Exception as e:
-            print(f"Error loading config: {e}")
-
+        # Merge with defaults (cached loader; only re-parses on file change)
+        default_config.update(load_user_config())
         return default_config
 
     def _load_cubs_facts(self) -> list[str]:
@@ -228,7 +219,7 @@ class OffSeasonHandler:
         for feed_url in rss_feeds:
             try:
                 print(f"Fetching Cubs news from {feed_url}")
-                feed = feedparser.parse(feed_url)
+                feed = fetch_feed(feed_url)
 
                 # Check if feed has entries even if bozo flag is set
                 # Some feeds work fine despite bozo being True
@@ -362,7 +353,7 @@ class OffSeasonHandler:
 
         try:
             print(f"Fetching Bears news from official source: {official_feed}")
-            feed = feedparser.parse(official_feed)
+            feed = fetch_feed(official_feed)
 
             if feed.entries:
                 print(f"Found {len(feed.entries)} entries from chicagobears.com")
@@ -409,7 +400,7 @@ class OffSeasonHandler:
             for feed_url in fallback_feeds:
                 try:
                     print(f"Fetching Bears news from {feed_url}")
-                    feed = feedparser.parse(feed_url)
+                    feed = fetch_feed(feed_url)
 
                     if not feed.entries:
                         continue
@@ -493,8 +484,11 @@ class OffSeasonHandler:
 
         if not weather_enabled:
             print("Weather not configured - showing default message only")
-            self._display_message_loop()
-            return
+            if not self._display_message_loop():
+                return  # season started
+            # Weather was configured via the admin panel - fall through
+            # into the full rotation loop
+            self.config = self._load_config()
 
         # Main rotation loop
         loop_count = 0
@@ -506,6 +500,10 @@ class OffSeasonHandler:
             try:
                 # Reload config periodically (every loop)
                 self.config = self._load_config()
+                weather_enabled = (
+                    self.config.get('zip_code') and
+                    self.config.get('weather_api_key')
+                )
 
                 # Display mode handling
                 display_mode = self.config.get('display_mode', 'auto')
@@ -1167,11 +1165,22 @@ class OffSeasonHandler:
                 break
 
     def _display_message_loop(self):
-        """Continuously display message when weather isn't configured"""
+        """Continuously display message when weather isn't configured.
+
+        Returns True if weather config was added (via the admin panel),
+        False if a new season started.
+        """
         while True:
             # Only check if season started once per day
             if self._should_check_season():
                 if self._check_season_started():
-                    return
+                    return False
+
+            # Pick up weather config added via the admin panel without
+            # requiring a process restart
+            config = self._load_config()
+            if config.get('zip_code') and config.get('weather_api_key'):
+                print("Weather configuration detected - switching to full rotation")
+                return True
 
             self._display_custom_message(duration=300)

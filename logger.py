@@ -66,8 +66,9 @@ def setup_logging(
             file_handler.setLevel(level)
             file_handler.setFormatter(formatter)
             logger.addHandler(file_handler)
-        except PermissionError:
+        except OSError:
             # Fall back to local directory if /var/log is not writable
+            # (PermissionError, or plain OSError from a read-only SD card)
             local_log = Path("./scoreboard.log")
             file_handler = RotatingFileHandler(
                 local_log,

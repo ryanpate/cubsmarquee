@@ -12,7 +12,7 @@ import feedparser
 from PIL import Image
 from typing import TYPE_CHECKING, Any
 
-from scoreboard_config import Colors, GameConfig, DisplayConfig, Positions, RGBColor, get_scroll_delay
+from scoreboard_config import Colors, GameConfig, DisplayConfig, Positions, RGBColor, get_scroll_delay, load_user_config
 from retry import retry_http_request
 
 if TYPE_CHECKING:
@@ -159,14 +159,7 @@ class PGADisplay:
 
     def _load_scroll_config(self) -> dict:
         """Load scroll speed settings from config file"""
-        config_path = '/home/pi/config.json'
-        try:
-            if os.path.exists(config_path):
-                with open(config_path, 'r') as f:
-                    return json.load(f)
-        except Exception as e:
-            print(f"Error loading config for scroll speed: {e}")
-        return {}
+        return load_user_config()
 
     def _load_pga_logo(self) -> Image.Image | None:
         """Load the PGA golf flag logo"""

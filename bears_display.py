@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import time
-import json
-import os
 import requests
 import pendulum
 from PIL import Image
 from typing import TYPE_CHECKING, Any
 
-from scoreboard_config import Colors, GameConfig, RGBColor, get_scroll_delay
+from scoreboard_config import Colors, GameConfig, RGBColor, get_scroll_delay, load_user_config
 from retry import retry_http_request
 
 if TYPE_CHECKING:
@@ -53,14 +51,7 @@ class BearsDisplay:
 
     def _load_scroll_config(self) -> dict:
         """Load scroll speed settings from config file"""
-        config_path = '/home/pi/config.json'
-        try:
-            if os.path.exists(config_path):
-                with open(config_path, 'r') as f:
-                    return json.load(f)
-        except Exception as e:
-            print(f"Error loading config for scroll speed: {e}")
-        return {}
+        return load_user_config()
 
     def _fetch_live_scores(self, game_id):
         """

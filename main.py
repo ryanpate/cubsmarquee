@@ -356,7 +356,9 @@ class CubsScoreboard:
         # off-season content (weather, flights, facts). Only live In Progress
         # games bypass the hybrid cycling and go to normal game display.
         display_mode = self._get_display_mode()
-        if display_mode == 'offseason' and status != 'In Progress':
+        if (display_mode == 'offseason'
+                and status not in ('In Progress', 'Warmup', 'Pre-Game', 'Postponed')
+                and not status.startswith('Delayed')):
             logger.info(f"display_mode=offseason, status={status} - hybrid cycling")
             self.state_handler.display_no_game(
                 game_data, self.current_game_index, cycle_content=True)
@@ -364,9 +366,10 @@ class CubsScoreboard:
                 self.off_season_handler._display_rotation_cycle()
             return
 
-        # Get lineup if needed
+        # Get lineup only for statuses whose displays actually scroll it
+        # (In Progress / Postponed fetched it before but never used it)
         lineup: str | None = None
-        if status in ['Warmup', 'Pre-Game', 'In Progress', 'Delayed', 'Postponed']:
+        if status in ['Warmup', 'Pre-Game'] or status.startswith('Delayed'):
             lineup = self.manager.get_lineup(gameid)
 
         # Route based on status
@@ -400,7 +403,10 @@ class CubsScoreboard:
             # After postponement, check for rescheduling
             self.process_game_cycle()
 
-        elif status == 'In Progress':
+        elif (status == 'In Progress'
+              or 'challenge' in status.lower()
+              or 'review' in status.lower()):
+            # Replay challenges / umpire reviews are mid-game states
             self.live_handler.display_game_on(
                 game_data, self.current_game_index, gameid
             )
@@ -412,6 +418,20 @@ class CubsScoreboard:
                 game_data, self.current_game_index, gameid
             )
             # After game over display, start new cycle
+            self.process_game_cycle()
+
+        elif status.startswith('Suspend'):
+            self.state_handler.display_suspended(
+                game_data, self.current_game_index, lineup, gameid
+            )
+            # After suspension display, check for resumption
+            self.process_game_cycle()
+
+        elif status.startswith('Cancel'):
+            self.state_handler.display_cancelled(
+                game_data, self.current_game_index, lineup, gameid
+            )
+            # After cancellation display, start new cycle
             self.process_game_cycle()
 
         else:

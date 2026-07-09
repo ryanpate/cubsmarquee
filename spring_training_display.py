@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import time
-import json
 import pendulum
 from PIL import Image
 import os
 from typing import TYPE_CHECKING
 
-from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, get_scroll_delay
+from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, get_scroll_delay, load_user_config
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
@@ -50,14 +49,7 @@ class SpringTrainingDisplay:
 
     def _load_scroll_config(self) -> dict:
         """Load scroll speed settings from config file"""
-        config_path = '/home/pi/config.json'
-        try:
-            if os.path.exists(config_path):
-                with open(config_path, 'r') as f:
-                    return json.load(f)
-        except Exception as e:
-            print(f"Error loading config for scroll speed: {e}")
-        return {}
+        return load_user_config()
 
     def is_spring_training_active(self) -> bool:
         """Check if Spring Training is currently underway (Feb 21 - Mar 31)."""
@@ -77,8 +69,10 @@ class SpringTrainingDisplay:
         # Spring Training start date (approximate - first game around Feb 21)
         spring_training = pendulum.datetime(year, 2, 21, tz='America/Chicago')
 
-        # If Spring Training has passed (we're in April or later), use next year
-        if now > spring_training.add(months=2):
+        # Once Spring Training is over (same Mar 31 cutoff as
+        # is_spring_training_active), count down to next year
+        end = pendulum.datetime(year, 3, 31, tz='America/Chicago')
+        if now > end:
             spring_training = pendulum.datetime(year + 1, 2, 21, tz='America/Chicago')
 
         return spring_training

@@ -39,6 +39,10 @@ class ScoreboardManager:
         self.split_squad_indicator: str = ""  # e.g., "1/2" or "2/2"
         self.split_squad_switch_time: float = 0.0  # When to switch to next game
 
+        # Cache for the no-game-today schedule lookahead
+        self._lookahead_cache: list[dict[str, Any]] | None = None
+        self._lookahead_cached_at: float = 0.0
+
     def _load_brightness(self) -> int:
         """
         Load brightness percentage from config.json.
@@ -188,22 +192,35 @@ class ScoreboardManager:
             statsapi.schedule,
             start_date=date_string, team=TeamConfig.CUBS_TEAM_ID
         )
+        if sched:
+            return sched
 
-        # Keep checking future dates until we find a game
-        days_ahead: int = 0
-        while not sched and days_ahead < GameConfig.MAX_DAYS_TO_CHECK:
-            days_ahead += 1
-            next_date = current_date.add(days=days_ahead)
-            date_string = next_date.format('MM/DD/YYYY')
-            sched = retry_api_call(
-                statsapi.schedule,
-                start_date=date_string, team=TeamConfig.CUBS_TEAM_ID
-            )
+        # No game today: look ahead with a single ranged query instead of
+        # one call per day, and cache the result so off-season polling
+        # doesn't hammer the API
+        now = time.time()
+        if (self._lookahead_cache is not None
+                and now - self._lookahead_cached_at < GameConfig.SCHEDULE_UPDATE_INTERVAL):
+            return self._lookahead_cache
 
-        if not sched:
+        future: list[dict[str, Any]] = retry_api_call(
+            statsapi.schedule,
+            start_date=current_date.add(days=1).format('MM/DD/YYYY'),
+            end_date=current_date.add(
+                days=GameConfig.MAX_DAYS_TO_CHECK).format('MM/DD/YYYY'),
+            team=TeamConfig.CUBS_TEAM_ID
+        )
+
+        if future:
+            # Keep only the next game day (matches the old day-by-day scan)
+            first_date = future[0]['game_date']
+            future = [g for g in future if g['game_date'] == first_date]
+        else:
             print(f"No games found in the next {GameConfig.MAX_DAYS_TO_CHECK} days")
 
-        return sched
+        self._lookahead_cache = future
+        self._lookahead_cached_at = now
+        return future
 
     def get_pitchers(
         self, game_data: list[dict[str, Any]], game_index: int, gameid: int
@@ -233,15 +250,28 @@ class ScoreboardManager:
 
             lineup: list[str] = []
 
-            # Process home team
             home_team: str = boxscore['teams']['home']['team']['name']
             home_batters: list[int] = boxscore['teams']['home']['batters']
-            home_lineup: str = f"{home_team} - "
+            away_team: str = boxscore['teams']['away']['team']['name']
+            away_batters: list[int] = boxscore['teams']['away']['batters']
 
+            # Fetch every batter in one batched call instead of one call
+            # per player (the people endpoint accepts comma-separated IDs)
+            players_by_id: dict[int, dict[str, Any]] = {}
+            all_batters = home_batters + away_batters
+            if all_batters:
+                people = retry_api_call(
+                    statsapi.get, 'people',
+                    {'personIds': ','.join(str(pid) for pid in all_batters)}
+                )['people']
+                players_by_id = {p['id']: p for p in people}
+
+            # Process home team
+            home_lineup: str = f"{home_team} - "
             for player_id in home_batters:
-                player_info = retry_api_call(
-                    statsapi.get, 'people', {'personIds': player_id}
-                )['people'][0]
+                player_info = players_by_id.get(player_id)
+                if not player_info:
+                    continue
                 last_name: str = player_info['lastName']
                 position: str = player_info['primaryPosition']['abbreviation']
                 home_lineup += f"{position}:{last_name} "
@@ -249,14 +279,11 @@ class ScoreboardManager:
             lineup.append(home_lineup)
 
             # Process away team
-            away_team: str = boxscore['teams']['away']['team']['name']
-            away_batters: list[int] = boxscore['teams']['away']['batters']
             away_lineup: str = f"  {away_team} - "
-
             for player_id in away_batters:
-                player_info = retry_api_call(
-                    statsapi.get, 'people', {'personIds': player_id}
-                )['people'][0]
+                player_info = players_by_id.get(player_id)
+                if not player_info:
+                    continue
                 last_name = player_info['lastName']
                 position = player_info['primaryPosition']['abbreviation']
                 away_lineup += f"{position}:{last_name} "

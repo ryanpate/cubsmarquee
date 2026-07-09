@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import time
 import os
-import feedparser
 from PIL import Image
 from typing import TYPE_CHECKING, Any
 
-import json
-from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, get_scroll_delay
+from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, get_scroll_delay, load_user_config
+from rss_fetch import fetch_feed
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
@@ -104,7 +103,7 @@ class NewsmaxDisplay:
 
         try:
             print(f"Fetching Newsmax news from {rss_url}")
-            feed = feedparser.parse(rss_url)
+            feed = fetch_feed(rss_url)
 
             # Check if feed was successfully parsed
             if feed.bozo and not feed.entries:
@@ -239,14 +238,7 @@ class NewsmaxDisplay:
 
     def _load_scroll_config(self) -> dict:
         """Load scroll speed settings from config file"""
-        config_path = '/home/pi/config.json'
-        try:
-            if os.path.exists(config_path):
-                with open(config_path, 'r') as f:
-                    return json.load(f)
-        except Exception as e:
-            print(f"Error loading config for scroll speed: {e}")
-        return {}
+        return load_user_config()
 
     def display_newsmax_news(self, duration: int = 180) -> None:
         """Display scrolling Newsmax news with header"""

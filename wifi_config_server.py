@@ -21,7 +21,7 @@ def get_connection_mode():
     """Determine if we're in AP mode or connected to WiFi"""
     try:
         result = subprocess.run(
-            ['iwgetid', '-r'], capture_output=True, text=True)
+            ['iwgetid', '-r'], capture_output=True, text=True, timeout=10)
         if result.stdout.strip():
             return 'Connected to WiFi'
         return 'Access Point Mode'
@@ -32,6 +32,33 @@ def get_connection_mode():
 def get_hostname():
     """Get the Pi's hostname"""
     return socket.gethostname()
+
+
+def _wpa_escape(value):
+    """Escape backslashes and double quotes for a quoted wpa_supplicant string"""
+    return value.replace('\\', '\\\\').replace('"', '\\"')
+
+
+def validate_wifi_credentials(ssid, password):
+    """Return an error message for invalid WiFi credentials, or None if valid"""
+    if any(ord(c) < 32 for c in ssid + password):
+        return 'SSID and password must not contain control characters'
+    if len(ssid.encode('utf-8')) > 32:
+        return 'SSID must be at most 32 bytes'
+    if not 8 <= len(password) <= 63:
+        return 'Password must be 8-63 characters'
+    return None
+
+
+def build_wpa_network_block(ssid, password):
+    """Build a wpa_supplicant network block with escaped SSID/password"""
+    return f"""network={{
+    ssid="{_wpa_escape(ssid)}"
+    psk="{_wpa_escape(password)}"
+    key_mgmt=WPA-PSK
+    priority=10
+}}
+"""
 
 
 def set_hostname(new_hostname):
@@ -55,7 +82,7 @@ def set_hostname(new_hostname):
         with open('/tmp/hostname', 'w') as f:
             f.write(f"{new_hostname}\n")
 
-        subprocess.run(['sudo', 'cp', '/tmp/hostname', '/etc/hostname'], check=True)
+        subprocess.run(['sudo', 'cp', '/tmp/hostname', '/etc/hostname'], check=True, timeout=10)
 
         # Update /etc/hosts
         # Read current hosts file
@@ -72,13 +99,13 @@ def set_hostname(new_hostname):
         with open('/tmp/hosts', 'w') as f:
             f.write(hosts_content)
 
-        subprocess.run(['sudo', 'cp', '/tmp/hosts', '/etc/hosts'], check=True)
+        subprocess.run(['sudo', 'cp', '/tmp/hosts', '/etc/hosts'], check=True, timeout=10)
 
         # Set hostname immediately (without reboot)
-        subprocess.run(['sudo', 'hostnamectl', 'set-hostname', new_hostname], check=True)
+        subprocess.run(['sudo', 'hostnamectl', 'set-hostname', new_hostname], check=True, timeout=10)
 
         # Restart Avahi daemon to advertise new hostname via mDNS
-        subprocess.run(['sudo', 'systemctl', 'restart', 'avahi-daemon'], check=False)
+        subprocess.run(['sudo', 'systemctl', 'restart', 'avahi-daemon'], check=False, timeout=30)
 
         return True, f"Hostname changed to '{new_hostname}'. Access at http://{new_hostname}.local/admin"
 
@@ -90,7 +117,7 @@ def get_current_network():
     """Get currently connected network SSID"""
     try:
         result = subprocess.run(
-            ['iwgetid', '-r'], capture_output=True, text=True)
+            ['iwgetid', '-r'], capture_output=True, text=True, timeout=10)
         return result.stdout.strip() or 'Not connected'
     except:
         return 'Unknown'
@@ -100,7 +127,7 @@ def get_ip_address():
     """Get current IP address"""
     try:
         result = subprocess.run(
-            ['hostname', '-I'], capture_output=True, text=True)
+            ['hostname', '-I'], capture_output=True, text=True, timeout=10)
         return result.stdout.strip().split()[0] if result.stdout.strip() else 'No IP'
     except:
         return 'Unknown'
@@ -164,13 +191,25 @@ def load_config():
 
 
 def save_config(config):
-    """Save configuration to JSON file"""
+    """Save configuration to JSON file.
+
+    Writes to a temp file and renames it into place so a power loss or
+    concurrent reader never sees a truncated config.json.
+    """
+    tmp_path = CONFIG_PATH + '.tmp'
     try:
-        with open(CONFIG_PATH, 'w') as f:
+        with open(tmp_path, 'w') as f:
             json.dump(config, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, CONFIG_PATH)
         return True
     except Exception as e:
         print(f"Error saving config: {e}")
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
         return False
 
 
@@ -1019,12 +1058,20 @@ HTML_TEMPLATE = """
                 const data = await response.json();
 
                 if (data.success && data.networks.length > 0) {
-                    networkList.innerHTML = data.networks.map(network =>
-                        `<div class="network-item" onclick="selectNetwork('${network.ssid}')">
-                            ${network.ssid}
-                            <span class="signal">${network.signal}</span>
-                        </div>`
-                    ).join('');
+                    // Build DOM nodes with textContent so hostile SSIDs
+                    // can never inject HTML or script
+                    networkList.innerHTML = '';
+                    data.networks.forEach(network => {
+                        const item = document.createElement('div');
+                        item.className = 'network-item';
+                        item.addEventListener('click', () => selectNetwork(network.ssid));
+                        item.appendChild(document.createTextNode(network.ssid + ' '));
+                        const signal = document.createElement('span');
+                        signal.className = 'signal';
+                        signal.textContent = network.signal;
+                        item.appendChild(signal);
+                        networkList.appendChild(item);
+                    });
                 } else {
                     networkList.innerHTML = '<div style="padding: 10px; text-align: center;">No networks found</div>';
                 }
@@ -1441,6 +1488,10 @@ def connect_wifi():
         if not ssid or not password:
             return jsonify({'success': False, 'message': 'SSID and password required'})
 
+        error = validate_wifi_credentials(ssid, password)
+        if error:
+            return jsonify({'success': False, 'message': error})
+
         # Read existing wpa_supplicant config
         existing_header = """ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
 update_config=1
@@ -1472,13 +1523,7 @@ country=US
             wpa_config += f"network={network[8:]}\n\n"  # Remove 'network=' prefix
 
         # Add new network with highest priority
-        wpa_config += f"""network={{
-    ssid="{ssid}"
-    psk="{password}"
-    key_mgmt=WPA-PSK
-    priority=10
-}}
-"""
+        wpa_config += build_wpa_network_block(ssid, password)
 
         # Write to temp file first
         with open('/tmp/wpa_supplicant.conf', 'w') as f:
@@ -1488,42 +1533,43 @@ country=US
         subprocess.run(
             ['sudo', 'cp', '/tmp/wpa_supplicant.conf',
              '/etc/wpa_supplicant/wpa_supplicant.conf'],
-            check=True
+            check=True, timeout=10
         )
         
         subprocess.run(
             ['sudo', 'chmod', '600', '/etc/wpa_supplicant/wpa_supplicant.conf'],
-            check=True
+            check=True, timeout=10
         )
         
         # Ensure wpa_supplicant service is enabled for persistence
         subprocess.run(
             ['sudo', 'systemctl', 'enable', 'wpa_supplicant'],
-            check=False
+            check=False, timeout=30
         )
 
         # Stop AP mode if running
-        subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'], check=False)
-        subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'], check=False)
+        subprocess.run(['sudo', 'systemctl', 'stop', 'hostapd'], check=False, timeout=30)
+        subprocess.run(['sudo', 'systemctl', 'stop', 'dnsmasq'], check=False, timeout=30)
 
         # Remove AP IP if set
-        subprocess.run(['sudo', 'ip', 'addr', 'flush', 'dev', 'wlan0'], check=False)
+        subprocess.run(['sudo', 'ip', 'addr', 'flush', 'dev', 'wlan0'], check=False, timeout=10)
 
         # Restart networking services in proper order
-        subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'], check=False)
+        subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'], check=False, timeout=30)
         time.sleep(2)
-        subprocess.run(['sudo', 'wpa_cli', '-i', 'wlan0', 'reconfigure'], check=False)
+        subprocess.run(['sudo', 'wpa_cli', '-i', 'wlan0', 'reconfigure'], check=False, timeout=30)
         time.sleep(3)
         
         # Restart Avahi to advertise hostname on new network
-        subprocess.run(['sudo', 'systemctl', 'restart', 'avahi-daemon'], check=False)
+        subprocess.run(['sudo', 'systemctl', 'restart', 'avahi-daemon'], check=False, timeout=30)
         time.sleep(2)
         
         # Check if we got an IP (not the AP IP)
         result = subprocess.run(
             ['ip', 'addr', 'show', 'wlan0'],
             capture_output=True,
-            text=True
+            text=True,
+            timeout=10
         )
         
         hostname = get_hostname()
@@ -1846,4 +1892,6 @@ def get_logs(log_type):
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=80, debug=False)
+    # threaded=True so one hung request (e.g. a stuck systemctl call)
+    # can't make the whole admin panel unreachable
+    app.run(host='0.0.0.0', port=80, debug=False, threaded=True)

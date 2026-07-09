@@ -412,6 +412,65 @@ class WeatherDisplay:
             print(f"Error loading weather icon {icon_path}: {e}")
             return None
 
+    def _build_daily_forecasts(self):
+        """Bucket 3-hourly forecast readings into the next 3 local-time days"""
+        local_tz = pendulum.now().timezone
+
+        # Get current date to exclude today
+        today = pendulum.now().format('YYYY-MM-DD')
+
+        # Get forecast for next 3 days - collect all temps per day
+        daily_data = {}
+
+        for item in self.forecast_data['list']:
+            # dt_txt is UTC; convert to local time so evening readings
+            # stay on the correct local day
+            dt = pendulum.parse(item['dt_txt'], tz='UTC').in_timezone(local_tz)
+            day_key = dt.format('YYYY-MM-DD')
+
+            # Skip today's data
+            if day_key == today:
+                continue
+
+            # Initialize day if not seen
+            if day_key not in daily_data:
+                daily_data[day_key] = {
+                    'day': dt.format('ddd').upper(),
+                    'temps': [],
+                    'conditions': []
+                }
+
+            # Collect all temps and conditions for the day
+            daily_data[day_key]['temps'].append(item['main']['temp'])
+            daily_data[day_key]['conditions'].append(
+                item['weather'][0]['main'])
+
+        # Process into forecast list with actual high/low
+        forecasts = []
+        # Get first 3 days after today
+        for day_key in sorted(daily_data.keys())[:3]:
+            day_info = daily_data[day_key]
+
+            # Get actual high and low from all readings that day
+            temp_high = int(max(day_info['temps']))
+            temp_low = int(min(day_info['temps']))
+
+            # Use most common condition for the day
+            condition = max(
+                set(day_info['conditions']), key=day_info['conditions'].count)
+
+            forecasts.append({
+                'day': day_info['day'],
+                'temp_high': temp_high,
+                'temp_low': temp_low,
+                'condition': condition
+            })
+
+            if len(forecasts) >= 3:
+                break
+
+        return forecasts
+
     def _draw_forecast(self):
         """Draw professional forecast information"""
         import traceback
@@ -444,56 +503,7 @@ class WeatherDisplay:
             return
 
         try:
-            # Get current date to exclude today
-            today = pendulum.now().format('YYYY-MM-DD')
-
-            # Get forecast for next 3 days - collect all temps per day
-            daily_data = {}
-
-            for item in self.forecast_data['list']:
-                dt = pendulum.parse(item['dt_txt'])
-                day_key = dt.format('YYYY-MM-DD')
-
-                # Skip today's data
-                if day_key == today:
-                    continue
-
-                # Initialize day if not seen
-                if day_key not in daily_data:
-                    daily_data[day_key] = {
-                        'day': dt.format('ddd').upper(),
-                        'temps': [],
-                        'conditions': []
-                    }
-
-                # Collect all temps and conditions for the day
-                daily_data[day_key]['temps'].append(item['main']['temp'])
-                daily_data[day_key]['conditions'].append(
-                    item['weather'][0]['main'])
-
-            # Process into forecast list with actual high/low
-            forecasts = []
-            # Get first 3 days after today
-            for day_key in sorted(daily_data.keys())[:3]:
-                day_info = daily_data[day_key]
-
-                # Get actual high and low from all readings that day
-                temp_high = int(max(day_info['temps']))
-                temp_low = int(min(day_info['temps']))
-
-                # Use most common condition for the day
-                condition = max(
-                    set(day_info['conditions']), key=day_info['conditions'].count)
-
-                forecasts.append({
-                    'day': day_info['day'],
-                    'temp_high': temp_high,
-                    'temp_low': temp_low,
-                    'condition': condition
-                })
-
-                if len(forecasts) >= 3:
-                    break
+            forecasts = self._build_daily_forecasts()
 
             # Draw column headers
             self.manager.draw_text('micro', 4, 15, Colors.BRIGHT_YELLOW, 'DAY')

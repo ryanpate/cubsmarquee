@@ -1,6 +1,8 @@
 """Configuration and constants for the Cubs LED Scoreboard"""
 
 from __future__ import annotations
+import json
+import os
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
@@ -133,6 +135,38 @@ class Fonts:
     CHAR_WIDTH_SMALL: int = 6
     CHAR_WIDTH_TINY: int = 5
     CHAR_WIDTH_MICRO: int = 4
+
+
+# User config file, written by the admin panel
+CONFIG_FILE_PATH = '/home/pi/config.json'
+
+_user_config_cache: dict = {}
+_user_config_stamp: tuple[str, float] | None = None
+
+
+def load_user_config() -> dict:
+    """Load the user config JSON, re-parsing only when the file changes.
+
+    Cheap enough to call every animation frame: a stat() per call instead
+    of an open+parse, which matters for SD-card wear on a 24/7 display.
+    """
+    global _user_config_cache, _user_config_stamp
+
+    try:
+        mtime = os.path.getmtime(CONFIG_FILE_PATH)
+    except OSError:
+        return {}
+
+    if _user_config_stamp != (CONFIG_FILE_PATH, mtime):
+        try:
+            with open(CONFIG_FILE_PATH, 'r') as f:
+                _user_config_cache = json.load(f)
+            _user_config_stamp = (CONFIG_FILE_PATH, mtime)
+        except Exception as e:
+            print(f"Error loading config {CONFIG_FILE_PATH}: {e}")
+            # Keep serving the last good config
+
+    return dict(_user_config_cache)
 
 
 def get_scroll_delay(speed_setting: int) -> float:

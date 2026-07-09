@@ -10,7 +10,7 @@ import math
 from PIL import Image
 from typing import TYPE_CHECKING, Any
 
-from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, get_scroll_delay
+from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, get_scroll_delay, load_user_config
 from adsb_lol_source import fetch_aircraft as adsb_lol_fetch_aircraft
 from adsb_lol_source import enrich_routes as adsb_lol_enrich_routes
 from route_cache import RouteCache
@@ -139,14 +139,7 @@ class FlightDisplay:
 
     def _load_scroll_config(self) -> dict:
         """Load scroll speed settings from config file"""
-        config_path = '/home/pi/config.json'
-        try:
-            if os.path.exists(config_path):
-                with open(config_path, 'r') as f:
-                    return json.load(f)
-        except Exception as e:
-            print(f"Error loading config for scroll speed: {e}")
-        return {}
+        return load_user_config()
 
     def _load_destination_cache(self) -> None:
         """Load cached destination data from file"""
@@ -213,7 +206,6 @@ class FlightDisplay:
                             'departure': dep_iata,
                             'timestamp': time.time()
                         }
-                        self._save_destination_cache()
                         print(f"airplanes.live: {hex_code} -> {dep_iata} to {arr_iata}")
                         return arr_iata
 
@@ -227,7 +219,6 @@ class FlightDisplay:
             'destination': None,
             'timestamp': time.time()
         }
-        self._save_destination_cache()
         return None
 
     def _lookup_destination_airlabs(self, callsign: str) -> str | None:
@@ -261,7 +252,6 @@ class FlightDisplay:
                             'departure': dep_iata,
                             'timestamp': time.time()
                         }
-                        self._save_destination_cache()
                         return arr_iata
 
             # Try IATA format
@@ -283,7 +273,6 @@ class FlightDisplay:
                                 'departure': dep_iata,
                                 'timestamp': time.time()
                             }
-                            self._save_destination_cache()
                             return arr_iata
 
         except requests.exceptions.Timeout:
@@ -296,7 +285,6 @@ class FlightDisplay:
             'destination': None,
             'timestamp': time.time()
         }
-        self._save_destination_cache()
         return None
 
     # Airport IATA code to city name mapping
@@ -501,11 +489,15 @@ class FlightDisplay:
         if not flights:
             return False
 
-        adsb_lol_enrich_routes(
-            base_url=GameConfig.ADSB_LOL_BASE_URL,
-            flights=flights,
-            cache=self.route_cache,
-        )
+        try:
+            adsb_lol_enrich_routes(
+                base_url=GameConfig.ADSB_LOL_BASE_URL,
+                flights=flights,
+                cache=self.route_cache,
+            )
+        except Exception as e:
+            # Route info is nice-to-have; never lose the flights over it
+            print(f"Route enrichment failed: {e}")
 
         self.flight_data = flights
         print(f"adsb.lol: {len(self.flight_data)} flights found")
@@ -605,6 +597,8 @@ class FlightDisplay:
 
     def _lookup_destinations(self) -> None:
         """Look up destinations for flights using airplanes.live (free) then AirLabs (paid)."""
+        cache_before = dict(self.destination_cache)
+
         for flight in self.flight_data:
             callsign = flight['callsign']
             hex_code = flight.get('icao_hex', '')
@@ -639,7 +633,6 @@ class FlightDisplay:
                             'destination': dest,
                             'timestamp': time.time()
                         }
-                        self._save_destination_cache()
                     continue
 
             # Fall back to AirLabs if configured
@@ -650,6 +643,10 @@ class FlightDisplay:
 
             # Small delay to avoid rate limiting
             time.sleep(0.2)
+
+        # Persist once per cycle instead of once per lookup (SD-card wear)
+        if self.destination_cache != cache_before:
+            self._save_destination_cache()
 
     def _fetch_from_opensky(self) -> bool:
         """Fetch flight data from OpenSky Network API (fallback)."""
