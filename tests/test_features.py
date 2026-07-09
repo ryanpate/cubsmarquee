@@ -122,6 +122,7 @@ class TestRuntimeBrightnessApplication:
         manager._last_brightness_check = 0.0
         manager._applied_brightness = None
         manager._save_preview = Mock()
+        manager._refresh_heartbeat = Mock()
         return manager
 
     def test_update_brightness_sets_matrix(self) -> None:
@@ -464,12 +465,13 @@ class TestLastPlayTicker:
 
 class TestStatusHeartbeat:
     def test_write_status_heartbeat(self, tmp_path, monkeypatch) -> None:
-        import main
+        import status_heartbeat
 
         status_file = tmp_path / 'status.json'
-        monkeypatch.setattr(main, 'STATUS_FILE', str(status_file))
+        monkeypatch.setattr(status_heartbeat, 'STATUS_FILE', str(status_file))
 
-        main.write_status_heartbeat('In Progress', 'Cubs vs Brewers')
+        status_heartbeat.write_status_heartbeat(
+            'In Progress', 'Cubs vs Brewers')
 
         data = json.loads(status_file.read_text())
         assert data['state'] == 'In Progress'
@@ -477,26 +479,75 @@ class TestStatusHeartbeat:
         assert data['timestamp'] > 0
 
     def test_heartbeat_write_never_raises(self, monkeypatch) -> None:
-        import main
+        import status_heartbeat
 
         monkeypatch.setattr(
-            main, 'STATUS_FILE', '/nonexistent/dir/status.json')
-        main.write_status_heartbeat('In Progress')  # must not raise
+            status_heartbeat, 'STATUS_FILE', '/nonexistent/dir/status.json')
+        status_heartbeat.write_status_heartbeat('In Progress')  # no raise
 
-    def test_route_by_status_writes_heartbeat(self, monkeypatch) -> None:
+    def test_route_by_status_sets_manager_status(self) -> None:
         from tests.test_bugfixes import _make_scoreboard
-        import main
-
-        writes = []
-        monkeypatch.setattr(
-            main, 'write_status_heartbeat',
-            lambda state, detail='': writes.append(state))
 
         sb = _make_scoreboard()
         with patch('main.time.sleep'):
-            sb.route_by_status([{'game_type': 'R'}], 12345, 'In Progress')
+            sb.route_by_status(
+                [{'game_type': 'R', 'game_date': '2026-07-09'}],
+                12345, 'In Progress')
 
-        assert writes == ['In Progress']
+        sb.manager.set_status.assert_called_once_with(
+            'In Progress', '2026-07-09')
+
+    def test_swap_canvas_refreshes_heartbeat_with_current_state(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        # The heartbeat must stay fresh as long as frames are rendering,
+        # even when the router hasn't run for many minutes
+        import status_heartbeat
+        from scoreboard_manager import ScoreboardManager
+
+        status_file = tmp_path / 'status.json'
+        monkeypatch.setattr(status_heartbeat, 'STATUS_FILE', str(status_file))
+
+        manager = ScoreboardManager.__new__(ScoreboardManager)
+        manager.matrix = Mock()
+        manager.canvas = Mock()
+        manager._last_brightness_check = 1e12
+        manager._applied_brightness = 100
+        manager._save_preview = Mock()
+        manager._last_heartbeat = 0.0
+        manager.current_status = ('Starting up', '')
+
+        manager.set_status('In Progress', '2026-07-09')
+        manager.swap_canvas()
+
+        data = json.loads(status_file.read_text())
+        assert data['state'] == 'In Progress'
+        assert data['detail'] == '2026-07-09'
+
+    def test_heartbeat_is_throttled_per_swap(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        import os
+        import status_heartbeat
+        from scoreboard_manager import ScoreboardManager
+
+        status_file = tmp_path / 'status.json'
+        monkeypatch.setattr(status_heartbeat, 'STATUS_FILE', str(status_file))
+
+        manager = ScoreboardManager.__new__(ScoreboardManager)
+        manager.matrix = Mock()
+        manager.canvas = Mock()
+        manager._last_brightness_check = 1e12
+        manager._applied_brightness = 100
+        manager._save_preview = Mock()
+        manager._last_heartbeat = 0.0
+        manager.current_status = ('Weather', '')
+
+        manager.swap_canvas()
+        first_mtime = os.path.getmtime(status_file)
+        manager.swap_canvas()  # immediately again - must skip the write
+
+        assert os.path.getmtime(status_file) == first_mtime
 
 
 # ============================================================================
@@ -515,6 +566,7 @@ class TestPreviewMirror:
         manager._last_brightness_check = 0.0
         manager._applied_brightness = None
         manager.update_brightness = Mock()
+        manager._refresh_heartbeat = Mock()
         manager._init_preview_mirror()
         return manager
 

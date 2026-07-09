@@ -16,6 +16,7 @@ from typing import Any
 from retry import retry_api_call
 import json
 from logger import get_logger
+from status_heartbeat import write_status_heartbeat
 
 # Config file location for runtime settings. Module-level so tests can patch it.
 USER_CONFIG_PATH = '/home/pi/config.json'
@@ -51,6 +52,10 @@ class ScoreboardManager:
         # Runtime brightness / auto-dim state
         self._last_brightness_check: float = 0.0
         self._applied_brightness: int | None = None
+
+        # Heartbeat: refreshed while frames render, so staleness means hung
+        self.current_status: tuple[str, str] = ('Starting up', '')
+        self._last_heartbeat: float = 0.0
 
         self._init_preview_mirror()
 
@@ -456,10 +461,25 @@ class ScoreboardManager:
             self._applied_brightness = brightness
             _logger.info("Brightness set to %d%%", brightness)
 
+    def set_status(self, state: str, detail: str = '') -> None:
+        """Record what is being shown; published by the heartbeat"""
+        self.current_status = (state, detail)
+        write_status_heartbeat(state, detail)
+        self._last_heartbeat = time.time()
+
+    def _refresh_heartbeat(self) -> None:
+        """Re-publish the current status while frames render (throttled)"""
+        now = time.time()
+        if now - self._last_heartbeat < 15:
+            return
+        self._last_heartbeat = now
+        write_status_heartbeat(*self.current_status)
+
     def swap_canvas(self) -> None:
         """Swap the canvas buffer"""
         self.update_brightness()
         self._save_preview()
+        self._refresh_heartbeat()
         self.canvas = self.matrix.SwapOnVSync(self.canvas)
 
     def draw_text(
