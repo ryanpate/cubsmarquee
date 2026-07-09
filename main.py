@@ -27,6 +27,22 @@ _shutdown_requested: bool = False
 # Module logger
 logger = get_logger("main")
 
+# Heartbeat file read by the admin panel's status card
+STATUS_FILE = '/var/tmp/scoreboard_status.json'
+
+
+def write_status_heartbeat(state: str, detail: str = '') -> None:
+    """Record what the scoreboard is currently showing (best-effort)"""
+    try:
+        with open(STATUS_FILE, 'w') as f:
+            json.dump({
+                'timestamp': time.time(),
+                'state': state,
+                'detail': detail,
+            }, f)
+    except OSError:
+        pass  # status reporting must never break the display
+
 
 def _signal_handler(signum: int, frame: Any) -> None:
     """Handle shutdown signals gracefully"""
@@ -118,6 +134,7 @@ class CubsScoreboard:
                     if display_mode == 'no_games':
                         logger.info(
                             "display_mode=no_games - forcing pure off-season display")
+                        write_status_heartbeat('Off-season content')
                         self.off_season_handler.display_off_season_content()
                         if is_shutdown_requested():
                             break
@@ -128,6 +145,7 @@ class CubsScoreboard:
                     if self.is_off_season():
                         logger.info(
                             "Off-season detected - entering off-season display mode")
+                        write_status_heartbeat('Off-season content')
                         self.off_season_handler.display_off_season_content()
                         if is_shutdown_requested():
                             break
@@ -351,6 +369,8 @@ class CubsScoreboard:
         self, game_data: list[dict[str, Any]], gameid: int, status: str
     ) -> None:
         """Route to appropriate display based on game status"""
+        write_status_heartbeat(
+            status, game_data[self.current_game_index].get('game_date', ''))
         # Hybrid off-season mode: for any pre-game / post-game / delay state,
         # show a single brief pass of the pre-game display then rotate through
         # off-season content (weather, flights, facts). Only live In Progress

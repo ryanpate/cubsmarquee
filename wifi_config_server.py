@@ -15,6 +15,8 @@ from scoreboard_config import DisplayConfig
 app = Flask(__name__)
 
 CONFIG_PATH = '/home/pi/config.json'
+STATUS_FILE = '/var/tmp/scoreboard_status.json'
+HEARTBEAT_STALE_SECONDS = 120
 
 
 def get_connection_mode():
@@ -521,6 +523,7 @@ HTML_TEMPLATE = """
             <div class="info-row"><strong>IP Address:</strong> {{ ip_address }}</div>
             <div class="info-row"><strong>Connection:</strong> {{ connection_mode }}</div>
             <div class="info-row"><strong>Current Network:</strong> {{ current_network }}</div>
+            <div class="info-row"><strong>Scoreboard:</strong> <span id="scoreboard-status">checking...</span></div>
         </div>
 
         <div class="nav-tabs">
@@ -566,7 +569,23 @@ HTML_TEMPLATE = """
                     <input type="range" class="speed-slider" id="brightness" min="10" max="100" value="100">
                     <span class="speed-value" id="brightness_val">100%</span>
                 </div>
-                <p class="help-text" style="margin-top: 8px;">Controls LED matrix brightness (10% = dim, 100% = full). Restart the service for changes to take effect.</p>
+                <p class="help-text" style="margin-top: 8px;">Controls LED matrix brightness (10% = dim, 100% = full). Changes apply within ~10 seconds.</p>
+
+                <div class="speed-control" style="margin-top: 12px;">
+                    <label><input type="checkbox" id="dim_enabled"> Auto-dim at night</label>
+                </div>
+                <div class="speed-control">
+                    <label>Dim from:</label>
+                    <input type="time" id="dim_start" value="22:00">
+                    <label>until:</label>
+                    <input type="time" id="dim_end" value="07:00">
+                </div>
+                <div class="speed-control">
+                    <label>Night brightness:</label>
+                    <input type="range" class="speed-slider" id="dim_brightness" min="10" max="100" value="30">
+                    <span class="speed-value" id="dim_brightness_val">30%</span>
+                </div>
+                <p class="help-text" style="margin-top: 8px;">Automatically lowers brightness during the set hours (handles windows past midnight, e.g. 22:00 to 07:00).</p>
             </div>
 
             <div class="form-group">
@@ -931,6 +950,26 @@ HTML_TEMPLATE = """
     <script>
         let currentLogType = null;
 
+        // Poll the scoreboard heartbeat for the status row
+        async function refreshScoreboardStatus() {
+            const el = document.getElementById('scoreboard-status');
+            try {
+                const resp = await fetch('/scoreboard_status');
+                const data = await resp.json();
+                if (!data.available) {
+                    el.textContent = 'No status reported yet';
+                } else if (data.stale) {
+                    el.textContent = data.state + ' (stale - last update ' + data.age_seconds + 's ago)';
+                } else {
+                    el.textContent = data.state + (data.detail ? ' - ' + data.detail : '');
+                }
+            } catch (e) {
+                el.textContent = 'unavailable';
+            }
+        }
+        refreshScoreboardStatus();
+        setInterval(refreshScoreboardStatus, 10000);
+
         // Auto-load config values on page load
         window.onload = function() {
             const config = {{ config | tojson }};
@@ -960,6 +999,19 @@ HTML_TEMPLATE = """
             brightnessVal.textContent = brightnessValue + '%';
             brightnessSlider.addEventListener('input', function() {
                 brightnessVal.textContent = this.value + '%';
+            });
+
+            // Load auto-dim settings
+            document.getElementById('dim_enabled').checked = !!config.dim_enabled;
+            document.getElementById('dim_start').value = config.dim_start || '22:00';
+            document.getElementById('dim_end').value = config.dim_end || '07:00';
+            const dimSlider = document.getElementById('dim_brightness');
+            const dimVal = document.getElementById('dim_brightness_val');
+            const dimValue = config.dim_brightness != null ? config.dim_brightness : 30;
+            dimSlider.value = dimValue;
+            dimVal.textContent = dimValue + '%';
+            dimSlider.addEventListener('input', function() {
+                dimVal.textContent = this.value + '%';
             });
 
             // Load flight tracking location
@@ -1206,7 +1258,11 @@ HTML_TEMPLATE = """
                 adsb_receiver_url: document.getElementById('adsb_receiver_url').value,
                 flight_max_range_nm: parseInt(document.getElementById('flight_max_range_nm').value),
                 airlabs_api_key: document.getElementById('airlabs_api_key').value,
-                brightness: parseInt(document.getElementById('brightness').value)
+                brightness: parseInt(document.getElementById('brightness').value),
+                dim_enabled: document.getElementById('dim_enabled').checked,
+                dim_start: document.getElementById('dim_start').value,
+                dim_end: document.getElementById('dim_end').value,
+                dim_brightness: parseInt(document.getElementById('dim_brightness').value)
             };
 
             const button = event.target;
@@ -1631,6 +1687,35 @@ def geocode_address():
         return jsonify({'success': False, 'message': str(e)})
 
 
+def _validate_hhmm(raw, default):
+    """Return raw if it is a valid 'HH:MM' string, else the default"""
+    try:
+        hours, minutes = str(raw).split(':')
+        if 0 <= int(hours) <= 23 and 0 <= int(minutes) <= 59:
+            return raw
+    except (ValueError, AttributeError):
+        pass
+    return default
+
+
+@app.route('/scoreboard_status')
+def scoreboard_status():
+    """Report what the scoreboard process is currently showing"""
+    try:
+        with open(STATUS_FILE, 'r') as f:
+            heartbeat = json.load(f)
+        age = time.time() - heartbeat.get('timestamp', 0)
+        return jsonify({
+            'available': True,
+            'state': heartbeat.get('state', 'Unknown'),
+            'detail': heartbeat.get('detail', ''),
+            'age_seconds': int(age),
+            'stale': age > HEARTBEAT_STALE_SECONDS,
+        })
+    except (OSError, ValueError):
+        return jsonify({'available': False})
+
+
 def _clamp_brightness(raw) -> int:
     """Coerce and clamp an incoming brightness value to the allowed range.
 
@@ -1696,7 +1781,11 @@ def save_config_route():
             'adsb_receiver_url': data.get('adsb_receiver_url', ''),
             'flight_max_range_nm': data.get('flight_max_range_nm', 50),
             'airlabs_api_key': data.get('airlabs_api_key', ''),
-            'brightness': _clamp_brightness(data.get('brightness'))
+            'brightness': _clamp_brightness(data.get('brightness')),
+            'dim_enabled': bool(data.get('dim_enabled', False)),
+            'dim_start': _validate_hhmm(data.get('dim_start'), '22:00'),
+            'dim_end': _validate_hhmm(data.get('dim_end'), '07:00'),
+            'dim_brightness': _clamp_brightness(data.get('dim_brightness', 30))
         })
 
         if save_config(current_config):

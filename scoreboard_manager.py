@@ -8,7 +8,8 @@ import statsapi
 from PIL import Image
 from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
 from scoreboard_config import (
-    DisplayConfig, TeamConfig, Colors, Positions, Fonts, GameConfig, RGBColor
+    DisplayConfig, TeamConfig, Colors, Positions, Fonts, GameConfig, RGBColor,
+    load_user_config
 )
 from typing import Any
 from retry import retry_api_call
@@ -42,6 +43,10 @@ class ScoreboardManager:
         # Cache for the no-game-today schedule lookahead
         self._lookahead_cache: list[dict[str, Any]] | None = None
         self._lookahead_cached_at: float = 0.0
+
+        # Runtime brightness / auto-dim state
+        self._last_brightness_check: float = 0.0
+        self._applied_brightness: int | None = None
 
     def _load_brightness(self) -> int:
         """
@@ -330,8 +335,61 @@ class ScoreboardManager:
         """Clear the canvas"""
         self.canvas.Clear()
 
+    @staticmethod
+    def _parse_hhmm(value: str) -> int:
+        """Parse 'HH:MM' into minutes since midnight (raises ValueError)"""
+        hours, minutes = value.split(':')
+        hours, minutes = int(hours), int(minutes)
+        if not (0 <= hours <= 23 and 0 <= minutes <= 59):
+            raise ValueError(f"Invalid time: {value}")
+        return hours * 60 + minutes
+
+    @staticmethod
+    def _is_dim_time(now_minute: int, start_minute: int, end_minute: int) -> bool:
+        """True if now is inside the dim window (window may wrap midnight)"""
+        if start_minute == end_minute:
+            return False
+        if start_minute < end_minute:
+            return start_minute <= now_minute < end_minute
+        return now_minute >= start_minute or now_minute < end_minute
+
+    def get_effective_brightness(self) -> int:
+        """Base brightness, or the dimmed value inside the auto-dim window"""
+        brightness = self._load_brightness()
+        config = load_user_config()
+        if not config.get('dim_enabled'):
+            return brightness
+
+        try:
+            start = self._parse_hhmm(config.get('dim_start', '22:00'))
+            end = self._parse_hhmm(config.get('dim_end', '07:00'))
+            dim = int(config.get('dim_brightness', 30))
+        except (ValueError, TypeError, AttributeError):
+            return brightness
+
+        now = pendulum.now()
+        if self._is_dim_time(now.hour * 60 + now.minute, start, end):
+            dim = max(DisplayConfig.BRIGHTNESS_MIN,
+                      min(DisplayConfig.BRIGHTNESS_MAX, dim))
+            return min(dim, brightness)
+        return brightness
+
+    def update_brightness(self) -> None:
+        """Apply brightness/auto-dim at runtime (throttled; called per frame)"""
+        now = time.time()
+        if now - self._last_brightness_check < 10:
+            return
+        self._last_brightness_check = now
+
+        brightness = self.get_effective_brightness()
+        if brightness != self._applied_brightness:
+            self.matrix.brightness = brightness
+            self._applied_brightness = brightness
+            _logger.info("Brightness set to %d%%", brightness)
+
     def swap_canvas(self) -> None:
         """Swap the canvas buffer"""
+        self.update_brightness()
         self.canvas = self.matrix.SwapOnVSync(self.canvas)
 
     def draw_text(
