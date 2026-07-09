@@ -1318,3 +1318,32 @@ class TestNewScreensInRotation:
         source = inspect.getsource(osh)
         for segment in ('clock', 'cubs_history', 'sky', 'iss', 'celebration'):
             assert f"'{segment}'" in source, f'{segment} missing from rotation'
+
+
+class TestWrigleyClockSky:
+    """The clock screen's sky tracks time of day and weather"""
+
+    def test_sky_phase_day_dawn_dusk_night(self) -> None:
+        from clock_display import WrigleyClockDisplay
+
+        phase = WrigleyClockDisplay._sky_phase
+        sunrise, sunset = 100000.0, 100000.0 + 14 * 3600
+        assert phase(sunrise + 5 * 3600, sunrise, sunset) == 'day'
+        assert phase(sunrise + 60, sunrise, sunset) == 'dawn'
+        assert phase(sunrise - 600, sunrise, sunset) == 'dawn'
+        assert phase(sunset - 60, sunrise, sunset) == 'dusk'
+        assert phase(sunset + 3600, sunrise, sunset) == 'night'
+        assert phase(sunrise - 4 * 3600, sunrise, sunset) == 'night'
+
+    def test_sky_colors_follow_phase_and_weather(self) -> None:
+        from clock_display import WrigleyClockDisplay
+
+        colors = WrigleyClockDisplay._sky_colors
+        day_top, _ = colors('day', 'Clear')
+        assert day_top[2] > day_top[0] + 40         # clear day: blue sky
+        rain_top, _ = colors('day', 'Rain')
+        assert abs(rain_top[0] - rain_top[1]) < 25  # rain: gray sky
+        _, dusk_horizon = colors('dusk', 'Clear')
+        assert dusk_horizon[0] > dusk_horizon[2]    # dusk: warm horizon
+        night_top, _ = colors('night', 'Clear')
+        assert max(night_top) < 60                  # night: dark sky

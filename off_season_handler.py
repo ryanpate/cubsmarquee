@@ -44,7 +44,8 @@ class OffSeasonHandler:
         self.stock_display: StockDisplay = StockDisplay(scoreboard_manager)
         self.spring_training_display: SpringTrainingDisplay = SpringTrainingDisplay(scoreboard_manager)
         self.flight_display: FlightDisplay = FlightDisplay(scoreboard_manager)
-        self.clock_display: WrigleyClockDisplay = WrigleyClockDisplay(scoreboard_manager)
+        self.clock_display: WrigleyClockDisplay = WrigleyClockDisplay(
+            scoreboard_manager, self.weather_display)
         self.cubs_history_display: CubsHistoryDisplay = CubsHistoryDisplay(scoreboard_manager)
         self.sky_display: SkyDisplay = SkyDisplay(scoreboard_manager, self.weather_display)
         self.iss_display: ISSDisplay = ISSDisplay(
