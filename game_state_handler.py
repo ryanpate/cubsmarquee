@@ -23,6 +23,7 @@ class GameStateHandler:
         """Initialize with reference to main scoreboard manager"""
         self.manager = scoreboard_manager
         self.scroll_position: int = 96  # For scrolling text
+        self.rain_drops: list[dict[str, Any]] = []  # Lazy-initialized
 
     def display_warmup(
         self,
@@ -43,10 +44,13 @@ class GameStateHandler:
         lineup: str | None,
         gameid: int
     ) -> None:
-        """Display delayed game screen"""
+        """Display delayed game screen with rain animation"""
         start_time: str = self.manager.format_game_time(game_data, game_index)
-        self._display_pregame_base(
-            "DELAYED", Colors.DELAY_YELLOW, start_time, lineup or "", game_data, game_index, gameid)
+        # Detect if the delay reason mentions rain for a more specific label
+        status: str = game_data[game_index].get('status', '')
+        label: str = "RAIN DELAY" if 'rain' in status.lower() else "GAME DELAY"
+        self._display_delay_animated(
+            label, start_time, lineup or "", game_data, game_index, gameid)
 
     def display_postponed(
         self,
@@ -55,10 +59,184 @@ class GameStateHandler:
         lineup: str | None,
         gameid: int
     ) -> None:
-        """Display postponed game screen"""
+        """Display postponed game screen with rain animation.
+
+        Shows 'CHICAGO CUBS VS {OPPONENT}' instead of lineup since the game
+        isn't being played. Single-pass so the caller can cycle other content.
+        """
         start_time: str = self.manager.format_game_time(game_data, game_index)
-        self._display_pregame_base(
-            "POSTPONED", Colors.POSTPONE_RED, start_time, lineup or "", game_data, game_index, gameid)
+        opponent_name: str = self._get_opponent_name(gameid)
+        matchup_text: str = f"CHICAGO CUBS VS {opponent_name.upper()}"
+        self._display_delay_animated(
+            "POSTPONED", start_time, lineup or "", game_data, game_index, gameid,
+            single_pass=True, scroll_text_override=matchup_text)
+
+    def _get_opponent_name(self, gameid: int) -> str:
+        """Fetch the opposing team's name for a given game."""
+        try:
+            game_info: dict[str, Any] = retry_api_call(
+                statsapi.get, 'game', {'gamePk': gameid}
+            )
+            home = game_info['gameData']['teams']['home']
+            away = game_info['gameData']['teams']['away']
+            if home['abbreviation'] == 'CHC':
+                return away['name']
+            return home['name']
+        except Exception:
+            return "OPPONENT"
+
+    def display_suspended(
+        self,
+        game_data: list[dict[str, Any]],
+        game_index: int,
+        lineup: str | None,
+        gameid: int
+    ) -> None:
+        """Display suspended game screen with rain animation"""
+        start_time: str = self.manager.format_game_time(game_data, game_index)
+        self._display_delay_animated(
+            "SUSPENDED", start_time, lineup or "", game_data, game_index, gameid)
+
+    def display_cancelled(
+        self,
+        game_data: list[dict[str, Any]],
+        game_index: int,
+        lineup: str | None,
+        gameid: int
+    ) -> None:
+        """Display cancelled game screen with rain animation (single pass)"""
+        start_time: str = self.manager.format_game_time(game_data, game_index)
+        self._display_delay_animated(
+            "CANCELLED", start_time, lineup or "", game_data, game_index, gameid,
+            single_pass=True)
+
+    def _init_rain_drops(self) -> None:
+        """Initialize rain drop positions (called lazily on first delay display)"""
+        import random
+        self.rain_drops = []
+        for _ in range(14):
+            self.rain_drops.append({
+                'x': random.randint(0, 95),
+                'y': random.randint(-10, 47),
+                'speed': random.uniform(1.8, 3.0)
+            })
+
+    def _draw_stormy_background(self) -> None:
+        """Paint a dark stormy-blue gradient background across the matrix"""
+        for y in range(DisplayConfig.MATRIX_ROWS):
+            # Interpolate from (5, 15, 40) top to (10, 25, 60) bottom
+            t = y / float(DisplayConfig.MATRIX_ROWS - 1)
+            r = int(5 + t * 5)
+            g = int(15 + t * 10)
+            b = int(40 + t * 20)
+            for x in range(DisplayConfig.MATRIX_COLS):
+                self.manager.draw_pixel(x, y, r, g, b)
+
+    def _animate_rain_drops(self) -> None:
+        """Advance and draw rain drops (2-pixel streaks)"""
+        import random
+        for drop in self.rain_drops:
+            y = int(drop['y'])
+            x = int(drop['x'])
+            if 0 <= y < DisplayConfig.MATRIX_ROWS:
+                self.manager.draw_pixel(x, y, 180, 200, 220)
+            if 0 <= y + 1 < DisplayConfig.MATRIX_ROWS:
+                self.manager.draw_pixel(x, y + 1, 160, 180, 200)
+            drop['y'] += drop['speed']
+            if drop['y'] > DisplayConfig.MATRIX_ROWS:
+                drop['y'] = random.randint(-8, -1)
+                drop['x'] = random.randint(0, 95)
+                drop['speed'] = random.uniform(1.8, 3.0)
+
+    def _display_delay_animated(
+        self,
+        label: str,
+        start_time: str,
+        lineup: str,
+        game_data: list[dict[str, Any]],
+        game_index: int,
+        gameid: int,
+        single_pass: bool = False,
+        scroll_text_override: str | None = None
+    ) -> None:
+        """Animated delay/postponement/cancellation screen with falling rain.
+
+        If scroll_text_override is provided, it's shown at the bottom instead
+        of the lineup and is NOT refreshed between passes.
+        """
+        if not self.rain_drops:
+            self._init_rain_drops()
+
+        use_override: bool = scroll_text_override is not None
+        scroll_text: str = scroll_text_override if use_override else lineup
+
+        # Terminal statuses — exit the loop when status transitions to these
+        resume_statuses = {'In Progress', 'Warmup', 'Pre-Game', 'Final', 'Game Over'}
+
+        refresh_counter: int = 0
+        refresh_interval: int = 200  # Re-check status every ~200 frames
+        passes_completed: int = 0
+
+        # Precompute centered X for label (use medium_bold: ~9px per char)
+        label_x: int = max(0, (DisplayConfig.MATRIX_COLS - len(label) * 9) // 2)
+
+        while True:
+            self.manager.clear_canvas()
+            self._draw_stormy_background()
+            self._animate_rain_drops()
+
+            # Divider line above label
+            for x in range(DisplayConfig.MATRIX_COLS):
+                self.manager.draw_pixel(x, 14, 255, 255, 255)
+
+            # Status label
+            self.manager.draw_text(
+                'medium_bold', label_x, 12, Colors.BRIGHT_YELLOW, label)
+
+            # Start time info
+            self.manager.draw_text('small', 17, 24, Colors.WHITE, 'START TIME')
+            self.manager.draw_text('small', 36, 32, Colors.WHITE, start_time)
+
+            # Scroll text at bottom (lineup or custom override)
+            self.scroll_position -= 1
+            text_length: int = len(scroll_text) * 7
+            if self.scroll_position + text_length < 0:
+                self.scroll_position = 96
+                passes_completed += 1
+                # Refresh lineup on loop (only when not using override text)
+                if not use_override and scroll_text:
+                    scroll_text = self.manager.get_lineup(gameid)
+                # Bail after one scroll pass when requested (cancelled, postponed)
+                if single_pass and passes_completed >= 1:
+                    break
+
+            self.manager.draw_text(
+                'lineup', self.scroll_position, 45, Colors.WHITE, scroll_text)
+
+            # Split-squad indicator
+            if self.manager.split_squad_indicator:
+                self._draw_split_squad_indicator()
+
+            self.manager.swap_canvas()
+            time.sleep(0.03)
+
+            # Split-squad rotation timeout
+            if self.manager.split_squad_indicator:
+                if time.time() >= self.manager.split_squad_switch_time:
+                    break
+
+            # Periodically check if the delay is over
+            refresh_counter += 1
+            if refresh_counter >= refresh_interval:
+                refresh_counter = 0
+                try:
+                    game_data = self.manager.get_schedule()
+                    current_status: str = game_data[game_index].get('status', '')
+                    if current_status in resume_statuses:
+                        break
+                except Exception:
+                    # If status check fails, keep showing the delay screen
+                    pass
 
     def _display_pregame_base(
         self,
@@ -158,7 +336,8 @@ class GameStateHandler:
         self.manager.draw_text('micro', box_x + 1, 6, Colors.YELLOW, indicator)
 
     def display_no_game(
-        self, game_data: list[dict[str, Any]], game_index: int
+        self, game_data: list[dict[str, Any]], game_index: int,
+        cycle_content: bool = False
     ) -> None:
         """Display when no game is currently playing"""
         gameid: int = game_data[game_index]['game_id']
@@ -209,8 +388,14 @@ class GameStateHandler:
             if self.scroll_position + text_length < 0:
                 self.scroll_position = 96
 
-                # Spring training: return after one scroll pass to cycle through other content
-                if game_type in ('S', 'E'):
+                # Spring training or offseason content mode: return after one scroll pass
+                # to cycle through other content
+                if game_type in ('S', 'E') or cycle_content:
+                    # Still show standings/playoff info before breaking
+                    if cycle_content and game_type == 'R':
+                        self._display_standings()
+                    elif cycle_content and game_type not in ('S', 'E', 'R'):
+                        self._display_playoff_info(game_data, game_index)
                     break
 
                 # Show standings for regular season, playoff info for postseason

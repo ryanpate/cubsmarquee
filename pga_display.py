@@ -606,6 +606,28 @@ class PGADisplay:
 
         return None
 
+    @staticmethod
+    def _extract_player_name(player: dict) -> str:
+        # ESPN's individual stroke-play events expose `athlete.displayName`.
+        # Team events (e.g. Zurich Classic) have no top-level athlete; players
+        # live under `roster[].athlete`. Renderer takes the last whitespace
+        # token truncated to 7 chars, so for teams we synthesize a no-space
+        # combo like "Duf/Coo" so both partners stay visible.
+        athlete = player.get('athlete') or {}
+        name = athlete.get('displayName')
+        if name:
+            return name
+        roster = player.get('roster') or []
+        last_names = [
+            (entry.get('athlete') or {}).get('lastName')
+            for entry in roster
+        ]
+        last_names = [n for n in last_names if n]
+        if last_names:
+            return '/'.join(n[:3] for n in last_names)
+        team_name = (player.get('team') or {}).get('displayName')
+        return team_name or 'Unknown'
+
     def _get_tournament_info(self, event):
         """
         Extract tournament information
@@ -654,13 +676,14 @@ class PGADisplay:
             competitors = competition.get('competitors', [])
 
             def get_score_sort_key(player):
+                # Parse displayValue (relative-to-par like "-8", "+6", "E").
+                # Do NOT use score.value — ESPN returns total stroke count there,
+                # which is not comparable across players who have played a
+                # different number of rounds (e.g. a missed-cut player at +6
+                # has fewer strokes than a current leader at -10).
                 try:
                     score_obj = player.get('score')
-                    # Prefer numeric value if available
                     if isinstance(score_obj, dict):
-                        val = score_obj.get('value')
-                        if val is not None:
-                            return float(val)
                         display = score_obj.get('displayValue', 'E')
                     else:
                         display = str(score_obj) if score_obj else 'E'
@@ -682,8 +705,7 @@ class PGADisplay:
             leaders = []
             for i, player in enumerate(sorted_competitors[:25]):
                 try:
-                    athlete = player.get('athlete', {})
-                    name = athlete.get('displayName', 'Unknown')
+                    name = self._extract_player_name(player)
 
                     # Get score (relative to par)
                     score_obj = player.get('score')

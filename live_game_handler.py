@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 from scoreboard_config import Colors, Positions, GameConfig, TeamConfig, DisplayConfig
 from retry import retry_api_call
 from logger import get_logger
+from flight_display import FlightDisplay
 
 logger = get_logger("live_game")
 
@@ -27,6 +28,8 @@ class LiveGameHandler:
         self.cubs_score: int = 0
         self.opp_score: int = 0
         self.is_cubs_home: bool = False
+        self._flight_display: FlightDisplay | None = None
+        self._last_inning_state: str = ''
 
     def display_game_on(
         self, game_data: list[dict[str, Any]], game_index: int, gameid: int
@@ -47,9 +50,19 @@ class LiveGameHandler:
             game_data = self.manager.get_schedule()
 
             # Check for game over
-            if game_data[game_index]['status'] in ['Game Over', 'Final']:
+            current_status = game_data[game_index]['status']
+            if current_status in ['Game Over', 'Final'] or current_status.startswith('Completed Early'):
                 self.display_game_over(game_data, game_index, gameid)
                 break
+
+            # Exit live display when the game is no longer actively being played
+            # (delay/suspension/postponement/cancellation). Returning lets the
+            # main loop route to the appropriate handler on the next cycle.
+            if (current_status.startswith('Delayed')
+                    or current_status.startswith('Suspend')
+                    or current_status.startswith('Postpon')
+                    or current_status == 'Cancelled'):
+                return
 
             # Get current game data
             game_info = retry_api_call(statsapi.get, 'game', {'gamePk': gameid})
@@ -61,57 +74,64 @@ class LiveGameHandler:
             # Get inning state for batting indicator logic
             inning_state = game_info['liveData']['linescore']['inningState'][:3]
 
-            # Create base composite image with team logos
+            # Create base composite image with all background regions pre-painted
             base_image = Image.new("RGB", (96, 48))
+            pixels = base_image.load()
 
-            # Add team logos (resized to 15x15 to fit score boxes)
-            cubs_image_pos = (1, 0)
-            opp_image_pos = (1, 17)
-            cubs_logo = self.manager.game_images['cubs'].resize((15, 15))
-            opp_logo = self.manager.game_images['opponent'].resize((15, 15))
-            base_image.paste(cubs_logo, cubs_image_pos)
-            base_image.paste(opp_logo, opp_image_pos)
+            # Paint black divider between logos and scores (x=16, y=0-30)
+            for y in range(0, 31):
+                pixels[16, y] = (0, 0, 0)
 
-            # Draw the base composite to get pixel buffer
+            # Paint score boxes white (x=17-31, y=0-30) with black divider at y=15
+            for x in range(17, 32):
+                for y in range(0, 31):
+                    if y == 15:
+                        pixels[x, y] = (0, 0, 0)
+                    else:
+                        pixels[x, y] = (255, 255, 255)
+
+            # Paint right side Cubs blue (x=32-95, y=0-30)
+            for x in range(32, 96):
+                for y in range(0, 31):
+                    pixels[x, y] = (0, 51, 102)
+
+            # Paint black divider line between logos (y=15, x=0-15)
+            for x in range(0, 16):
+                pixels[x, 15] = (0, 0, 0)
+
+            # Paint white base line (y=22, x=32-95)
+            for x in range(32, 96):
+                pixels[x, 22] = (255, 255, 255)
+
+            # Paint white vertical line at x=70 (y=0-30)
+            for y in range(0, 31):
+                pixels[70, y] = (255, 255, 255)
+
+            # Add team logos (resized to 16x15 to fill logo area edge-to-edge)
+            cubs_logo = self.manager.game_images['cubs'].resize((16, 15)).convert('RGBA')
+            opp_logo = self.manager.game_images['opponent'].resize((16, 15)).convert('RGBA')
+
+            # Composite logos onto white background so dark logos remain visible
+            for logo, pos in [(cubs_logo, (0, 0)), (opp_logo, (0, 16))]:
+                logo_bg = Image.new("RGB", logo.size, (255, 255, 255))
+                logo_bg.paste(logo, (0, 0), logo)
+                base_image.paste(logo_bg, pos)
+
+            # Set the full composite image to the canvas in one call
             self.manager.canvas.SetImage(base_image.convert("RGB"), 0, 0)
-
-            # Draw score boxes (white boxes for scores)
-            for h in range(17, 32):
-                for v in range(1, 32):
-                    self.manager.draw_pixel(h, v, 255, 255, 255)
-
-            # Draw white line divider
-            for white_line in range(1, 32):
-                if white_line <= 16:
-                    self.manager.draw_pixel(white_line, 16, 255, 255, 255)
-                else:
-                    self.manager.draw_pixel(white_line, 16, 0, 0, 0)
-
-            # Fill right side background with Cubs blue
-            for out_fill in range(32, 96):
-                for out_fill_v in range(1, 32):
-                    self.manager.draw_pixel(out_fill, out_fill_v, 0, 51, 102)
-
-            # Draw base line
-            for base_line in range(32, 96):
-                self.manager.draw_pixel(base_line, 23, 255, 255, 255)
-
-            # Draw vertical line at position 70
-            for out_line in range(1, 32):
-                self.manager.draw_pixel(70, out_line, 255, 255, 255)
 
             # Draw pitcher info area with gradient
             m = 0
-            for pitcher_line in range(32, 40):
-                for pitcher_line_v in range(1, 96):
+            for pitcher_line in range(31, 39):
+                for pitcher_line_v in range(0, 96):
                     self.manager.draw_pixel(
                         pitcher_line_v, pitcher_line, 255 + m, 255 + m, 255 + m)
                 m -= 20
 
             # Draw batter info area with gradient
             m = 0
-            for batter_line in range(40, 48):
-                for batter_line_v in range(1, 96):
+            for batter_line in range(39, 47):
+                for batter_line_v in range(0, 96):
                     self.manager.draw_pixel(
                         batter_line_v, batter_line, 255 + m, 255 + m, 255 + m)
                 m -= 20
@@ -119,20 +139,20 @@ class LiveGameHandler:
             # Draw batting indicator box (red box)
             if self.is_cubs_home:
                 if inning_state in ['Bot', 'Mid']:
-                    for ht_h in range(7, 9):
+                    for ht_h in range(6, 8):
                         for ht_v in range(30, 34):
                             self.manager.draw_pixel(ht_v, ht_h, 255, 0, 0)
                 else:
-                    for at_h in range(23, 25):
+                    for at_h in range(22, 24):
                         for at_v in range(30, 34):
                             self.manager.draw_pixel(at_v, at_h, 255, 0, 0)
             else:
                 if inning_state in ['Top', 'End']:
-                    for ht_h in range(7, 9):
+                    for ht_h in range(6, 8):
                         for ht_v in range(30, 34):
                             self.manager.draw_pixel(ht_v, ht_h, 255, 0, 0)
                 else:
-                    for at_h in range(23, 25):
+                    for at_h in range(22, 24):
                         for at_v in range(30, 34):
                             self.manager.draw_pixel(at_v, at_h, 255, 0, 0)
 
@@ -156,6 +176,12 @@ class LiveGameHandler:
                 self._draw_split_squad_indicator()
 
             self.manager.swap_canvas()
+
+            # Show brief flight summary on inning transitions (Mid/End states)
+            if inning_state in ('Mid', 'End') and inning_state != self._last_inning_state:
+                self._show_between_innings_flights()
+            self._last_inning_state = inning_state
+
             time.sleep(GameConfig.GAME_CHECK_DELAY)
 
             # Exit loop if in split-squad mode and it's time to switch games
@@ -167,8 +193,8 @@ class LiveGameHandler:
     def _draw_batting_indicator_overlay(self, inning_state):
         """Draw batting indicator by overlaying on the current pixel buffer"""
         # Determine position based on who's batting
-        batting_home_pos = (30, 6)
-        batting_away_pos = (30, 22)
+        batting_home_pos = (30, 5)
+        batting_away_pos = (30, 21)
 
         # Get the appropriate position
         if self.is_cubs_home:
@@ -234,10 +260,68 @@ class LiveGameHandler:
         # Draw the indicator text (e.g., "1/2") in yellow
         self.manager.draw_text('micro', box_x + 1, 6, Colors.YELLOW, indicator)
 
+    def _show_between_innings_flights(self) -> None:
+        """Show a brief 5-second flight count overlay during inning transitions."""
+        try:
+            # Check if flights are enabled in config
+            config_path = '/home/pi/config.json'
+            alt_config_path = './config.json'
+            import os, json
+            config_file = config_path if os.path.exists(config_path) else alt_config_path
+            if os.path.exists(config_file):
+                with open(config_file, 'r') as f:
+                    config = json.load(f)
+                    if not config.get('enable_flights', True):
+                        return
+
+            # Lazy-init flight display
+            if self._flight_display is None:
+                self._flight_display = FlightDisplay(self.manager)
+
+            summary = self._flight_display.get_quick_flight_summary()
+            if not summary or summary['count'] == 0:
+                return
+
+            count = summary['count']
+            callsign = summary['closest_callsign']
+            distance = summary['closest_distance']
+
+            # Show for 5 seconds - simple overlay on dark background
+            start_time = time.time()
+            while time.time() - start_time < 5:
+                self.manager.clear_canvas()
+
+                # Dark blue background
+                from PIL import Image
+                bg = Image.new("RGB", (96, 48), (15, 40, 80))
+                self.manager.canvas.SetImage(bg, 0, 0)
+
+                # "OVERHEAD" centered at top
+                text1 = "OVERHEAD"
+                x1 = (96 - len(text1) * 5) // 2
+                self.manager.draw_text('tiny_bold', x1, 12, Colors.WHITE, text1)
+
+                # Aircraft count - big and centered
+                count_str = f"{count} AIRCRAFT"
+                x2 = (96 - len(count_str) * 5) // 2
+                self.manager.draw_text('tiny_bold', x2, 24,
+                                       (255, 215, 0), count_str)
+
+                # Closest flight info
+                close_str = f"{callsign} {distance:.1f}MI"
+                x3 = (96 - len(close_str) * 5) // 2
+                self.manager.draw_text('tiny', x3, 36, (150, 150, 150), close_str)
+
+                self.manager.swap_canvas()
+                time.sleep(0.2)
+
+        except Exception as e:
+            logger.debug(f"Between-innings flight display error: {e}")
+
     def _draw_bases_original(self, game_info):
         """Draw bases exactly like original"""
         # Base positions from original
-        second_base_x, second_base_y = 46, 8
+        second_base_x, second_base_y = 46, 7
         first_base_x, first_base_y = second_base_x + 7, second_base_y + 7
         third_base_x, third_base_y = second_base_x - 7, second_base_y + 7
 
@@ -316,14 +400,26 @@ class LiveGameHandler:
             cubs_display_score = str(game_data[game_index]['away_score'])
             opp_display_score = str(game_data[game_index]['home_score'])
 
-        # Position based on number of digits
-        cubs_x = 20 if len(cubs_display_score) == 1 else 17
-        opp_x = 20 if len(opp_display_score) == 1 else 17
+        self._draw_score_in_box(cubs_display_score, 12)
+        self._draw_score_in_box(opp_display_score, 29)
 
-        self.manager.draw_text('medium_bold', cubs_x, 13,
-                               Colors.BLACK, cubs_display_score)
-        self.manager.draw_text('medium_bold', opp_x, 30,
-                               Colors.BLACK, opp_display_score)
+    def _draw_score_in_box(self, score_text: str, y: int) -> None:
+        """Draw a score inside the 15px-wide score box (x=17-31).
+
+        Double-digit scores are drawn digit-by-digit at a 6px advance
+        (vs. the font's native 9px) so both digits fit cleanly within
+        the box. The first digit renders at the box's left edge and
+        the second sits close enough to leave ~1px of margin on the
+        right, keeping "10"-"19" readable without overflowing.
+        """
+        if len(score_text) == 1:
+            self.manager.draw_text('medium_bold', 20, y,
+                                   Colors.BLACK, score_text)
+        else:
+            self.manager.draw_text('medium_bold', 17, y,
+                                   Colors.BLACK, score_text[0])
+            self.manager.draw_text('medium_bold', 23, y,
+                                   Colors.BLACK, score_text[1])
 
     def _draw_game_info_improved(self, game_info, play_data):
         """Draw game info with improved pitch count"""
@@ -338,26 +434,26 @@ class LiveGameHandler:
         # Inning text
         inning_text_up = linescore['inningState'][:3]
         inning_text_down = linescore['currentInningOrdinal']
-        self.manager.draw_text('tiny', 76, 9, count_color, inning_text_up)
-        self.manager.draw_text('tiny', 76, 19, count_color, inning_text_down)
+        self.manager.draw_text('tiny', 76, 8, count_color, inning_text_up)
+        self.manager.draw_text('tiny', 76, 18, count_color, inning_text_down)
 
         # Count
         count_text = f"{count['balls']} - {count['strikes']}"
-        self.manager.draw_text('tiny', 39, 31, count_color, count_text)
+        self.manager.draw_text('tiny', 39, 30, count_color, count_text)
 
         # Outs
         out_text = str(linescore['outs'])
         out_text_a = ' OUTS'
-        self.manager.draw_text('tiny', 72, 31, count_color, out_text)
-        self.manager.draw_text('micro', 75, 30, count_color, out_text_a)
+        self.manager.draw_text('tiny', 72, 30, count_color, out_text)
+        self.manager.draw_text('micro', 75, 29, count_color, out_text_a)
 
         # Batter text
         batter_text = f"BAT: {matchup['batter']['fullName']}"
-        self.manager.draw_text('micro', 2, 46, run_color, batter_text)
+        self.manager.draw_text('micro', 2, 45, run_color, batter_text)
 
         # Pitcher text
         pitching_text = matchup['pitcher']['fullName']
-        self.manager.draw_text('micro', 2, 38, run_color, pitching_text)
+        self.manager.draw_text('micro', 2, 37, run_color, pitching_text)
 
         # IMPROVED PITCH COUNT - Get from current pitcher in boxscore
         try:
@@ -386,7 +482,7 @@ class LiveGameHandler:
                 x_pos = 96 - (len(pitch_count_text) * 4)
 
             self.manager.draw_text(
-                'micro', x_pos, 38, run_color, pitch_count_text)
+                'micro', x_pos, 37, run_color, pitch_count_text)
 
         except (KeyError, IndexError, TypeError) as e:
             print(f"Error getting pitch count: {e}")
@@ -447,21 +543,32 @@ class LiveGameHandler:
             time.sleep(0.5)
 
     def animate_opponent_run(self):
-        """Animate opponent scoring a run"""
-        opp_image = self.manager.game_images['opponent']
+        """Animate opponent scoring a run with alert-style flash"""
+        opp_image = self.manager.game_images['opponent'].resize((20, 20)).convert('RGBA')
 
-        for x in range(-24, 220, 2):
+        # Create logo on red background
+        logo_bg = Image.new("RGB", opp_image.size, (180, 0, 0))
+        logo_bg.paste(opp_image, (0, 0), opp_image)
+
+        # Flash red/dark frames with opponent logo and "SCORES" text
+        for cycle in range(4):
+            # Red flash frame
             self.manager.clear_canvas()
-            output_image = Image.new("RGB", (96, 48))
-            output_image.paste(opp_image, (x, 12))
-            output_image.paste(opp_image, (x - 119, 12))
+            output_image = Image.new("RGB", (96, 48), (180, 0, 0))
+            output_image.paste(logo_bg, (38, 1))
             self.manager.canvas.SetImage(output_image.convert("RGB"), 0, 0)
-
-            self.manager.draw_text('medium_bold', x - 90,
-                                   30, Colors.WHITE, 'RUN SCORED')
-            self.manager.draw_text('medium_bold', x - 91,
-                                   29, Colors.RED, 'RUN SCORED')
+            self.manager.draw_text('medium_bold', 21, 42, Colors.WHITE, 'SCORES')
             self.manager.swap_canvas()
+            time.sleep(0.35)
+
+            # Dark frame
+            self.manager.clear_canvas()
+            output_image = Image.new("RGB", (96, 48), (60, 0, 0))
+            output_image.paste(logo_bg, (38, 1))
+            self.manager.canvas.SetImage(output_image.convert("RGB"), 0, 0)
+            self.manager.draw_text('medium_bold', 21, 42, (120, 120, 120), 'SCORES')
+            self.manager.swap_canvas()
+            time.sleep(0.25)
 
     def display_game_over(self, game_data, game_index, gameid):
         """Display game over screen - Cubs always on left, opponent always on right.
