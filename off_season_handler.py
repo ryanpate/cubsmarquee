@@ -20,6 +20,11 @@ from newsmax_display import NewsmaxDisplay
 from stock_display import StockDisplay
 from spring_training_display import SpringTrainingDisplay
 from flight_display import FlightDisplay
+from clock_display import WrigleyClockDisplay
+from cubs_history_display import CubsHistoryDisplay
+from sky_display import SkyDisplay
+from iss_display import ISSDisplay
+from celebration_display import CelebrationDisplay
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
@@ -39,6 +44,13 @@ class OffSeasonHandler:
         self.stock_display: StockDisplay = StockDisplay(scoreboard_manager)
         self.spring_training_display: SpringTrainingDisplay = SpringTrainingDisplay(scoreboard_manager)
         self.flight_display: FlightDisplay = FlightDisplay(scoreboard_manager)
+        self.clock_display: WrigleyClockDisplay = WrigleyClockDisplay(scoreboard_manager)
+        self.cubs_history_display: CubsHistoryDisplay = CubsHistoryDisplay(scoreboard_manager)
+        self.sky_display: SkyDisplay = SkyDisplay(scoreboard_manager, self.weather_display)
+        self.iss_display: ISSDisplay = ISSDisplay(
+            scoreboard_manager, self.flight_display.latitude,
+            self.flight_display.longitude)
+        self.celebration_display: CelebrationDisplay = CelebrationDisplay(scoreboard_manager)
         self.scroll_position: int = DisplayConfig.MATRIX_COLS
 
         # Load configuration
@@ -82,7 +94,12 @@ class OffSeasonHandler:
             'newsmax': GameConfig.NEWSMAX_DISPLAY_DURATION if hasattr(GameConfig, 'NEWSMAX_DISPLAY_DURATION') else 2,
             'stocks': GameConfig.STOCKS_DISPLAY_DURATION if hasattr(GameConfig, 'STOCKS_DISPLAY_DURATION') else 2,
             'spring_training': GameConfig.SPRING_TRAINING_DISPLAY_DURATION if hasattr(GameConfig, 'SPRING_TRAINING_DISPLAY_DURATION') else 2,
-            'flights': GameConfig.FLIGHT_DISPLAY_DURATION if hasattr(GameConfig, 'FLIGHT_DISPLAY_DURATION') else 2
+            'flights': GameConfig.FLIGHT_DISPLAY_DURATION if hasattr(GameConfig, 'FLIGHT_DISPLAY_DURATION') else 2,
+            'clock': GameConfig.CLOCK_DISPLAY_DURATION,
+            'cubs_history': GameConfig.CUBS_HISTORY_DURATION,
+            'sky': GameConfig.SKY_DISPLAY_DURATION,
+            'iss': GameConfig.ISS_DISPLAY_DURATION,
+            'celebration': GameConfig.CELEBRATION_DURATION
         }
 
         # Track when we last checked for new season
@@ -650,6 +667,24 @@ class OffSeasonHandler:
         if _tick():
             return
 
+        # Display the Wrigley clock if enabled
+        if self.config.get('enable_clock', True):
+            print("Displaying Wrigley clock...")
+            try:
+                self.clock_display.display_clock(
+                    duration=self.rotation_schedule['clock'] * 60
+                )
+                print("Clock display finished")
+            except Exception as e:
+                print(f"Error in clock display: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("Skipping clock (disabled in config)")
+
+        if _tick():
+            return
+
         # Display Bears breaking news if enabled
         bears_news_enabled = self.config.get('enable_bears_news', True)
         if bears_news_enabled:
@@ -754,6 +789,20 @@ class OffSeasonHandler:
         if _tick():
             return
 
+        # Celebration days (birthdays etc. from config; skips quietly
+        # when today isn't one)
+        if self.config.get('enable_celebrations', True):
+            try:
+                if self.celebration_display.display_celebrations(
+                        duration=self.rotation_schedule['celebration'] * 60):
+                    print("Celebration display finished")
+                    if _tick():
+                        return
+            except Exception as e:
+                print(f"Error in celebration display: {e}")
+                import traceback
+                traceback.print_exc()
+
         # Display milestone countdown (Spring Training, then Opening Day
         # once Spring Training is underway) if enabled
         spring_training_enabled = self.config.get('enable_spring_training', True)
@@ -792,6 +841,24 @@ class OffSeasonHandler:
         if _tick():
             return
 
+        # Display sun/moon sky screen if enabled
+        if self.config.get('enable_sky', True):
+            print("Displaying sun & sky...")
+            try:
+                self.sky_display.display_sky(
+                    duration=self.rotation_schedule['sky'] * 60
+                )
+                print("Sky display finished")
+            except Exception as e:
+                print(f"Error in sky display: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("Skipping sky display (disabled in config)")
+
+        if _tick():
+            return
+
         # Display Cubs breaking news if enabled
         cubs_news_enabled = self.config.get('enable_cubs_news', True)
         if cubs_news_enabled:
@@ -810,6 +877,22 @@ class OffSeasonHandler:
 
         if _tick():
             return
+
+        # Display today in Cubs history if enabled (skips quietly on
+        # dates with no entry)
+        if self.config.get('enable_cubs_history', True):
+            try:
+                if self.cubs_history_display.display_history(
+                        duration=self.rotation_schedule['cubs_history'] * 60):
+                    print("Cubs history display finished")
+                    if _tick():
+                        return
+            except Exception as e:
+                print(f"Error in Cubs history display: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("Skipping Cubs history (disabled in config)")
 
         # Display Bible Verse of the Day if enabled
         bible_enabled = self.config.get('enable_bible', True)
@@ -905,6 +988,22 @@ class OffSeasonHandler:
 
         if _tick():
             return
+
+        # Display the ISS tracker if enabled (skips when the API or a
+        # home location is unavailable)
+        if self.config.get('enable_iss', True):
+            try:
+                if self.iss_display.display_iss(
+                        duration=self.rotation_schedule['iss'] * 60):
+                    print("ISS display finished")
+                    if _tick():
+                        return
+            except Exception as e:
+                print(f"Error in ISS display: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("Skipping ISS tracker (disabled in config)")
 
         print("=== Rotation cycle complete ===")
 

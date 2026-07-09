@@ -1174,3 +1174,147 @@ class TestStockDashboard:
 
         pts = display._scale_points([5.0, 5.0], 10, 20, 2, 4)
         assert pts == [(10, 22), (11, 22)]
+
+
+# ============================================================================
+# New rotation screens: clock, history, sky, ISS, celebrations
+# ============================================================================
+
+class TestWrigleyClock:
+    def _display(self):
+        from clock_display import WrigleyClockDisplay
+
+        return WrigleyClockDisplay.__new__(WrigleyClockDisplay)
+
+    def test_hand_angles(self) -> None:
+        angles = self._display()._hand_angles
+        assert angles(3, 0, 0) == (90.0, 0.0, 0.0)
+        assert angles(6, 30, 0) == (195.0, 180.0, 0.0)
+        assert angles(12, 0, 30) == (0.0, 0.0, 180.0)
+        assert angles(15, 45, 0) == (112.5, 270.0, 0.0)  # 24h input wraps
+
+
+class TestCubsHistory:
+    def _display(self):
+        from cubs_history_display import CubsHistoryDisplay
+
+        return CubsHistoryDisplay.__new__(CubsHistoryDisplay)
+
+    def test_entry_lookup_by_date(self) -> None:
+        display = self._display()
+        display.history = {'11-02': [{'year': 2016, 'text': 'WORLD CHAMPS'}]}
+
+        assert display._entries_for(11, 2)[0]['year'] == 2016
+        assert display._entries_for(7, 4) == []
+
+    def test_history_file_loads_with_famous_dates(self) -> None:
+        from cubs_history_display import CubsHistoryDisplay
+
+        history = CubsHistoryDisplay._load_history()
+        assert any(e['year'] == 2016 for e in history.get('11-02', []))
+        assert any(e['year'] == 1998 for e in history.get('05-06', []))
+        for date_key, entries in history.items():
+            month, day = date_key.split('-')
+            assert 1 <= int(month) <= 12 and 1 <= int(day) <= 31
+            for entry in entries:
+                assert entry['text'] == entry['text'].upper()
+                assert len(entry['text']) <= 96
+
+    def test_wrap_text_to_pixel_lines(self) -> None:
+        wrap = self._display()._wrap
+        assert wrap('KERRY WOOD STRIKES OUT 20 ASTROS', 12) == [
+            'KERRY WOOD', 'STRIKES OUT', '20 ASTROS']
+        assert wrap('SHORT', 12) == ['SHORT']
+
+
+class TestSkyDisplay:
+    def _display(self):
+        from sky_display import SkyDisplay
+
+        return SkyDisplay.__new__(SkyDisplay)
+
+    def test_moon_phase_at_known_new_and_full_moons(self) -> None:
+        moon = self._display()._moon_phase
+        frac, name = moon(pendulum.datetime(2000, 1, 6, 18, tz='UTC'))
+        assert frac < 0.02 or frac > 0.98
+        assert name == 'NEW MOON'
+        frac, name = moon(pendulum.datetime(2000, 1, 21, 4, tz='UTC'))
+        assert abs(frac - 0.5) < 0.03
+        assert name == 'FULL MOON'
+
+    def test_sun_fraction_across_the_day(self) -> None:
+        sun = self._display()._sun_fraction
+        assert sun(1200, 1000, 2000) == pytest.approx(0.2)
+        assert sun(2000, 1000, 2000) is None   # after sunset
+        assert sun(500, 1000, 2000) is None    # before sunrise
+        assert sun(1000, 1000, 2000) == pytest.approx(0.0)
+
+
+class TestISSDisplay:
+    def _display(self):
+        from iss_display import ISSDisplay
+
+        return ISSDisplay.__new__(ISSDisplay)
+
+    def test_distance_and_bearing_to_iss(self) -> None:
+        display = self._display()
+        # Same point: zero distance
+        assert display._distance_mi(41.7, -88.0, 41.7, -88.0) < 1
+        # Due north: bearing ~0, one degree of latitude ~69 miles
+        dist = display._distance_mi(41.7, -88.0, 42.7, -88.0)
+        assert 66 <= dist <= 72
+        assert display._cardinal(display._bearing(41.7, -88.0, 42.7, -88.0)) == 'N'
+        assert display._cardinal(display._bearing(0.0, 0.0, 0.0, 10.0)) == 'E'
+
+    def test_parse_iss_position(self) -> None:
+        display = self._display()
+        payload = {'message': 'success',
+                   'iss_position': {'latitude': '41.9', 'longitude': '-87.6'}}
+        assert display._parse_position(payload) == (41.9, -87.6)
+        assert display._parse_position({'message': 'error'}) is None
+        assert display._parse_position({}) is None
+
+
+class TestCelebrations:
+    def _display(self):
+        from celebration_display import CelebrationDisplay
+
+        return CelebrationDisplay.__new__(CelebrationDisplay)
+
+    def test_matches_todays_celebrations(self) -> None:
+        display = self._display()
+        config = {'celebrations': [
+            {'date': '07-09', 'name': 'RYAN', 'type': 'birthday'},
+            {'date': '12-25', 'name': 'CHRISTMAS', 'type': 'holiday'},
+        ]}
+        today = pendulum.datetime(2026, 7, 9)
+
+        matches = display._todays_celebrations(config, today)
+        assert len(matches) == 1 and matches[0]['name'] == 'RYAN'
+
+    def test_ignores_malformed_entries(self) -> None:
+        display = self._display()
+        config = {'celebrations': [
+            {'date': 'bogus', 'name': 'X', 'type': 'birthday'},
+            {'name': 'NO DATE'},
+            'not-a-dict',
+        ]}
+        assert display._todays_celebrations(
+            config, pendulum.datetime(2026, 7, 9)) == []
+
+    def test_message_for_each_type(self) -> None:
+        display = self._display()
+        msg = display._message_for
+        assert msg({'type': 'birthday', 'name': 'EMMA'}) == 'HAPPY BIRTHDAY EMMA!'
+        assert msg({'type': 'anniversary', 'name': 'M & D'}) == 'HAPPY ANNIVERSARY M & D!'
+        assert msg({'type': 'holiday', 'name': 'CHRISTMAS'}) == 'HAPPY CHRISTMAS!'
+
+
+class TestNewScreensInRotation:
+    def test_rotation_schedule_has_new_segments(self) -> None:
+        import off_season_handler as osh
+        import inspect
+
+        source = inspect.getsource(osh)
+        for segment in ('clock', 'cubs_history', 'sky', 'iss', 'celebration'):
+            assert f"'{segment}'" in source, f'{segment} missing from rotation'
