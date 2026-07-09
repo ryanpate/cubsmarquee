@@ -140,6 +140,13 @@ class Fonts:
 # User config file, written by the admin panel
 CONFIG_FILE_PATH = '/home/pi/config.json'
 
+# Live preview frame: written by the scoreboard, served by the admin panel.
+# Prefer tmpfs (/dev/shm) so the frequent writes never touch the SD card.
+PREVIEW_FILE_PATH = (
+    '/dev/shm/scoreboard_preview.png' if os.path.isdir('/dev/shm')
+    else '/var/tmp/scoreboard_preview.png'
+)
+
 _user_config_cache: dict = {}
 _user_config_stamp: tuple[str, float] | None = None
 

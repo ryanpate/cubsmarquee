@@ -133,7 +133,7 @@ class SpringTrainingDisplay:
             background.paste(self._header_image, (x_offset, 0), self._header_image)
 
         # Display the composite image
-        self.manager.canvas.SetImage(background, 0, 0)
+        self.manager.set_image(background, 0, 0)
 
     def display_spring_training_countdown(self, duration: int = 180) -> None:
         """Display Spring Training countdown with scrolling message"""

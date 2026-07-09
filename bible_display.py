@@ -166,7 +166,7 @@ class BibleDisplay:
     def _draw_bible_header(self):
         """Draw elegant Bible verse header with icon and two-line title using cached background"""
         # Use pre-generated cached background for performance
-        self.manager.canvas.SetImage(self._bible_bg, 0, 0)
+        self.manager.set_image(self._bible_bg, 0, 0)
 
         # Draw Bible icon on the left if available (shifted right 8 pixels)
         icon_width = 0
@@ -284,7 +284,7 @@ class BibleDisplay:
     def _draw_bible_facts_header(self) -> None:
         """Draw elegant Bible facts header with icon and two-line title using cached background"""
         # Use pre-generated cached background for performance
-        self.manager.canvas.SetImage(self._bible_bg, 0, 0)
+        self.manager.set_image(self._bible_bg, 0, 0)
 
         # Draw Bible icon on the left if available (shifted right 8 pixels)
         icon_width = 0

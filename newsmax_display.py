@@ -193,7 +193,7 @@ class NewsmaxDisplay:
     def _draw_newsmax_header(self):
         """Draw Newsmax header with white background and logo using cached background"""
         # Use pre-generated cached background for performance
-        self.manager.canvas.SetImage(self._newsmax_bg, 0, 0)
+        self.manager.set_image(self._newsmax_bg, 0, 0)
 
         # Draw Newsmax logo at top if available
         if self.newsmax_logo:

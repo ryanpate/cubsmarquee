@@ -741,7 +741,7 @@ class PGADisplay:
     def _draw_pga_header(self):
         """Draw unique PGA Tour header with golf course/leaderboard theme using cached background"""
         # Use pre-generated cached background for performance
-        self.manager.canvas.SetImage(self._pga_header_bg, 0, 0)
+        self.manager.set_image(self._pga_header_bg, 0, 0)
 
         # Draw thin white separator line below header
         for x in range(DisplayConfig.MATRIX_COLS):
@@ -911,7 +911,7 @@ class PGADisplay:
 
                 # Redraw header area using cached overlay to mask any leaderboard text that scrolled above
                 # This uses a pre-generated image instead of pixel-by-pixel drawing for performance
-                self.manager.canvas.SetImage(self._pga_leaderboard_header_overlay, 0, 0)
+                self.manager.set_image(self._pga_leaderboard_header_overlay, 0, 0)
 
                 # Draw PGA logo on cached header
                 if self.pga_logo:
@@ -1086,7 +1086,7 @@ class PGADisplay:
     def _draw_pga_content_header(self, subtitle: str):
         """Draw header for PGA news or facts page with logo using cached background"""
         # Use pre-generated cached background for performance
-        self.manager.canvas.SetImage(self._pga_content_header_bg, 0, 0)
+        self.manager.set_image(self._pga_content_header_bg, 0, 0)
 
         # Draw golfball logo on left if available (moved 2 pixels left)
         logo_x = 2

@@ -109,6 +109,6 @@ class SetupDisplay:
                 last_check = now
 
             img = self._render_frame()
-            self.manager.canvas.SetImage(img)
+            self.manager.set_image(img)
             self.manager.canvas = self.manager.matrix.SwapOnVSync(self.manager.canvas)
             time.sleep(0.03)

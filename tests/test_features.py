@@ -121,6 +121,7 @@ class TestRuntimeBrightnessApplication:
         manager.canvas = Mock()
         manager._last_brightness_check = 0.0
         manager._applied_brightness = None
+        manager._save_preview = Mock()
         return manager
 
     def test_update_brightness_sets_matrix(self) -> None:
@@ -228,6 +229,142 @@ class TestStatusHeartbeat:
             sb.route_by_status([{'game_type': 'R'}], 12345, 'In Progress')
 
         assert writes == ['In Progress']
+
+
+# ============================================================================
+# Live matrix preview
+# ============================================================================
+
+class TestPreviewMirror:
+    def _manager(self):
+        from unittest.mock import Mock
+        from scoreboard_manager import ScoreboardManager
+
+        manager = ScoreboardManager.__new__(ScoreboardManager)
+        manager.canvas = Mock()
+        manager.matrix = Mock()
+        manager.fonts = {'tiny_bold': Mock()}
+        manager._last_brightness_check = 0.0
+        manager._applied_brightness = None
+        manager.update_brightness = Mock()
+        manager._init_preview_mirror()
+        return manager
+
+    def test_draw_pixel_mirrors_to_frame(self) -> None:
+        manager = self._manager()
+
+        manager.draw_pixel(5, 6, 255, 0, 0)
+
+        assert manager._frame.getpixel((5, 6)) == (255, 0, 0)
+        manager.canvas.SetPixel.assert_called_once_with(5, 6, 255, 0, 0)
+
+    def test_out_of_bounds_pixel_does_not_crash_mirror(self) -> None:
+        manager = self._manager()
+        manager.draw_pixel(200, 200, 255, 0, 0)  # off the 96x48 panel
+
+    def test_clear_canvas_blanks_mirror(self) -> None:
+        manager = self._manager()
+        manager.draw_pixel(5, 6, 255, 0, 0)
+
+        manager.clear_canvas()
+
+        assert manager._frame.getpixel((5, 6)) == (0, 0, 0)
+        manager.canvas.Clear.assert_called_once()
+
+    def test_set_image_pastes_into_mirror(self) -> None:
+        from PIL import Image
+
+        manager = self._manager()
+        img = Image.new('RGB', (10, 10), (0, 128, 0))
+
+        manager.set_image(img, 3, 4)
+
+        assert manager._frame.getpixel((3, 4)) == (0, 128, 0)
+        assert manager._frame.getpixel((12, 13)) == (0, 128, 0)
+        manager.canvas.SetImage.assert_called_once()
+
+    def test_draw_text_mirrors_glyphs(self) -> None:
+        manager = self._manager()
+
+        # Baseline y=10: glyph pixels land in rows above the baseline
+        manager.draw_text('tiny_bold', 2, 10, (255, 255, 255), 'W')
+
+        region = manager._frame.crop((0, 0, 12, 11))
+        lit = [p for p in region.getdata() if p != (0, 0, 0)]
+        assert lit, 'expected the mirrored W glyph to light pixels'
+
+    def test_swap_canvas_saves_preview_png(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        from PIL import Image
+        import scoreboard_manager as sm
+
+        preview = tmp_path / 'preview.png'
+        monkeypatch.setattr(sm, 'PREVIEW_FILE_PATH', str(preview))
+
+        manager = self._manager()
+        manager.draw_pixel(0, 0, 255, 0, 0)
+        manager.swap_canvas()
+
+        saved = Image.open(preview)
+        assert saved.size == (96, 48)
+        assert saved.convert('RGB').getpixel((0, 0)) == (255, 0, 0)
+
+    def test_preview_save_is_throttled(self, tmp_path, monkeypatch) -> None:
+        import os
+        import scoreboard_manager as sm
+
+        preview = tmp_path / 'preview.png'
+        monkeypatch.setattr(sm, 'PREVIEW_FILE_PATH', str(preview))
+
+        manager = self._manager()
+        manager.swap_canvas()
+        first_mtime = os.path.getmtime(preview)
+        manager.swap_canvas()  # immediately again - must skip the save
+
+        assert os.path.getmtime(preview) == first_mtime
+
+    def test_no_direct_canvas_setimage_outside_manager(self) -> None:
+        from pathlib import Path
+
+        root = Path(__file__).parent.parent
+        offenders = []
+        for py in root.glob('*.py'):
+            if py.name == 'scoreboard_manager.py':
+                continue
+            if '.canvas.SetImage(' in py.read_text():
+                offenders.append(py.name)
+
+        assert offenders == [], (
+            f'{offenders} draw around the preview mirror; '
+            'use manager.set_image() instead'
+        )
+
+
+class TestPreviewRoute:
+    def test_serves_png_when_available(self, tmp_path, monkeypatch) -> None:
+        from PIL import Image
+        import wifi_config_server as wcs
+
+        preview = tmp_path / 'preview.png'
+        Image.new('RGB', (96, 48), (10, 20, 30)).save(preview)
+        monkeypatch.setattr(wcs, 'PREVIEW_FILE_PATH', str(preview))
+
+        resp = wcs.app.test_client().get('/preview.png')
+
+        assert resp.status_code == 200
+        assert resp.mimetype == 'image/png'
+        assert 'no-store' in resp.headers.get('Cache-Control', '')
+
+    def test_404_when_preview_missing(self, tmp_path, monkeypatch) -> None:
+        import wifi_config_server as wcs
+
+        monkeypatch.setattr(
+            wcs, 'PREVIEW_FILE_PATH', str(tmp_path / 'nope.png'))
+
+        resp = wcs.app.test_client().get('/preview.png')
+
+        assert resp.status_code == 404
 
 
 class TestScoreboardStatusRoute:

@@ -10,7 +10,7 @@ import json
 import time
 import re
 
-from scoreboard_config import DisplayConfig
+from scoreboard_config import DisplayConfig, PREVIEW_FILE_PATH
 
 app = Flask(__name__)
 
@@ -524,6 +524,10 @@ HTML_TEMPLATE = """
             <div class="info-row"><strong>Connection:</strong> {{ connection_mode }}</div>
             <div class="info-row"><strong>Current Network:</strong> {{ current_network }}</div>
             <div class="info-row"><strong>Scoreboard:</strong> <span id="scoreboard-status">checking...</span></div>
+            <div class="info-row" style="text-align: center; margin-top: 8px;">
+                <img id="matrix-preview" width="384" height="192" alt="Preview not available yet"
+                     style="image-rendering: pixelated; background: #000; border-radius: 4px; max-width: 100%;">
+            </div>
         </div>
 
         <div class="nav-tabs">
@@ -969,6 +973,14 @@ HTML_TEMPLATE = """
         }
         refreshScoreboardStatus();
         setInterval(refreshScoreboardStatus, 10000);
+
+        // Live matrix preview - the scoreboard republishes every ~2s
+        function refreshPreview() {
+            const img = document.getElementById('matrix-preview');
+            img.src = '/preview.png?t=' + Date.now();
+        }
+        refreshPreview();
+        setInterval(refreshPreview, 2000);
 
         // Auto-load config values on page load
         window.onload = function() {
@@ -1696,6 +1708,19 @@ def _validate_hhmm(raw, default):
     except (ValueError, AttributeError):
         pass
     return default
+
+
+@app.route('/preview.png')
+def preview_png():
+    """Serve the latest frame the scoreboard rendered"""
+    try:
+        with open(PREVIEW_FILE_PATH, 'rb') as f:
+            data = f.read()
+    except OSError:
+        return ('', 404)
+    response = app.response_class(data, mimetype='image/png')
+    response.headers['Cache-Control'] = 'no-store'
+    return response
 
 
 @app.route('/scoreboard_status')

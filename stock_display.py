@@ -160,7 +160,7 @@ class StockDisplay:
     def _draw_header(self):
         """Draw clean stock ticker header using cached background"""
         # Use pre-generated cached background for performance
-        self.manager.canvas.SetImage(self._stock_header_bg, 0, 0)
+        self.manager.set_image(self._stock_header_bg, 0, 0)
 
         # Calculate positions for icon and "Markets" text centered together
         text_width = 7 * 9  # "Markets" = 7 chars * 9 pixels

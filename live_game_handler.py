@@ -118,7 +118,7 @@ class LiveGameHandler:
                 base_image.paste(logo_bg, pos)
 
             # Set the full composite image to the canvas in one call
-            self.manager.canvas.SetImage(base_image.convert("RGB"), 0, 0)
+            self.manager.set_image(base_image.convert("RGB"), 0, 0)
 
             # Draw pitcher info area with gradient
             m = 0
@@ -317,7 +317,7 @@ class LiveGameHandler:
                 # Dark blue background
                 from PIL import Image
                 bg = Image.new("RGB", (96, 48), (15, 40, 80))
-                self.manager.canvas.SetImage(bg, 0, 0)
+                self.manager.set_image(bg, 0, 0)
 
                 # "OVERHEAD" centered at top
                 text1 = "OVERHEAD"
@@ -546,7 +546,7 @@ class LiveGameHandler:
             output_image = Image.new("RGB", (96, 48))
             output_image.paste(run_image_flipped, (0, 12))
             output_image.paste(baseball_image, (x, run_y))
-            self.manager.canvas.SetImage(output_image.convert("RGB"), 0, 0)
+            self.manager.set_image(output_image.convert("RGB"), 0, 0)
             self.manager.swap_canvas()
 
         # Flash "RUN SCORED"
@@ -579,7 +579,7 @@ class LiveGameHandler:
             self.manager.clear_canvas()
             output_image = Image.new("RGB", (96, 48), (180, 0, 0))
             output_image.paste(logo_bg, (38, 1))
-            self.manager.canvas.SetImage(output_image.convert("RGB"), 0, 0)
+            self.manager.set_image(output_image.convert("RGB"), 0, 0)
             self.manager.draw_text('medium_bold', 21, 42, Colors.WHITE, 'SCORES')
             self.manager.swap_canvas()
             time.sleep(0.35)
@@ -588,7 +588,7 @@ class LiveGameHandler:
             self.manager.clear_canvas()
             output_image = Image.new("RGB", (96, 48), (60, 0, 0))
             output_image.paste(logo_bg, (38, 1))
-            self.manager.canvas.SetImage(output_image.convert("RGB"), 0, 0)
+            self.manager.set_image(output_image.convert("RGB"), 0, 0)
             self.manager.draw_text('medium_bold', 21, 42, (120, 120, 120), 'SCORES')
             self.manager.swap_canvas()
             time.sleep(0.25)
@@ -640,7 +640,7 @@ class LiveGameHandler:
             output_image.paste(opp_resized, Positions.OPP_IMAGE_GAMEOVER, opp_resized)
 
             # Set the image with blue background
-            self.manager.canvas.SetImage(output_image.convert("RGB"), 0, 0)
+            self.manager.set_image(output_image.convert("RGB"), 0, 0)
 
             # Draw "FINAL" text - centered and lowered to be fully visible
             self.manager.draw_text('small_bold', 33, 11,
@@ -719,7 +719,7 @@ class LiveGameHandler:
 
                 while time.time() - start_time < 15:
                     self.manager.clear_canvas()
-                    self.manager.canvas.SetImage(frames[frame_index], 0, 0)
+                    self.manager.set_image(frames[frame_index], 0, 0)
                     self.manager.swap_canvas()
 
                     time.sleep(duration)

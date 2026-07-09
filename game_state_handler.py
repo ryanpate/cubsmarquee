@@ -380,7 +380,7 @@ class GameStateHandler:
             # Display Cubs gradient background with marquee image (matches Cubs Facts screen)
             output_image: Image.Image = gradient_bg.copy()
             output_image.paste(self.manager.game_images['marquee'], (0, 0))
-            self.manager.canvas.SetImage(output_image.convert("RGB"), 0, 0)
+            self.manager.set_image(output_image.convert("RGB"), 0, 0)
 
             # Scroll next game text
             self.scroll_position -= 1

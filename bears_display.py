@@ -244,7 +244,7 @@ class BearsDisplay:
     def _draw_sweater_header(self):
         """Draw the classic Bears sweater header with orange stripes using cached background"""
         # Use pre-generated cached background for performance
-        self.manager.canvas.SetImage(self._bears_sweater_bg, 0, 0)
+        self.manager.set_image(self._bears_sweater_bg, 0, 0)
 
         # Draw "CHICAGO BEARS" text in white, centered between stripes
         self.manager.draw_text('small_bold', 9, 19,

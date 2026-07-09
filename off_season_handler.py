@@ -921,7 +921,7 @@ class OffSeasonHandler:
         self.manager.clear_canvas()
 
         # Use pre-generated cached background for performance
-        self.manager.canvas.SetImage(self._bears_sweater_bg, 0, 0)
+        self.manager.set_image(self._bears_sweater_bg, 0, 0)
 
         # Draw "CHICAGO BEARS" text in white, centered between stripes
         self.manager.draw_text('small_bold', 9, 19,
@@ -946,7 +946,7 @@ class OffSeasonHandler:
         if self._marquee_image is not None:
             output_image.paste(self._marquee_image, (0, 0))
 
-        self.manager.canvas.SetImage(output_image.convert("RGB"), 0, 0)
+        self.manager.set_image(output_image.convert("RGB"), 0, 0)
 
         # Display loading message centered at bottom
         message_width = len(message) * 5
@@ -959,7 +959,7 @@ class OffSeasonHandler:
     def _draw_sweater_header(self):
         """Draw the classic Bears sweater header with orange stripes using cached image"""
         # Use pre-generated cached background for performance
-        self.manager.canvas.SetImage(self._bears_sweater_bg, 0, 0)
+        self.manager.set_image(self._bears_sweater_bg, 0, 0)
 
         # Draw "CHICAGO BEARS" text in white, centered between stripes
         self.manager.draw_text('small_bold', 9, 19,
@@ -1049,7 +1049,7 @@ class OffSeasonHandler:
                 if self._marquee_image is not None:
                     output_image.paste(self._marquee_image, (0, 0))
 
-                self.manager.canvas.SetImage(output_image.convert("RGB"), 0, 0)
+                self.manager.set_image(output_image.convert("RGB"), 0, 0)
 
                 # Get current news headline
                 current_headline = live_news[message_index]
@@ -1114,7 +1114,7 @@ class OffSeasonHandler:
                 if self._marquee_image is not None:
                     output_image.paste(self._marquee_image, (0, 0))
 
-                self.manager.canvas.SetImage(output_image.convert("RGB"), 0, 0)
+                self.manager.set_image(output_image.convert("RGB"), 0, 0)
 
                 # Get current message - custom message once, then facts continuously
                 if showing_custom and not custom_shown:

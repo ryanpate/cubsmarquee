@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+import os
 import pendulum
 import time
 import statsapi
-from PIL import Image
+from PIL import BdfFontFile, Image, ImageDraw, ImageFont
 from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
 from scoreboard_config import (
     DisplayConfig, TeamConfig, Colors, Positions, Fonts, GameConfig, RGBColor,
-    load_user_config
+    load_user_config, PREVIEW_FILE_PATH
 )
 from typing import Any
 from retry import retry_api_call
@@ -18,6 +19,9 @@ from logger import get_logger
 
 # Config file location for runtime settings. Module-level so tests can patch it.
 USER_CONFIG_PATH = '/home/pi/config.json'
+
+# Where BDF fonts converted for the PIL preview mirror are cached
+PIL_FONT_DIR = '/var/tmp/pil_fonts'
 
 _logger = get_logger("scoreboard")
 
@@ -47,6 +51,8 @@ class ScoreboardManager:
         # Runtime brightness / auto-dim state
         self._last_brightness_check: float = 0.0
         self._applied_brightness: int | None = None
+
+        self._init_preview_mirror()
 
     def _load_brightness(self) -> int:
         """
@@ -83,28 +89,88 @@ class ScoreboardManager:
         options.brightness = self._load_brightness()
         return RGBMatrix(options=options)
 
+    FONT_MAPPING: dict[str, str] = {
+        'large_bold': Fonts.LARGE_BOLD,
+        'medium_bold': Fonts.MEDIUM_BOLD,
+        'standard_bold': Fonts.STANDARD_BOLD,
+        'lineup': Fonts.LINEUP,
+        'small_bold': Fonts.SMALL_BOLD,
+        'small': Fonts.SMALL,
+        'tiny_bold': Fonts.TINY_BOLD,
+        'tiny': Fonts.TINY,
+        'micro': Fonts.MICRO,
+        'ultra_micro': Fonts.ULTRA_MICRO
+    }
+
     def _load_fonts(self) -> dict[str, graphics.Font]:
         """Load all required fonts"""
         fonts: dict[str, graphics.Font] = {}
-        font_mapping: dict[str, str] = {
-            'large_bold': Fonts.LARGE_BOLD,
-            'medium_bold': Fonts.MEDIUM_BOLD,
-            'standard_bold': Fonts.STANDARD_BOLD,
-            'lineup': Fonts.LINEUP,
-            'small_bold': Fonts.SMALL_BOLD,
-            'small': Fonts.SMALL,
-            'tiny_bold': Fonts.TINY_BOLD,
-            'tiny': Fonts.TINY,
-            'micro': Fonts.MICRO,
-            'ultra_micro': Fonts.ULTRA_MICRO
-        }
-
-        for name, path in font_mapping.items():
+        for name, path in self.FONT_MAPPING.items():
             font = graphics.Font()
             font.LoadFont(path)
             fonts[name] = font
 
         return fonts
+
+    def _init_preview_mirror(self) -> None:
+        """Set up the PIL frame that mirrors the canvas for the admin preview"""
+        self._frame = Image.new(
+            'RGB', (DisplayConfig.MATRIX_COLS, DisplayConfig.MATRIX_ROWS))
+        self._frame_px = self._frame.load()
+        self._frame_draw = ImageDraw.Draw(self._frame)
+        self._pil_fonts = self._load_pil_fonts()
+        self._last_preview_save: float = 0.0
+
+    def _load_pil_fonts(self) -> dict[str, tuple[Any, int]]:
+        """Convert the BDF fonts to PIL fonts so text can be mirrored"""
+        pil_fonts: dict[str, tuple[Any, int]] = {}
+        try:
+            os.makedirs(PIL_FONT_DIR, exist_ok=True)
+        except OSError as e:
+            _logger.warning("Preview fonts unavailable: %s", e)
+            return pil_fonts
+
+        for name, path in self.FONT_MAPPING.items():
+            try:
+                base = os.path.join(
+                    PIL_FONT_DIR, os.path.splitext(os.path.basename(path))[0])
+                if not os.path.exists(base + '.pil'):
+                    with open(path, 'rb') as fp:
+                        BdfFontFile.BdfFontFile(fp).save(base)
+                font = ImageFont.load(base + '.pil')
+                pil_fonts[name] = (font, self._bdf_ascent(path))
+            except Exception as e:
+                _logger.warning("Preview font %s unavailable: %s", name, e)
+        return pil_fonts
+
+    @staticmethod
+    def _bdf_ascent(path: str) -> int:
+        """Baseline offset of a BDF font (PIL bitmap fonts lack metrics)"""
+        bounding_box_ascent = 0
+        with open(path, 'r', errors='ignore') as f:
+            for line in f:
+                if line.startswith('FONT_ASCENT'):
+                    return int(line.split()[1])
+                if line.startswith('FONTBOUNDINGBOX'):
+                    # 'FONTBOUNDINGBOX w h xoff yoff': ascent = h + yoff
+                    parts = line.split()
+                    bounding_box_ascent = int(parts[2]) + int(parts[4])
+                if line.startswith('STARTCHAR'):
+                    break  # metadata section is over
+        return bounding_box_ascent
+
+    def _save_preview(self) -> None:
+        """Publish the mirror frame for the admin panel (throttled)"""
+        now = time.time()
+        if now - self._last_preview_save < 2:
+            return
+        self._last_preview_save = now
+        try:
+            tmp_path = PREVIEW_FILE_PATH + '.tmp'
+            self._frame.save(tmp_path, 'PNG')
+            os.replace(tmp_path, PREVIEW_FILE_PATH)
+        except OSError:
+            pass  # the preview must never break the display
     
     def load_game_images(
         self, game_data: list[dict[str, Any]], game_index: int = 0
@@ -334,6 +400,9 @@ class ScoreboardManager:
     def clear_canvas(self) -> None:
         """Clear the canvas"""
         self.canvas.Clear()
+        self._frame.paste(
+            (0, 0, 0),
+            (0, 0, DisplayConfig.MATRIX_COLS, DisplayConfig.MATRIX_ROWS))
 
     @staticmethod
     def _parse_hhmm(value: str) -> int:
@@ -390,6 +459,7 @@ class ScoreboardManager:
     def swap_canvas(self) -> None:
         """Swap the canvas buffer"""
         self.update_brightness()
+        self._save_preview()
         self.canvas = self.matrix.SwapOnVSync(self.canvas)
 
     def draw_text(
@@ -404,10 +474,31 @@ class ScoreboardManager:
         color = graphics.Color(*color_tuple)
         graphics.DrawText(self.canvas, font, x, y, color, text)
 
+        # Mirror for the preview: DrawText's y is the baseline, PIL's is
+        # the glyph top, so shift up by the font ascent
+        pil_entry = self._pil_fonts.get(font_name)
+        if pil_entry:
+            pil_font, ascent = pil_entry
+            self._frame_draw.text(
+                (int(x), int(y) - ascent), text,
+                font=pil_font, fill=color_tuple)
+
     def draw_pixel(self, x: int, y: int, r: int, g: int, b: int) -> None:
         """Draw a single pixel"""
         self.canvas.SetPixel(x, y, r, g, b)
+        if (0 <= x < DisplayConfig.MATRIX_COLS
+                and 0 <= y < DisplayConfig.MATRIX_ROWS):
+            self._frame_px[int(x), int(y)] = (r, g, b)
+
+    def set_image(self, image: Image.Image, x: int = 0, y: int = 0) -> None:
+        """Draw a PIL image onto the canvas and the preview mirror"""
+        rgb = image if image.mode == 'RGB' else image.convert('RGB')
+        self.canvas.SetImage(rgb, x, y)
+        self._frame.paste(rgb, (x, y))
 
     def fill_canvas(self, r: int, g: int, b: int) -> None:
         """Fill the entire canvas with a color"""
         self.canvas.Fill(r, g, b)
+        self._frame.paste(
+            (r, g, b),
+            (0, 0, DisplayConfig.MATRIX_COLS, DisplayConfig.MATRIX_ROWS))

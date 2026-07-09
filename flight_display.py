@@ -788,7 +788,7 @@ class FlightDisplay:
 
     def _draw_flight_header(self, header_text: str = 'OVERHEAD FLIGHT') -> None:
         """Draw sky gradient header for flight display using cached background"""
-        self.manager.canvas.SetImage(self._flight_header_bg, 0, 0)
+        self.manager.set_image(self._flight_header_bg, 0, 0)
 
         # Draw thin gray separator line below header
         for x in range(DisplayConfig.MATRIX_COLS):
@@ -944,7 +944,7 @@ class FlightDisplay:
 
             # Dark background
             bg = Image.new("RGB", (radar_w, DisplayConfig.MATRIX_ROWS), (5, 15, 30))
-            self.manager.canvas.SetImage(bg, 0, 0)
+            self.manager.set_image(bg, 0, 0)
 
             # Draw range ring (circle at usable_radius)
             ring_color = (30, 60, 90)
