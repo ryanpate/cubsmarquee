@@ -886,3 +886,74 @@ class TestScoreboardStatusRoute:
         data = self._get_status(tmp_path, monkeypatch, heartbeat=None)
 
         assert data['available'] is False
+
+
+# ============================================================================
+# Flight tracker visual upgrade: icons, compass, radar sweep
+# ============================================================================
+
+class TestFlightVisualHelpers:
+    def _display(self):
+        from flight_display import FlightDisplay
+
+        return FlightDisplay.__new__(FlightDisplay)
+
+    def test_airline_name_from_callsign(self) -> None:
+        display = self._display()
+
+        assert display._airline_name('UAL1837') == 'UNITED'
+        assert display._airline_name('SWA452') == 'SOUTHWEST'
+        assert display._airline_name('FDX9821') == 'FEDEX'
+        assert display._airline_name('N425PC') is None   # GA registration
+        assert display._airline_name('XXX123') is None   # unknown prefix
+        assert display._airline_name('') is None
+
+    def test_aircraft_category_from_type_code(self) -> None:
+        display = self._display()
+
+        category = display._aircraft_category
+        assert category('B738') == 'jet'
+        assert category('A321') == 'jet'
+        assert category('B77W') == 'jet'
+        assert category('E75L') == 'regional'
+        assert category('CRJ9') == 'regional'
+        assert category('C172') == 'prop'
+        assert category('PA28') == 'prop'
+        assert category('SR22') == 'prop'
+        assert category('R44') == 'heli'
+        assert category('') == ''
+        assert category(None) == ''
+
+    def test_heading_vector_points_the_right_way(self) -> None:
+        display = self._display()
+
+        vector = display._heading_vector
+        assert vector(0, 3) == (0, -3)     # north: straight up
+        assert vector(90, 3) == (3, 0)     # east: right
+        assert vector(180, 3) == (0, 3)    # south: down
+        assert vector(270, 3) == (-3, 0)   # west: left
+        dx, dy = vector(45, 3)             # northeast: up-right
+        assert dx > 0 and dy < 0
+
+    def test_radar_sweep_rotates_once_every_four_seconds(self) -> None:
+        display = self._display()
+
+        sweep = display._sweep_angle
+        assert sweep(0.0) == 0
+        assert sweep(1.0) == 90
+        assert sweep(2.5) == 225
+        assert sweep(4.0) == 0    # wraps
+        assert sweep(5.0) == 90
+
+    def test_vertical_rate_indicator_reports_direction(self) -> None:
+        display = self._display()
+
+        indicator = display._get_vertical_rate_indicator
+        text, color, direction = indicator(1856)
+        assert text == '1856' and direction == 'up'
+        text, color, direction = indicator(-1200)
+        assert text == '1200' and direction == 'down'
+        text, color, direction = indicator(50)
+        assert text == 'LVL' and direction == 'level'
+        text, color, direction = indicator(None)
+        assert text == '' and direction == 'level'
