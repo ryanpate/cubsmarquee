@@ -1014,12 +1014,12 @@ class FlightDisplay:
                     self.manager.draw_pixel(rx, ry, *ring_color)
 
             # Rotating radar sweep with a fading afterglow trail,
-            # extending past the range ring to the edge of the scope
+            # kept subtle and contained within the range ring
             sweep_base = self._sweep_angle(time.time() - start_time)
-            sweep_reach = int(math.hypot(cx, cy)) + 1
+            sweep_reach = usable_radius
             for trail in range(5):
                 angle = math.radians(sweep_base - trail * 7)
-                level = 190 - trail * 38
+                level = 55 - trail * 10
                 for r in range(3, sweep_reach):
                     rx = int(cx + r * math.sin(angle))
                     ry = int(cy - r * math.cos(angle))
