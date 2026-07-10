@@ -158,6 +158,11 @@ def load_config():
         'enable_playoff_race': True,
         'enable_flights': True,
         'enable_flight_radar': True,
+        'enable_clock': True,
+        'enable_cubs_history': True,
+        'enable_sky': True,
+        'enable_iss': True,
+        'enable_celebrations': True,
         'flights_between_displays': False,
         'scroll_speed_bears': 5,
         'scroll_speed_bears_news': 5,
@@ -725,6 +730,41 @@ HTML_TEMPLATE = """
                 </label>
             </div>
 
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="enable_clock">
+                    Enable Wrigley scoreboard clock display
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="enable_cubs_history">
+                    Enable Today in Cubs History display
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="enable_sky">
+                    Enable Sun &amp; Sky display (sunrise arc, moon phase)
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="enable_iss">
+                    Enable ISS tracker display
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="enable_celebrations">
+                    Enable celebration days display (birthdays &amp; holidays)
+                </label>
+            </div>
+
             <div class="scroll-speeds-section">
                 <h4>Scroll Speed Settings</h4>
                 <p class="help-text" style="margin-bottom: 15px;">Adjust scrolling text speed for each display (1 = slowest, 10 = fastest):</p>
@@ -1010,6 +1050,11 @@ HTML_TEMPLATE = """
             document.getElementById('enable_playoff_race').checked = config.enable_playoff_race !== false;
             document.getElementById('enable_flights').checked = config.enable_flights !== false;
             document.getElementById('enable_flight_radar').checked = config.enable_flight_radar !== false;
+            document.getElementById('enable_clock').checked = config.enable_clock !== false;
+            document.getElementById('enable_cubs_history').checked = config.enable_cubs_history !== false;
+            document.getElementById('enable_sky').checked = config.enable_sky !== false;
+            document.getElementById('enable_iss').checked = config.enable_iss !== false;
+            document.getElementById('enable_celebrations').checked = config.enable_celebrations !== false;
             document.getElementById('flights_between_displays').checked = config.flights_between_displays === true;
 
             // Load brightness setting
@@ -1259,6 +1304,11 @@ HTML_TEMPLATE = """
                 enable_playoff_race: document.getElementById('enable_playoff_race').checked,
                 enable_flights: document.getElementById('enable_flights').checked,
                 enable_flight_radar: document.getElementById('enable_flight_radar').checked,
+                enable_clock: document.getElementById('enable_clock').checked,
+                enable_cubs_history: document.getElementById('enable_cubs_history').checked,
+                enable_sky: document.getElementById('enable_sky').checked,
+                enable_iss: document.getElementById('enable_iss').checked,
+                enable_celebrations: document.getElementById('enable_celebrations').checked,
                 flights_between_displays: document.getElementById('flights_between_displays').checked,
                 scroll_speed_bears: parseInt(document.getElementById('scroll_speed_bears').value),
                 scroll_speed_bears_news: parseInt(document.getElementById('scroll_speed_bears_news').value),
@@ -1796,6 +1846,11 @@ def save_config_route():
             'enable_playoff_race': data.get('enable_playoff_race', True),
             'enable_flights': data.get('enable_flights', True),
             'enable_flight_radar': data.get('enable_flight_radar', True),
+            'enable_clock': data.get('enable_clock', True),
+            'enable_cubs_history': data.get('enable_cubs_history', True),
+            'enable_sky': data.get('enable_sky', True),
+            'enable_iss': data.get('enable_iss', True),
+            'enable_celebrations': data.get('enable_celebrations', True),
             'flights_between_displays': data.get('flights_between_displays', False),
             'scroll_speed_bears': data.get('scroll_speed_bears', 5),
             'scroll_speed_bears_news': data.get('scroll_speed_bears_news', 5),

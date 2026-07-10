@@ -180,6 +180,11 @@ class OffSeasonHandler:
             'enable_playoff_race': True,  # Enable/disable playoff race display
             'enable_flights': True,  # Enable/disable Flight Tracking display
             'enable_flight_radar': True,  # Enable/disable radar scope view
+            'enable_clock': True,  # Enable/disable Wrigley scoreboard clock
+            'enable_cubs_history': True,  # Enable/disable Today in Cubs History
+            'enable_sky': True,  # Enable/disable Sun & Sky display
+            'enable_iss': True,  # Enable/disable ISS tracker display
+            'enable_celebrations': True,  # Enable/disable celebration days
             'flights_between_displays': False,  # Show flight interstitial between every rotation segment
             'flight_tracking_latitude': None,  # Latitude for flight tracking center
             'flight_tracking_longitude': None,  # Longitude for flight tracking center
