@@ -14,14 +14,15 @@ if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
 
 ISS_API_URL = 'http://api.open-notify.org/iss-now.json'
+ISS_IMAGE_PATH = './iss.png'
 ISS_SPEED_MPH = 17150
 ISS_ALTITUDE_MI = 254
 OVERHEAD_MILES = 500  # close enough to call it overhead
 
 SPACE_TOP = (2, 2, 12)
 SPACE_BOTTOM = (10, 14, 34)
-PANEL_BLUE = (70, 110, 220)
-BODY_WHITE = (220, 225, 235)
+TITLE_BLUE = (140, 160, 220)
+OVERHEAD_GREEN = (60, 220, 90)
 
 
 class ISSDisplay:
@@ -34,6 +35,12 @@ class ISSDisplay:
         self.manager = scoreboard_manager
         self.latitude = latitude
         self.longitude = longitude
+        try:
+            self.sprite: Image.Image | None = Image.open(
+                ISS_IMAGE_PATH).convert('RGBA')
+        except Exception as e:
+            print(f"ISS artwork unavailable: {e}")
+            self.sprite = None
 
     @staticmethod
     def _parse_position(payload: dict[str, Any]) -> tuple[float, float] | None:
@@ -83,22 +90,10 @@ class ISSDisplay:
         directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
         return directions[int((degrees + 22.5) // 45) % 8]
 
-    def _draw_iss_sprite(self, cx: int, cy: int) -> None:
-        """Little station: two solar wings around a white body"""
-        for side in (-1, 1):
-            for col in range(3, 9):
-                for row in (-2, -1, 0, 1, 2):
-                    self.manager.draw_pixel(
-                        cx + side * col, cy + row, *PANEL_BLUE)
-            self.manager.draw_pixel(cx + side * 2, cy, 150, 150, 160)
-        for col in range(-1, 2):
-            for row in (-1, 0, 1):
-                self.manager.draw_pixel(cx + col, cy + row, *BODY_WHITE)
-
     def _draw_iss_frame(
         self, distance: float, direction: str, tick: float | None = None
     ) -> None:
-        """The station over a starfield with its vitals"""
+        """The station artwork over a starfield with its vitals alongside"""
         if tick is None:
             tick = time.time()
         self.manager.clear_canvas()
@@ -112,42 +107,41 @@ class ISSDisplay:
                           for a, b in zip(SPACE_TOP, SPACE_BOTTOM))
             for x in range(DisplayConfig.MATRIX_COLS):
                 pixels[x, y] = color
-        self.manager.set_image(img, 0, 0)
 
-        # Twinkling starfield
-        for i in range(24):
+        # Twinkling starfield behind everything
+        for i in range(26):
             x = (i * 41 + 7) % DisplayConfig.MATRIX_COLS
-            y = (i * 13 + 3) % 30
+            y = (i * 19 + 3) % DisplayConfig.MATRIX_ROWS
             level = 80 if (i + int(tick)) % 4 else 200
-            self.manager.draw_pixel(x, y, level, level, level)
+            pixels[x, y] = (level, level, level)
+
+        # The station drifts gently on the left
+        if self.sprite is not None:
+            bob = int(tick) % 2
+            img.paste(self.sprite, (1, 7 + bob), self.sprite)
+        self.manager.set_image(img, 0, 0)
 
         title = 'SPACE STATION'
         self.manager.draw_text(
-            'micro', (96 - len(title) * 4) // 2, 6, (140, 160, 220), title)
+            'micro', (96 - len(title) * 4) // 2, 6, TITLE_BLUE, title)
 
-        self._draw_iss_sprite(48, 17)
-
+        # Vitals column to the right of the artwork
+        col_center = 68
         if distance <= OVERHEAD_MILES:
-            # Green banner when it's basically overhead
-            for y in range(26, 34):
-                for x in range(DisplayConfig.MATRIX_COLS):
-                    self.manager.draw_pixel(x, y, 25, 110, 45)
-            banner = 'OVERHEAD NOW!'
-            self.manager.draw_text(
-                'micro', (96 - len(banner) * 4) // 2, 32,
-                Colors.WHITE, banner)
+            info, info_color = 'OVERHEAD!', OVERHEAD_GREEN
         else:
-            info = f'{distance:,.0f} MI {direction}'
-            self.manager.draw_text(
-                'micro', (96 - len(info) * 4) // 2, 32,
-                Colors.YELLOW, info)
+            info, info_color = f'{distance:,.0f} MI {direction}', Colors.YELLOW
+        self.manager.draw_text(
+            'micro', col_center - (len(info) * 4) // 2, 21,
+            info_color, info)
 
         stats = f'{ISS_SPEED_MPH:,} MPH'
         self.manager.draw_text(
-            'micro', (96 - len(stats) * 4) // 2, 40, Colors.WHITE, stats)
+            'micro', col_center - (len(stats) * 4) // 2, 32,
+            Colors.WHITE, stats)
         alt = f'{ISS_ALTITUDE_MI} MILES UP'
         self.manager.draw_text(
-            'micro', (96 - len(alt) * 4) // 2, 47, (140, 160, 220), alt)
+            'micro', col_center - (len(alt) * 4) // 2, 43, TITLE_BLUE, alt)
         self.manager.swap_canvas()
 
     def display_iss(self, duration: int = 60) -> bool:
