@@ -611,32 +611,84 @@ class LiveGameHandler:
             time.sleep(0.5)
 
     def animate_opponent_run(self):
-        """Animate opponent scoring a run with alert-style flash"""
+        """Animate opponent scoring: a storm rolls in over their logo
+        with rain and lightning"""
+        import random
+        from PIL import ImageDraw
+
         opp_image = self.manager.game_images['opponent'].resize((20, 20)).convert('RGBA')
 
-        # Create logo on red background
-        logo_bg = Image.new("RGB", opp_image.size, (180, 0, 0))
-        logo_bg.paste(opp_image, (0, 0), opp_image)
+        # Stormy sky gradient, darkest at the top
+        sky = Image.new("RGB", (96, 48))
+        sky_px = sky.load()
+        for y in range(48):
+            shade = 10 + y // 4
+            for x in range(96):
+                sky_px[x, y] = (shade, shade, shade + 8)
 
-        # Flash red/dark frames with opponent logo and "SCORES" text
-        for cycle in range(4):
-            # Red flash frame
-            self.manager.clear_canvas()
-            output_image = Image.new("RGB", (96, 48), (180, 0, 0))
-            output_image.paste(logo_bg, (38, 1))
-            self.manager.set_image(output_image.convert("RGB"), 0, 0)
-            self.manager.draw_text('medium_bold', 21, 42, Colors.WHITE, 'SCORES')
-            self.manager.swap_canvas()
-            time.sleep(0.35)
+        # Puffy storm cloud built from overlapping gray lobes
+        cloud = Image.new("RGBA", (56, 14), (0, 0, 0, 0))
+        cloud_draw = ImageDraw.Draw(cloud)
+        for cx, cy, w, h, shade in ((2, 5, 20, 8, 70), (14, 1, 26, 11, 85),
+                                    (30, 4, 22, 9, 75), (10, 7, 38, 6, 60)):
+            cloud_draw.ellipse((cx, cy, cx + w, cy + h),
+                               fill=(shade, shade, shade + 10, 255))
 
-            # Dark frame
+        drops = [{'x': random.randint(0, 95),
+                  'y': random.uniform(-48, 0),
+                  'speed': random.uniform(2.5, 3.5)} for _ in range(36)]
+
+        cloud_final_x = 20
+        bolt_frames = {36, 37, 56, 57}
+
+        for frame in range(72):
+            frame_img = sky.copy()
+
+            # Lightning flash brightens the whole sky for the strike frames
+            bolt_on = frame in bolt_frames
+            if bolt_on:
+                frame_img = Image.eval(frame_img, lambda v: min(255, v + 45))
+
+            draw = ImageDraw.Draw(frame_img)
+
+            # Cloud drifts in from the left over the first 20 frames,
+            # then parks above the logo
+            if frame < 20:
+                cloud_x = -56 + int((cloud_final_x + 56) * frame / 20)
+            else:
+                cloud_x = cloud_final_x
+            frame_img.paste(cloud, (cloud_x, 0), cloud)
+
+            # Jagged bolt cracking down from the cloud beside the logo
+            if bolt_on:
+                x = 30 if frame < 50 else 63
+                y = 11
+                for _ in range(5):
+                    nx = x + random.choice((-3, -2, 2, 3))
+                    ny = y + 5
+                    draw.line((x, y, nx, ny), fill=(255, 245, 180), width=1)
+                    x, y = nx, ny
+
+            # Opponent logo under the cloud
+            frame_img.paste(opp_image, (38, 14), opp_image)
+
+            # Rain starts once the cloud is overhead
+            if frame >= 20:
+                for drop in drops:
+                    dy = int(drop['y'])
+                    draw.line((drop['x'], dy, drop['x'], dy + 2),
+                              fill=(150, 170, 205))
+                    drop['y'] += drop['speed']
+                    if drop['y'] > 48:
+                        drop['y'] = random.uniform(-6, 0)
+                        drop['x'] = random.randint(0, 95)
+
             self.manager.clear_canvas()
-            output_image = Image.new("RGB", (96, 48), (60, 0, 0))
-            output_image.paste(logo_bg, (38, 1))
-            self.manager.set_image(output_image.convert("RGB"), 0, 0)
-            self.manager.draw_text('medium_bold', 21, 42, (120, 120, 120), 'SCORES')
+            self.manager.set_image(frame_img, 0, 0)
+            text_color = Colors.BRIGHT_YELLOW if bolt_on else (185, 185, 195)
+            self.manager.draw_text('medium_bold', 21, 42, text_color, 'SCORES')
             self.manager.swap_canvas()
-            time.sleep(0.25)
+            time.sleep(0.04)
 
     def display_game_over(self, game_data, game_index, gameid):
         """Display game over screen - Cubs always on left, opponent always on right.
