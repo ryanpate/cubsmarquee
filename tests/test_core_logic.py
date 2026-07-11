@@ -648,3 +648,26 @@ class TestBearsCompactHeader:
         # Navy band between stripes and navy content area below
         for y in (2, 9, 12, 30, 47):
             assert img.getpixel((48, y)) == Colors.BEARS_NAVY
+
+
+# ============================================================================
+# Bears Current Scores Tests
+# ============================================================================
+
+class TestBearsCurrentScores:
+    """Tests for the extended _get_current_scores return value"""
+
+    def test_includes_situation_fields(
+        self, sample_bears_event: dict[str, Any]
+    ) -> None:
+        from bears_display import BearsDisplay
+
+        display = BearsDisplay.__new__(BearsDisplay)
+        result = display._get_current_scores(sample_bears_event, '401547417')
+
+        assert result['bears_score'] == '17'
+        assert result['opp_score'] == '24'
+        assert result['possession'] is None
+        assert result['down_distance'] is None
+        assert result['is_red_zone'] is False
+        assert result['last_play'] is None

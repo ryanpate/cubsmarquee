@@ -322,13 +322,22 @@ class BearsDisplay:
             else:
                 opp_score = '0'
 
+            # Live in-game situation (possession, down & distance, last play).
+            # Uses the final `competition` value, which is the live scoreboard
+            # data when a refetch happened above.
+            situation = extract_situation(competition)
+
             return {
                 'status': status,
                 'game_time': game_time_raw,
                 'bears_score': bears_score,
                 'opp_score': opp_score,
                 'opponent_abbr': opponent_abbr,
-                'opponent_name': opponent_name
+                'opponent_name': opponent_name,
+                'possession': situation['possession'],
+                'down_distance': situation['down_distance'],
+                'is_red_zone': situation['is_red_zone'],
+                'last_play': situation['last_play'],
             }
 
         except Exception as e:
