@@ -132,15 +132,14 @@ class BearsDisplay:
         self._bears_sweater_bg: Image.Image = self._create_bears_sweater_background()
 
     def _create_bears_sweater_background(self) -> Image.Image:
-        """Pre-generate Bears sweater header background image for performance"""
+        """Pre-generate compact Bears sweater header background for performance
+
+        Full 96x48 navy frame with orange stripes at y0-1 and y10-11; the
+        header band is y0-11 and content draws on navy from y12 down.
+        """
         img = Image.new("RGB", (96, 48), self.BEARS_NAVY)
         pixels = img.load()
-        # Top orange stripe (3 pixels tall, y=4-6)
-        for y in range(4, 7):
-            for x in range(96):
-                pixels[x, y] = self.BEARS_ORANGE
-        # Bottom orange stripe (3 pixels tall, y=22-24)
-        for y in range(22, 25):
+        for y in (0, 1, 10, 11):
             for x in range(96):
                 pixels[x, y] = self.BEARS_ORANGE
         print("Bears sweater background cached")
@@ -339,12 +338,11 @@ class BearsDisplay:
             return None
 
     def _draw_sweater_header(self):
-        """Draw the classic Bears sweater header with orange stripes using cached background"""
-        # Use pre-generated cached background for performance
+        """Draw the compact Bears sweater header using the cached background"""
         self.manager.set_image(self._bears_sweater_bg, 0, 0)
 
-        # Draw "CHICAGO BEARS" text in white, centered between stripes
-        self.manager.draw_text('small_bold', 9, 19,
+        # "CHICAGO BEARS" in tiny_bold (5px/char, 13 chars = 65px), centered
+        self.manager.draw_text('tiny_bold', 15, 9,
                                self.BEARS_WHITE, 'CHICAGO BEARS')
 
     def display_bears_info(self, duration=180):

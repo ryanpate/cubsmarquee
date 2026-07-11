@@ -623,3 +623,28 @@ class TestBearsCelebrationAndTime:
         from bears_display import format_kickoff_time
         dt = pendulum.datetime(2026, 12, 14, 19, 20, tz='America/Chicago')
         assert format_kickoff_time(dt) == '7:20 PM'
+
+
+# ============================================================================
+# Compact Bears Sweater Header Tests
+# ============================================================================
+
+class TestBearsCompactHeader:
+    """Tests for the compact sweater header background"""
+
+    def test_compact_sweater_background_layout(self) -> None:
+        from scoreboard_config import Colors
+        from bears_display import BearsDisplay
+
+        display = BearsDisplay.__new__(BearsDisplay)
+        display.BEARS_NAVY = Colors.BEARS_NAVY
+        display.BEARS_ORANGE = Colors.BEARS_ORANGE
+        img = display._create_bears_sweater_background()
+
+        assert img.size == (96, 48)
+        # Orange stripes at y0-1 and y10-11
+        for y in (0, 1, 10, 11):
+            assert img.getpixel((48, y)) == Colors.BEARS_ORANGE
+        # Navy band between stripes and navy content area below
+        for y in (2, 9, 12, 30, 47):
+            assert img.getpixel((48, y)) == Colors.BEARS_NAVY
