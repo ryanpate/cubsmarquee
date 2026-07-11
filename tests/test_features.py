@@ -564,14 +564,13 @@ class TestLastPlayDescription:
         handler.manager = Mock()
         return handler
 
-    def test_returns_full_description_with_prefix(self) -> None:
+    def test_returns_full_description_unprefixed(self) -> None:
         handler = self._handler()
         description = ('Nico Hoerner singles on a line drive to left fielder '
                        'Ian Happ.   Dansby Swanson scores.')
         play_data = {'allPlays': [_play(description)]}
 
-        assert handler._get_last_play_description(play_data) == \
-            f'LAST: {description}'
+        assert handler._get_last_play_description(play_data) == description
 
     def test_skips_in_progress_at_bat(self) -> None:
         handler = self._handler()
@@ -581,7 +580,7 @@ class TestLastPlayDescription:
         ]}
 
         assert handler._get_last_play_description(play_data) == \
-            'LAST: Nico Hoerner doubles to deep center field.'
+            'Nico Hoerner doubles to deep center field.'
 
     def test_no_plays_yet_returns_none(self) -> None:
         handler = self._handler()

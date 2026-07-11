@@ -29,12 +29,13 @@ bottom strip.
 
 Use `play['result']['description']` from the MLB live feed — the full
 sentence, e.g. "Nico Hoerner singles on a line drive to left fielder
-Ian Happ. Dansby Swanson scores." — prefixed with `LAST: `.
+Ian Happ. Dansby Swanson scores." — with no prefix or title (a
+`LAST: ` prefix was tried and removed after on-marquee review).
 
 - New method `_get_last_play_description()` in `LiveGameHandler`
-  returns the prefixed description of the most recent *completed*
-  play (skip plays with no `result.event`, same as today), or `None`
-  on missing/malformed data.
+  returns the description of the most recent *completed* play (skip
+  plays with no `result.event`, same as today), or `None` on
+  missing/malformed data.
 - The old `_get_last_play_text()` method and the
   `PLAY_EVENT_ABBREVIATIONS` dict are removed — nothing else uses
   them.

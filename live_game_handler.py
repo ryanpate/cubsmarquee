@@ -212,16 +212,13 @@ class LiveGameHandler:
                     break
 
     def _get_last_play_description(self, play_data) -> str | None:
-        """Full 'LAST: <description>' sentence for the latest finished play"""
+        """Full description sentence for the latest finished play"""
         try:
             for play in reversed(play_data.get('allPlays', [])):
                 result = play.get('result', {})
                 if not result.get('event'):
                     continue  # at-bat still in progress
-                description = result.get('description')
-                if not description:
-                    return None
-                return f"LAST: {description}"
+                return result.get('description') or None
         except (KeyError, IndexError, AttributeError):
             pass
         return None
