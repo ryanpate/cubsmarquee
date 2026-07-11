@@ -588,7 +588,7 @@ class BearsDisplay:
             self.manager.draw_text('micro', x, 47, self.BEARS_GRAY, line)
 
     def _draw_final_content(self, score_data, frame_count):
-        """Draw the final-score screen"""
+        """Draw the final-score screen with a win celebration"""
         bears_score = score_data['bears_score']
         opp_score = score_data['opp_score']
         opp_abbr = score_data['opponent_abbr']
@@ -599,14 +599,24 @@ class BearsDisplay:
                                self.BEARS_WHITE, f'{opp_abbr} {opp_score}')
 
         try:
-            bears_score_int = int(float(bears_score)) if bears_score else 0
-            opp_score_int = int(float(opp_score)) if opp_score else 0
-            result = 'WIN' if bears_score_int > opp_score_int else 'LOSS'
+            won = int(float(bears_score)) > int(float(opp_score))
         except (ValueError, TypeError):
-            result = 'FINAL'
+            won = None
 
-        result_color = (0, 200, 0) if result == 'WIN' else (200, 0, 0)
-        self.manager.draw_text('tiny_bold', 37, 36, result_color, result)
+        if won:
+            # Alternate orange/white every second (frames are 0.5s)
+            message = 'BEARS WIN!'
+            if (frame_count // 2) % 2 == 0:
+                color = self.BEARS_ORANGE
+            else:
+                color = self.BEARS_WHITE
+            x = max(0, (96 - len(message) * Fonts.CHAR_WIDTH_TINY) // 2)
+            self.manager.draw_text('tiny_bold', x, 37, color, message)
+        elif won is False:
+            self.manager.draw_text('tiny_bold', 38, 37, (200, 0, 0), 'LOSS')
+
+        x = max(0, (96 - 5 * Fonts.CHAR_WIDTH_MICRO) // 2)
+        self.manager.draw_text('micro', x, 46, self.BEARS_ORANGE, 'FINAL')
 
     def _display_next_game(self, game, duration):
         """Display next upcoming Bears game with scrolling text"""
