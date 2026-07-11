@@ -143,15 +143,10 @@ class OffSeasonHandler:
         return img
 
     def _create_bears_sweater_background(self) -> Image.Image:
-        """Pre-generate Bears sweater header background image for performance"""
+        """Pre-generate compact Bears sweater header background for performance"""
         img = Image.new("RGB", (96, 48), self.BEARS_NAVY)
         pixels = img.load()
-        # Top orange stripe (3 pixels tall, y=4-6)
-        for y in range(4, 7):
-            for x in range(96):
-                pixels[x, y] = self.BEARS_ORANGE
-        # Bottom orange stripe (3 pixels tall, y=22-24)
-        for y in range(22, 25):
+        for y in (0, 1, 10, 11):
             for x in range(96):
                 pixels[x, y] = self.BEARS_ORANGE
         print("Bears sweater background cached")
@@ -1025,17 +1020,12 @@ class OffSeasonHandler:
         """Display loading message with Bears sweater header using cached image"""
         self.manager.clear_canvas()
 
-        # Use pre-generated cached background for performance
-        self.manager.set_image(self._bears_sweater_bg, 0, 0)
+        self._draw_sweater_header()
 
-        # Draw "CHICAGO BEARS" text in white, centered between stripes
-        self.manager.draw_text('small_bold', 9, 19,
-                               self.BEARS_WHITE, 'CHICAGO BEARS')
-
-        # Display loading message centered
+        # Display loading message centered in the content area
         message_width = len(message) * 5
         x_pos = max(0, (96 - message_width) // 2)
-        self.manager.draw_text('small_bold', x_pos, 42,
+        self.manager.draw_text('small_bold', x_pos, 32,
                                self.BEARS_WHITE, message)
 
         self.manager.swap_canvas()
@@ -1062,12 +1052,11 @@ class OffSeasonHandler:
         self.manager.swap_canvas()
 
     def _draw_sweater_header(self):
-        """Draw the classic Bears sweater header with orange stripes using cached image"""
-        # Use pre-generated cached background for performance
+        """Draw the compact Bears sweater header using the cached image"""
         self.manager.set_image(self._bears_sweater_bg, 0, 0)
 
-        # Draw "CHICAGO BEARS" text in white, centered between stripes
-        self.manager.draw_text('small_bold', 9, 19,
+        # "CHICAGO BEARS" in tiny_bold (5px/char, 13 chars = 65px), centered
+        self.manager.draw_text('tiny_bold', 15, 9,
                                self.BEARS_WHITE, 'CHICAGO BEARS')
 
     def display_bears_news(self, duration=180):
@@ -1112,7 +1101,7 @@ class OffSeasonHandler:
 
                 # Draw scrolling text
                 self.manager.draw_text(
-                    'medium_bold', int(self.scroll_position), 44,
+                    'medium_bold', int(self.scroll_position), 32,
                     self.BEARS_WHITE, current_headline
                 )
 
