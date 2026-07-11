@@ -8,7 +8,8 @@ import pendulum
 from PIL import Image
 from typing import TYPE_CHECKING, Any
 
-from scoreboard_config import Colors, GameConfig, RGBColor, get_scroll_delay, load_user_config
+from scoreboard_config import (
+    Colors, Fonts, GameConfig, RGBColor, get_scroll_delay, load_user_config)
 from retry import retry_http_request
 
 if TYPE_CHECKING:
@@ -127,6 +128,7 @@ class BearsDisplay:
         self.BEARS_NAVY: RGBColor = Colors.BEARS_NAVY
         self.BEARS_ORANGE: RGBColor = Colors.BEARS_ORANGE
         self.BEARS_WHITE: RGBColor = Colors.WHITE
+        self.BEARS_GRAY: RGBColor = (170, 170, 170)
 
         # Pre-generate cached background image for performance
         self._bears_sweater_bg: Image.Image = self._create_bears_sweater_background()
@@ -378,118 +380,206 @@ class BearsDisplay:
         """Display today's Bears game with live score updates"""
         start_time = time.time()
         last_score_update = 0
+        frame_count = 0
+        prev_bears_score = None
+        last_scrolled_play = None
 
         try:
             game_id = game.get('id')
 
-            # Get initial scores
             score_data = self._get_current_scores(game, game_id)
             if not score_data:
                 return
 
-            status = score_data['status']
-            game_time = score_data['game_time']
-            bears_score = score_data['bears_score']
-            opp_score = score_data['opp_score']
-            opponent_abbr = score_data['opponent_abbr']
-            opponent_name = score_data['opponent_name']
+            try:
+                prev_bears_score = int(float(score_data['bears_score']))
+            except (ValueError, TypeError):
+                prev_bears_score = None
 
-            print(f"Game status: {status}, Detail: {game_time}")
-            print(f"Bears score: {bears_score}, Opponent score: {opp_score}")
+            print(f"Game status: {score_data['status']}, "
+                  f"Detail: {score_data['game_time']}")
 
             while time.time() - start_time < duration:
-                # Check if we should update live scores (every 60 seconds for live games)
+                # Refresh live scores every LIVE_SCORE_UPDATE_INTERVAL seconds
                 current_time = time.time()
-                if (status == 'STATUS_IN_PROGRESS' and
-                    current_time - last_score_update >= self.live_update_interval):
-
+                if (score_data['status'] == 'STATUS_IN_PROGRESS' and
+                        current_time - last_score_update >= self.live_update_interval):
                     print("Updating live scores...")
                     updated_data = self._get_current_scores(game, game_id)
 
                     if updated_data:
-                        status = updated_data['status']
-                        game_time = updated_data['game_time']
-                        bears_score = updated_data['bears_score']
-                        opp_score = updated_data['opp_score']
-                        print(f"Scores updated - Bears: {bears_score}, Opponent: {opp_score}")
+                        try:
+                            new_score = int(float(updated_data['bears_score']))
+                        except (ValueError, TypeError):
+                            new_score = prev_bears_score
+
+                        # Bears scored since the last poll - celebrate
+                        if (prev_bears_score is not None and
+                                new_score is not None and
+                                new_score > prev_bears_score):
+                            self._play_scoring_celebration(
+                                new_score - prev_bears_score)
+
+                        if new_score is not None:
+                            prev_bears_score = new_score
+                        score_data = updated_data
+                        print(f"Scores updated - Bears: {score_data['bears_score']}, "
+                              f"Opponent: {score_data['opp_score']}")
 
                     last_score_update = current_time
-                self.manager.clear_canvas()
 
-                # Draw sweater-style header
+                self.manager.clear_canvas()
                 self._draw_sweater_header()
 
+                status = score_data['status']
                 if status == 'STATUS_IN_PROGRESS':
-                    # Game in progress - show scores below header
-                    self.manager.draw_text('tiny_bold', 30, 28,
-                                           self.BEARS_WHITE, 'LIVE GAME')
-
-                    # Bears score
-                    self.manager.draw_text('small_bold', 8, 39,
-                                           self.BEARS_WHITE, f'CHI {bears_score}')
-
-                    # Opponent score
-                    self.manager.draw_text('small_bold', 52, 39,
-                                           self.BEARS_WHITE, f'{opponent_abbr} {opp_score}')
-
-                    # Quarter/Time info at bottom
-                    self.manager.draw_text('micro', 28, 47,
-                                           self.BEARS_ORANGE, game_time)
-
+                    self._draw_live_content(score_data, frame_count)
                 elif status == 'STATUS_FINAL':
-                    # Game final - safely convert scores to integers for comparison
-                    try:
-                        bears_score_int = int(
-                            float(bears_score)) if bears_score else 0
-                        opp_score_int = int(
-                            float(opp_score)) if opp_score else 0
-                        result = 'WIN' if bears_score_int > opp_score_int else 'LOSS'
-                    except (ValueError, TypeError):
-                        result = 'FINAL'
-
-                    result_color = (
-                        0, 200, 0) if result == 'WIN' else (200, 0, 0)
-
-                    self.manager.draw_text('tiny_bold', 37, 47,
-                                           result_color, result)
-
-                    # Final scores
-                    self.manager.draw_text('small_bold', 8, 37,
-                                           self.BEARS_WHITE, f'CHI {bears_score}')
-                    self.manager.draw_text('small_bold', 52, 37,
-                                           self.BEARS_WHITE, f'{opponent_abbr} {opp_score}')
-
-                    #self.manager.draw_text('micro', 35, 44,
-                    #                       self.BEARS_ORANGE, 'FINAL')
-
+                    self._draw_final_content(score_data, frame_count)
                 else:
-                    # Game scheduled but not started
-                    # Convert game time to Central timezone
-                    game_datetime = pendulum.parse(game['date'])
-                    game_datetime_central = game_datetime.in_timezone(
-                        'America/Chicago')
-                    display_time = game_datetime_central.format('h:mm A')
-
-                    self.manager.draw_text('tiny', 28, 28,
-                                           self.BEARS_WHITE, 'TODAY vs')
-
-                    # Opponent name centered
-                    opp_x = max(5, (96 - len(opponent_name) * 5) // 2)
-                    self.manager.draw_text('tiny', opp_x, 36,
-                                           self.BEARS_ORANGE, opponent_name)
-
-                    # Game time at bottom (in Central time)
-                    time_x = max(5, (96 - len(display_time) * 4) // 2)
-                    self.manager.draw_text('micro', time_x, 44,
-                                           self.BEARS_WHITE, display_time)
+                    self._draw_pregame_content(game)
 
                 self.manager.swap_canvas()
+                frame_count += 1
                 time.sleep(0.5)
+
+                # Scroll each new play description once across the bottom strip
+                if status == 'STATUS_IN_PROGRESS':
+                    play = score_data.get('last_play')
+                    if play and play != last_scrolled_play:
+                        self._scroll_last_play(play)
+                        last_scrolled_play = play
 
         except Exception as e:
             print(f"Error displaying Bears game: {e}")
             import traceback
             traceback.print_exc()
+
+    def _draw_live_content(self, score_data, frame_count):
+        """Draw scores, possession dot, down & distance, and clock (y12-47)"""
+        bears_score = score_data['bears_score']
+        opp_score = score_data['opp_score']
+        opp_abbr = score_data['opponent_abbr']
+
+        # Score row
+        self.manager.draw_text('small_bold', 8, 24,
+                               self.BEARS_WHITE, f'CHI {bears_score}')
+        self.manager.draw_text('small_bold', 52, 24,
+                               self.BEARS_WHITE, f'{opp_abbr} {opp_score}')
+
+        # Orange possession dot beside the team with the ball
+        possession = score_data.get('possession')
+        if possession == 'bears':
+            self._draw_possession_dot(3)
+        elif possession == 'opponent':
+            self._draw_possession_dot(91)
+
+        # Down & distance; red and blinking in the red zone
+        down_distance = score_data.get('down_distance')
+        if down_distance:
+            if score_data.get('is_red_zone'):
+                color = (255, 60, 60) if frame_count % 2 == 0 else None
+            else:
+                color = self.BEARS_WHITE
+            if color:
+                x = max(0, (96 - len(down_distance) * Fonts.CHAR_WIDTH_TINY) // 2)
+                self.manager.draw_text('tiny', x, 31, color, down_distance)
+
+        # Quarter / clock
+        game_time = score_data.get('game_time') or ''
+        if game_time:
+            x = max(0, (96 - len(game_time) * Fonts.CHAR_WIDTH_MICRO) // 2)
+            self.manager.draw_text('micro', x, 38, self.BEARS_ORANGE, game_time)
+
+    def _draw_possession_dot(self, x):
+        """Draw a 3x3 orange football dot at the given x, beside the score row"""
+        for px in range(x, x + 3):
+            for py in range(18, 21):
+                self.manager.draw_pixel(px, py, *self.BEARS_ORANGE)
+
+    def _scroll_last_play(self, text):
+        """Scroll a play description once across the bottom strip (y40-47)"""
+        original = self.manager.get_frame_copy()
+        snapshot = original.copy()
+
+        # Clear the strip to plain navy so the text scrolls over clean rows
+        pixels = snapshot.load()
+        for y in range(40, 48):
+            for x in range(96):
+                pixels[x, y] = self.BEARS_NAVY
+
+        text = text.upper()
+        text_width = len(text) * Fonts.CHAR_WIDTH_MICRO
+        config = self._load_scroll_config()
+        scroll_delay = get_scroll_delay(config.get('scroll_speed_bears', 5))
+
+        scroll_x = 96
+        while scroll_x + text_width >= 0:
+            self.manager.set_image(snapshot, 0, 0)
+            self.manager.draw_text('micro', scroll_x, 46,
+                                   self.BEARS_WHITE, text)
+            self.manager.swap_canvas()
+            time.sleep(scroll_delay)
+            scroll_x -= 1
+
+        # Restore the pre-scroll frame
+        self.manager.set_image(original, 0, 0)
+        self.manager.swap_canvas()
+
+    def _play_scoring_celebration(self, delta):
+        """Flash a scoring message for ~4 seconds when the Bears score"""
+        message = celebration_message(delta)
+        x = max(0, (96 - len(message) * Fonts.CHAR_WIDTH_SMALL) // 2)
+
+        for i in range(8):
+            self.manager.clear_canvas()
+            self._draw_sweater_header()
+            color = self.BEARS_ORANGE if i % 2 == 0 else self.BEARS_WHITE
+            self.manager.draw_text('small_bold', x, 32, color, message)
+            self.manager.swap_canvas()
+            time.sleep(0.5)
+
+    def _draw_pregame_content(self, game):
+        """Draw the pregame card (game today, not yet started)"""
+        competition = game['competitions'][0]
+        home_team = competition['competitors'][0]
+        away_team = competition['competitors'][1]
+        bears_home = home_team['team']['abbreviation'] == 'CHI'
+        opponent = away_team if bears_home else home_team
+        opponent_name = opponent['team']['displayName']
+
+        game_datetime = pendulum.parse(game['date'])
+        game_datetime_central = game_datetime.in_timezone('America/Chicago')
+        display_time = game_datetime_central.format('h:mm A')
+
+        self.manager.draw_text('tiny', 28, 20, self.BEARS_WHITE, 'TODAY vs')
+
+        opp_x = max(5, (96 - len(opponent_name) * 5) // 2)
+        self.manager.draw_text('tiny', opp_x, 30, self.BEARS_ORANGE, opponent_name)
+
+        time_x = max(5, (96 - len(display_time) * 4) // 2)
+        self.manager.draw_text('micro', time_x, 40, self.BEARS_WHITE, display_time)
+
+    def _draw_final_content(self, score_data, frame_count):
+        """Draw the final-score screen"""
+        bears_score = score_data['bears_score']
+        opp_score = score_data['opp_score']
+        opp_abbr = score_data['opponent_abbr']
+
+        self.manager.draw_text('small_bold', 8, 24,
+                               self.BEARS_WHITE, f'CHI {bears_score}')
+        self.manager.draw_text('small_bold', 52, 24,
+                               self.BEARS_WHITE, f'{opp_abbr} {opp_score}')
+
+        try:
+            bears_score_int = int(float(bears_score)) if bears_score else 0
+            opp_score_int = int(float(opp_score)) if opp_score else 0
+            result = 'WIN' if bears_score_int > opp_score_int else 'LOSS'
+        except (ValueError, TypeError):
+            result = 'FINAL'
+
+        result_color = (0, 200, 0) if result == 'WIN' else (200, 0, 0)
+        self.manager.draw_text('tiny_bold', 37, 36, result_color, result)
 
     def _display_next_game(self, game, duration):
         """Display next upcoming Bears game with scrolling text"""
