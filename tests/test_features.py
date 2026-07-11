@@ -640,13 +640,33 @@ class TestLastPlayScroll:
 
         handler._scroll_last_play('LAST: Test play.')
 
-        background = handler.manager.set_image.call_args.args[0]
+        background = handler.manager.set_image.call_args_list[0].args[0]
         # Strip repainted with the batter-area gradient, not the old text
         assert background.getpixel((48, 39)) == (255, 255, 255)
         assert background.getpixel((48, 43)) == (175, 175, 175)
         assert background.getpixel((48, 46)) == (115, 115, 115)
         # Rest of the frame untouched
         assert background.getpixel((48, 20)) == (200, 200, 200)
+
+    def test_batter_line_restored_after_scroll(self, monkeypatch) -> None:
+        import live_game_handler as lgh
+        from PIL import Image
+
+        monkeypatch.setattr(lgh.time, 'sleep', lambda seconds: None)
+        handler = self._handler()
+        frame = Image.new('RGB', (96, 48), (200, 200, 200))
+        for x in range(96):
+            frame.putpixel((x, 43), (255, 0, 0))
+        handler.manager.get_frame_copy.return_value = frame
+
+        handler._scroll_last_play('LAST: Test play.')
+
+        # The final frame put up is the original, batter line intact
+        final = handler.manager.set_image.call_args_list[-1].args[0]
+        assert final.getpixel((48, 43)) == (255, 0, 0)
+        # And it was swapped to the display
+        assert (handler.manager.swap_canvas.call_count
+                == handler.manager.set_image.call_count)
 
     def test_each_play_scrolls_exactly_once(self, monkeypatch) -> None:
         import live_game_handler as lgh
@@ -655,17 +675,20 @@ class TestLastPlayScroll:
         handler = self._handler()
         play_data = {'allPlays': [_play('Ian Happ walks.')]}
 
-        handler._maybe_scroll_last_play(play_data, banner_active=False)
+        assert handler._maybe_scroll_last_play(
+            play_data, banner_active=False) is True
         first_pass_frames = handler.manager.swap_canvas.call_count
         assert first_pass_frames > 0
 
         # Same play again: no new scroll
-        handler._maybe_scroll_last_play(play_data, banner_active=False)
+        assert handler._maybe_scroll_last_play(
+            play_data, banner_active=False) is False
         assert handler.manager.swap_canvas.call_count == first_pass_frames
 
         # A new play scrolls again
         play_data['allPlays'].append(_play('Seiya Suzuki homers.'))
-        handler._maybe_scroll_last_play(play_data, banner_active=False)
+        assert handler._maybe_scroll_last_play(
+            play_data, banner_active=False) is True
         assert handler.manager.swap_canvas.call_count > first_pass_frames
 
     def test_no_scroll_while_review_banner_active(self, monkeypatch) -> None:
@@ -701,9 +724,10 @@ class TestLastPlayScroll:
         assert xs == list(range(96, xs[-1] - 1, -1))
         assert xs[-1] + text_width <= 0
 
-        # Snapshot restored and canvas swapped every frame
-        assert handler.manager.set_image.call_count == len(xs)
-        assert handler.manager.swap_canvas.call_count == len(xs)
+        # Background painted and canvas swapped every frame, plus one
+        # final frame restoring the static display
+        assert handler.manager.set_image.call_count == len(xs) + 1
+        assert handler.manager.swap_canvas.call_count == len(xs) + 1
 
     def test_stops_immediately_on_shutdown(self, monkeypatch) -> None:
         import live_game_handler as lgh
@@ -726,7 +750,9 @@ class TestLastPlayScroll:
 
         handler._scroll_last_play('LAST: Test play.')
 
-        assert handler.manager.swap_canvas.call_count == 0
+        # No scroll frames drawn — just the single restored static frame
+        assert handler.manager.draw_text.call_count == 0
+        assert handler.manager.swap_canvas.call_count == 1
 
 
 # ============================================================================

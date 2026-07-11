@@ -69,7 +69,11 @@ The scroll pass in `LiveGameHandler`:
    - `draw_text('micro', scroll_x, 45, Colors.CUBS_BLUE, text)`
    - `swap_canvas()`
    - sleep the scroll delay; `scroll_x -= 1`
-3. One pass only, then return to the normal loop.
+3. One pass only. When the pass ends (or aborts for a split-squad
+   switch), immediately restore the original frame — batter line
+   included — so the strip is never left blank. The main loop also
+   skips its 5s cycle delay after a scroll pass, since the pass
+   already outlasts it, so fresh game data loads right away.
 
 Rejected alternative: re-running the base composite + gradient pixel
 loops (~1,500 `draw_pixel` calls) per scroll frame, as the

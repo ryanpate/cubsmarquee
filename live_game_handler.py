@@ -200,10 +200,11 @@ class LiveGameHandler:
             self._last_inning_state = inning_state
 
             # Scroll each new completed play's description across the batter
-            # strip once; the static batter line shows until the next play
-            self._maybe_scroll_last_play(play_data, banner is not None)
-
-            time.sleep(GameConfig.GAME_CHECK_DELAY)
+            # strip once; the static batter line shows until the next play.
+            # A scroll pass already outlasts the cycle delay, so skip the
+            # sleep afterwards to refresh game data right away.
+            if not self._maybe_scroll_last_play(play_data, banner is not None):
+                time.sleep(GameConfig.GAME_CHECK_DELAY)
 
             # Exit loop if in split-squad mode and it's time to switch games
             if self.manager.split_squad_indicator:
@@ -223,19 +224,25 @@ class LiveGameHandler:
             pass
         return None
 
-    def _maybe_scroll_last_play(self, play_data, banner_active: bool) -> None:
-        """Scroll each completed play's description exactly once"""
+    def _maybe_scroll_last_play(self, play_data, banner_active: bool) -> bool:
+        """Scroll each completed play's description exactly once.
+
+        Returns True if a scroll pass ran (the caller can then skip its
+        cycle delay so fresh data loads right away).
+        """
         description = self._get_last_play_description(play_data)
         if not description or banner_active:
-            return
+            return False
         if description == self._last_scrolled_description:
-            return
+            return False
         self._scroll_last_play(description)
         self._last_scrolled_description = description
+        return True
 
     def _scroll_last_play(self, text: str) -> None:
         """Scroll the full last-play description across the batter strip once"""
-        snapshot = self.manager.get_frame_copy()
+        original = self.manager.get_frame_copy()
+        snapshot = original.copy()
 
         # Erase the static batter line from the snapshot by repainting the
         # batter strip gradient (same ramp as the frame draw in
@@ -255,13 +262,17 @@ class LiveGameHandler:
                 return
             if (self.manager.split_squad_indicator
                     and time.time() >= self.manager.split_squad_switch_time):
-                return
+                break
             self.manager.set_image(snapshot, 0, 0)
             self.manager.draw_text('micro', scroll_x, 45,
                                    Colors.CUBS_BLUE, text)
             self.manager.swap_canvas()
             time.sleep(scroll_delay)
             scroll_x -= 1
+
+        # Put the static frame (batter line included) back up immediately
+        self.manager.set_image(original, 0, 0)
+        self.manager.swap_canvas()
 
     @staticmethod
     def _get_review_banner(status: str) -> str | None:
