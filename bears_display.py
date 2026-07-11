@@ -619,60 +619,64 @@ class BearsDisplay:
         self.manager.draw_text('micro', x, 46, self.BEARS_ORANGE, 'FINAL')
 
     def _display_next_game(self, game, duration):
-        """Display next upcoming Bears game with scrolling text"""
+        """Display the next upcoming Bears game as a structured card"""
         start_time = time.time()
-        scroll_position = 96
 
         try:
-            # Parse game data
             competition = game['competitions'][0]
             home_team = competition['competitors'][0]
             away_team = competition['competitors'][1]
-
             bears_home = home_team['team']['abbreviation'] == 'CHI'
+            opponent = away_team if bears_home else home_team
+            vs_at = 'VS' if bears_home else 'AT'
+            opp_name = (opponent['team'].get('shortDisplayName')
+                        or opponent['team']['displayName']).upper()
+            opp_line = f'{vs_at} {opp_name}'
 
-            if bears_home:
-                opponent = away_team
-                vs_at = 'vs'
-            else:
-                opponent = home_team
-                vs_at = 'at'
+            kickoff = pendulum.parse(game['date']).in_timezone('America/Chicago')
+            date_line = (f"{kickoff.format('ddd MMM D').upper()} "
+                         f"{format_kickoff_time(kickoff)}")
 
-            opponent_name = opponent['team']['displayName']
-            game_date_raw = game['date']
-            game_date = pendulum.parse(game_date_raw)
-
-            # Convert to Central timezone (system timezone)
-            game_date_central = game_date.in_timezone('America/Chicago')
-
-            # Format date and time in Central time
-            date_str = game_date_central.format('ddd MMM D')
-            time_str = game_date_central.format('h:mm A')
-
-            message = f"NEXT GAME: {date_str} {vs_at} {opponent_name} at {time_str}"
+            parts = []
+            week = extract_week(game)
+            if week:
+                parts.append(f'WK {week}')
+            network = extract_broadcast(competition)
+            if network:
+                parts.append(network.upper())
+            week_line = ' '.join(parts)
 
             while time.time() - start_time < duration:
                 self.manager.clear_canvas()
-
-                # Draw sweater-style header
                 self._draw_sweater_header()
 
-                # Scroll smoothly 1 pixel at a time (like Spring Training)
-                scroll_position -= 1
-                text_length = len(message) * 9
+                self.manager.draw_text('ultra_micro', 36, 18,
+                                       (150, 150, 150), 'UP NEXT')
 
-                if scroll_position + text_length < 0:
-                    scroll_position = 96
+                x = max(0, (96 - len(opp_line) * Fonts.CHAR_WIDTH_TINY) // 2)
+                self.manager.draw_text('tiny_bold', x, 26,
+                                       self.BEARS_WHITE, opp_line)
 
-                # Draw scrolling text
-                self.manager.draw_text('medium_bold', int(scroll_position), 44,
-                                       self.BEARS_WHITE, message)
+                x = max(0, (96 - len(date_line) * Fonts.CHAR_WIDTH_TINY) // 2)
+                self.manager.draw_text('tiny', x, 34,
+                                       self.BEARS_WHITE, date_line)
+
+                if week_line:
+                    x = max(0, (96 - len(week_line) * Fonts.CHAR_WIDTH_MICRO) // 2)
+                    self.manager.draw_text('micro', x, 41,
+                                           self.BEARS_GRAY, week_line)
+
+                seconds = (kickoff
+                           - pendulum.now('America/Chicago')).total_seconds()
+                if seconds > 0:
+                    countdown = f'IN {format_countdown(seconds)}'
+                    color = countdown_color(seconds, yellow_under=24 * 3600,
+                                            orange_under=3 * 3600)
+                    x = max(0, (96 - len(countdown) * Fonts.CHAR_WIDTH_MICRO) // 2)
+                    self.manager.draw_text('micro', x, 47, color, countdown)
 
                 self.manager.swap_canvas()
-                # Load config after drawing (like Spring Training)
-                config = self._load_scroll_config()
-                scroll_delay = get_scroll_delay(config.get('scroll_speed_bears', 5))
-                time.sleep(scroll_delay)
+                time.sleep(0.5)
 
         except Exception as e:
             print(f"Error displaying Bears game: {e}")
