@@ -484,3 +484,142 @@ class TestGameStatusRouting:
         final_statuses = ['Final', 'Game Over']
         for status in final_statuses:
             assert status in ['Final', 'Game Over']
+
+
+# ============================================================================
+# Bears Display Helper Tests
+# ============================================================================
+
+class TestBearsSituation:
+    """Tests for ESPN in-game situation extraction"""
+
+    def _competition_with_situation(self, situation: dict | None) -> dict[str, Any]:
+        competition: dict[str, Any] = {
+            'competitors': [
+                {'team': {'id': '9', 'abbreviation': 'GB'}},
+                {'team': {'id': '3', 'abbreviation': 'CHI'}},
+            ]
+        }
+        if situation is not None:
+            competition['situation'] = situation
+        return competition
+
+    def test_bears_possession(self) -> None:
+        from bears_display import extract_situation
+        competition = self._competition_with_situation({'possession': '3'})
+        assert extract_situation(competition)['possession'] == 'bears'
+
+    def test_opponent_possession(self) -> None:
+        from bears_display import extract_situation
+        competition = self._competition_with_situation({'possession': '9'})
+        assert extract_situation(competition)['possession'] == 'opponent'
+
+    def test_down_distance_string(self) -> None:
+        from bears_display import extract_situation
+        competition = self._competition_with_situation({
+            'shortDownDistanceText': '2nd & 8',
+            'possessionText': 'CHI 34',
+        })
+        assert extract_situation(competition)['down_distance'] == '2ND & 8 CHI 34'
+
+    def test_down_distance_without_possession_text(self) -> None:
+        from bears_display import extract_situation
+        competition = self._competition_with_situation(
+            {'shortDownDistanceText': '3rd & 1'})
+        assert extract_situation(competition)['down_distance'] == '3RD & 1'
+
+    def test_red_zone_and_last_play(self) -> None:
+        from bears_display import extract_situation
+        competition = self._competition_with_situation({
+            'isRedZone': True,
+            'lastPlay': {'text': 'D.Swift up the middle for 5 yards'},
+        })
+        result = extract_situation(competition)
+        assert result['is_red_zone'] is True
+        assert result['last_play'] == 'D.Swift up the middle for 5 yards'
+
+    def test_no_situation_returns_empty_defaults(self) -> None:
+        from bears_display import extract_situation
+        result = extract_situation(self._competition_with_situation(None))
+        assert result == {
+            'possession': None,
+            'down_distance': None,
+            'is_red_zone': False,
+            'last_play': None,
+        }
+
+
+class TestBearsBroadcastAndWeek:
+    """Tests for broadcast and week extraction from both ESPN shapes"""
+
+    def test_scoreboard_broadcast_shape(self) -> None:
+        from bears_display import extract_broadcast
+        competition = {'broadcasts': [{'names': ['FOX']}]}
+        assert extract_broadcast(competition) == 'FOX'
+
+    def test_schedule_broadcast_shape(self) -> None:
+        from bears_display import extract_broadcast
+        competition = {'broadcasts': [{'media': {'shortName': 'CBS'}}]}
+        assert extract_broadcast(competition) == 'CBS'
+
+    def test_missing_broadcast(self) -> None:
+        from bears_display import extract_broadcast
+        assert extract_broadcast({}) is None
+        assert extract_broadcast({'broadcasts': []}) is None
+
+    def test_week_number(self) -> None:
+        from bears_display import extract_week
+        assert extract_week({'week': {'number': 15}}) == 15
+
+    def test_missing_week(self) -> None:
+        from bears_display import extract_week
+        assert extract_week({}) is None
+
+
+class TestBearsCountdown:
+    """Tests for countdown formatting and color thresholds"""
+
+    def test_days_and_hours(self) -> None:
+        from bears_display import format_countdown
+        # 2 days, 14 hours
+        assert format_countdown(2 * 86400 + 14 * 3600) == '2D 14H'
+
+    def test_hours_and_minutes(self) -> None:
+        from bears_display import format_countdown
+        assert format_countdown(3 * 3600 + 22 * 60) == '3H 22M'
+
+    def test_minutes_only(self) -> None:
+        from bears_display import format_countdown
+        assert format_countdown(22 * 60) == '22M'
+
+    def test_color_thresholds(self) -> None:
+        from bears_display import countdown_color
+        from scoreboard_config import Colors
+        assert countdown_color(5 * 3600, 3 * 3600, 3600) == Colors.WHITE
+        assert countdown_color(2 * 3600, 3 * 3600, 3600) == Colors.YELLOW
+        assert countdown_color(30 * 60, 3 * 3600, 3600) == (255, 120, 0)
+
+
+class TestBearsCelebrationAndTime:
+    """Tests for celebration message selection and kickoff time formatting"""
+
+    def test_celebration_messages(self) -> None:
+        from bears_display import celebration_message
+        assert celebration_message(6) == 'TOUCHDOWN!'
+        assert celebration_message(7) == 'TOUCHDOWN!'
+        assert celebration_message(8) == 'TOUCHDOWN!'
+        assert celebration_message(3) == 'FIELD GOAL!'
+        assert celebration_message(2) == 'SAFETY!'
+        assert celebration_message(1) == 'BEARS SCORE!'
+
+    def test_noon_kickoff(self) -> None:
+        import pendulum
+        from bears_display import format_kickoff_time
+        dt = pendulum.datetime(2026, 12, 14, 12, 0, tz='America/Chicago')
+        assert format_kickoff_time(dt) == 'NOON'
+
+    def test_regular_kickoff(self) -> None:
+        import pendulum
+        from bears_display import format_kickoff_time
+        dt = pendulum.datetime(2026, 12, 14, 19, 20, tz='America/Chicago')
+        assert format_kickoff_time(dt) == '7:20 PM'

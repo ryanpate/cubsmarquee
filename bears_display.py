@@ -15,6 +15,103 @@ if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
 
 
+def extract_situation(competition: dict) -> dict:
+    """Extract the live in-game situation from an ESPN competition dict.
+
+    All fields are optional in the ESPN payload (absent between plays,
+    at halftime, and for non-live games) and degrade to None/False.
+    """
+    result: dict[str, Any] = {
+        'possession': None,
+        'down_distance': None,
+        'is_red_zone': False,
+        'last_play': None,
+    }
+    situation = competition.get('situation')
+    if not situation:
+        return result
+
+    possession_id = situation.get('possession')
+    if possession_id:
+        for competitor in competition.get('competitors', []):
+            team = competitor.get('team', {})
+            if str(team.get('id')) == str(possession_id):
+                if team.get('abbreviation') == 'CHI':
+                    result['possession'] = 'bears'
+                else:
+                    result['possession'] = 'opponent'
+                break
+
+    down_distance = situation.get('shortDownDistanceText')
+    possession_text = situation.get('possessionText')
+    if down_distance and possession_text:
+        result['down_distance'] = f'{down_distance} {possession_text}'.upper()
+    elif down_distance:
+        result['down_distance'] = down_distance.upper()
+
+    result['is_red_zone'] = bool(situation.get('isRedZone'))
+    result['last_play'] = (situation.get('lastPlay') or {}).get('text')
+    return result
+
+
+def extract_broadcast(competition: dict) -> str | None:
+    """TV network from either ESPN shape: scoreboard uses broadcasts[].names,
+    the schedule endpoint uses broadcasts[].media.shortName."""
+    broadcasts = competition.get('broadcasts') or []
+    if not broadcasts:
+        return None
+    first = broadcasts[0]
+    names = first.get('names')
+    if names:
+        return names[0]
+    return (first.get('media') or {}).get('shortName')
+
+
+def extract_week(event: dict) -> int | None:
+    """NFL week number from an ESPN event"""
+    return (event.get('week') or {}).get('number')
+
+
+def format_countdown(seconds: float) -> str:
+    """Format seconds until kickoff as '2D 14H', '3H 22M', or '22M'"""
+    total_minutes = int(seconds // 60)
+    days, remainder = divmod(total_minutes, 24 * 60)
+    hours, minutes = divmod(remainder, 60)
+    if days > 0:
+        return f'{days}D {hours}H'
+    if hours > 0:
+        return f'{hours}H {minutes}M'
+    return f'{minutes}M'
+
+
+def countdown_color(seconds: float, yellow_under: float,
+                    orange_under: float) -> RGBColor:
+    """Countdown text color: white, yellow when close, orange when imminent"""
+    if seconds < orange_under:
+        return (255, 120, 0)
+    if seconds < yellow_under:
+        return Colors.YELLOW
+    return Colors.WHITE
+
+
+def celebration_message(delta: int) -> str:
+    """Pick the scoring celebration text from the score change"""
+    if delta in (6, 7, 8):
+        return 'TOUCHDOWN!'
+    if delta == 3:
+        return 'FIELD GOAL!'
+    if delta == 2:
+        return 'SAFETY!'
+    return 'BEARS SCORE!'
+
+
+def format_kickoff_time(dt) -> str:
+    """Kickoff time in Central, with 12:00 PM shown as NOON"""
+    if dt.hour == 12 and dt.minute == 0:
+        return 'NOON'
+    return dt.format('h:mm A')
+
+
 class BearsDisplay:
     """Handles Chicago Bears game information display"""
 
