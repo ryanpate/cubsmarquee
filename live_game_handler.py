@@ -647,7 +647,7 @@ class LiveGameHandler:
 
     def animate_opponent_run(self):
         """Animate opponent scoring: a storm rolls in over their logo
-        with rain and lightning"""
+        with lightning"""
         import random
         from PIL import ImageDraw
 
@@ -668,10 +668,6 @@ class LiveGameHandler:
                                     (30, 4, 22, 9, 75), (10, 7, 38, 6, 60)):
             cloud_draw.ellipse((cx, cy, cx + w, cy + h),
                                fill=(shade, shade, shade + 10, 255))
-
-        drops = [{'x': random.randint(0, 95),
-                  'y': random.uniform(-48, 0),
-                  'speed': random.uniform(2.5, 3.5)} for _ in range(36)]
 
         cloud_final_x = 20
         bolt_frames = {36, 37, 56, 57}
@@ -706,17 +702,6 @@ class LiveGameHandler:
 
             # Opponent logo under the cloud
             frame_img.paste(opp_image, (38, 14), opp_image)
-
-            # Rain starts once the cloud is overhead
-            if frame >= 20:
-                for drop in drops:
-                    dy = int(drop['y'])
-                    draw.line((drop['x'], dy, drop['x'], dy + 2),
-                              fill=(150, 170, 205))
-                    drop['y'] += drop['speed']
-                    if drop['y'] > 48:
-                        drop['y'] = random.uniform(-6, 0)
-                        drop['x'] = random.randint(0, 95)
 
             self.manager.clear_canvas()
             self.manager.set_image(frame_img, 0, 0)
