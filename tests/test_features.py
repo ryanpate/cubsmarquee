@@ -542,22 +542,21 @@ class TestPlayoffRaceInNoGameRotation:
 
 
 # ============================================================================
-# Last-play ticker on the live game screen
+# Last-play scrolling description on the live game screen
 # ============================================================================
 
-def _play(event, batter, rbi=0, complete=True):
-    play = {
-        'matchup': {'batter': {'fullName': batter}},
-        'about': {'isComplete': complete},
-    }
+def _play(description=None, complete=True):
+    play = {'about': {'isComplete': complete}}
     if complete:
-        play['result'] = {'event': event, 'rbi': rbi}
+        play['result'] = {'event': 'Single'}
+        if description is not None:
+            play['result']['description'] = description
     else:
         play['result'] = {}
     return play
 
 
-class TestLastPlayTicker:
+class TestLastPlayDescription:
     def _handler(self):
         from live_game_handler import LiveGameHandler
 
@@ -565,59 +564,112 @@ class TestLastPlayTicker:
         handler.manager = Mock()
         return handler
 
-    def test_home_run_with_rbi(self) -> None:
+    def test_returns_full_description_with_prefix(self) -> None:
         handler = self._handler()
-        play_data = {'allPlays': [_play('Home Run', 'Seiya Suzuki', rbi=2)]}
+        description = ('Nico Hoerner singles on a line drive to left fielder '
+                       'Ian Happ.   Dansby Swanson scores.')
+        play_data = {'allPlays': [_play(description)]}
 
-        assert handler._get_last_play_text(play_data) == 'LAST: HR SUZUKI +2'
-
-    def test_strikeout_abbreviated(self) -> None:
-        handler = self._handler()
-        play_data = {'allPlays': [_play('Strikeout', 'Dansby Swanson')]}
-
-        assert handler._get_last_play_text(play_data) == 'LAST: K SWANSON'
-
-    def test_common_outs_abbreviated(self) -> None:
-        handler = self._handler()
-
-        cases = [
-            ('Groundout', 'Adley Rutschman', 'LAST: GO RUTSCHMAN'),
-            ('Flyout', 'Ian Happ', 'LAST: FO HAPP'),
-            ('Lineout', 'Alex Bregman', 'LAST: LO BREGMAN'),
-        ]
-        for event, batter, expected in cases:
-            play_data = {'allPlays': [_play(event, batter)]}
-            assert handler._get_last_play_text(play_data) == expected
-
-    def test_unmapped_event_uses_event_name(self) -> None:
-        handler = self._handler()
-        play_data = {'allPlays': [_play('Balk', 'Ian Happ')]}
-
-        assert handler._get_last_play_text(play_data) == 'LAST: BALK HAPP'
+        assert handler._get_last_play_description(play_data) == \
+            f'LAST: {description}'
 
     def test_skips_in_progress_at_bat(self) -> None:
         handler = self._handler()
         play_data = {'allPlays': [
-            _play('Double', 'Nico Hoerner'),
-            _play('', 'Michael Busch', complete=False),  # at bat now
+            _play('Nico Hoerner doubles to deep center field.'),
+            _play(complete=False),  # at bat now
         ]}
 
-        assert handler._get_last_play_text(play_data) == 'LAST: 2B HOERNER'
+        assert handler._get_last_play_description(play_data) == \
+            'LAST: Nico Hoerner doubles to deep center field.'
 
     def test_no_plays_yet_returns_none(self) -> None:
         handler = self._handler()
 
-        assert handler._get_last_play_text({'allPlays': []}) is None
-        assert handler._get_last_play_text({}) is None
+        assert handler._get_last_play_description({'allPlays': []}) is None
+        assert handler._get_last_play_description({}) is None
 
-    def test_fits_the_96px_micro_font_row(self) -> None:
+    def test_completed_play_without_description_returns_none(self) -> None:
         handler = self._handler()
-        play_data = {'allPlays': [
-            _play('Grounded Into DP', 'Pete Crow-Armstrong', rbi=1),
-        ]}
+        play_data = {'allPlays': [_play()]}
 
-        text = handler._get_last_play_text(play_data)
-        assert len(text) <= 24  # 96px / 4px-per-char micro font
+        assert handler._get_last_play_description(play_data) is None
+
+
+class TestGetFrameCopy:
+    def test_returns_independent_copy_of_current_frame(self) -> None:
+        from PIL import Image
+        from scoreboard_manager import ScoreboardManager
+
+        manager = ScoreboardManager.__new__(ScoreboardManager)
+        manager._frame = Image.new('RGB', (96, 48), (10, 20, 30))
+
+        copy = manager.get_frame_copy()
+
+        assert copy is not manager._frame
+        assert copy.tobytes() == manager._frame.tobytes()
+
+        copy.putpixel((0, 0), (255, 0, 0))
+        assert manager._frame.getpixel((0, 0)) == (10, 20, 30)
+
+
+class TestLastPlayScroll:
+    def _handler(self):
+        from PIL import Image
+        from live_game_handler import LiveGameHandler
+
+        handler = LiveGameHandler.__new__(LiveGameHandler)
+        handler.manager = Mock()
+        handler.manager.get_frame_copy.return_value = Image.new(
+            'RGB', (96, 48))
+        handler.manager.split_squad_indicator = False
+        return handler
+
+    def test_scrolls_text_across_and_off_screen(self, monkeypatch) -> None:
+        import live_game_handler as lgh
+        from scoreboard_config import Fonts
+
+        monkeypatch.setattr(lgh.time, 'sleep', lambda seconds: None)
+        handler = self._handler()
+
+        text = 'LAST: Test play.'
+        handler._scroll_last_play(text)
+
+        xs = [call.args[1]
+              for call in handler.manager.draw_text.call_args_list]
+        text_width = len(text) * Fonts.CHAR_WIDTH_MICRO
+
+        # Starts off-screen right, moves 1px left per frame, exits left
+        assert xs[0] == 96
+        assert xs == list(range(96, xs[-1] - 1, -1))
+        assert xs[-1] + text_width <= 0
+
+        # Snapshot restored and canvas swapped every frame
+        assert handler.manager.set_image.call_count == len(xs)
+        assert handler.manager.swap_canvas.call_count == len(xs)
+
+    def test_stops_immediately_on_shutdown(self, monkeypatch) -> None:
+        import live_game_handler as lgh
+
+        monkeypatch.setattr(lgh.time, 'sleep', lambda seconds: None)
+        monkeypatch.setattr(lgh, '_is_shutdown_requested', lambda: True)
+        handler = self._handler()
+
+        handler._scroll_last_play('LAST: Test play.')
+
+        assert handler.manager.swap_canvas.call_count == 0
+
+    def test_aborts_when_split_squad_switch_is_due(self, monkeypatch) -> None:
+        import live_game_handler as lgh
+
+        monkeypatch.setattr(lgh.time, 'sleep', lambda seconds: None)
+        handler = self._handler()
+        handler.manager.split_squad_indicator = True
+        handler.manager.split_squad_switch_time = 0  # already in the past
+
+        handler._scroll_last_play('LAST: Test play.')
+
+        assert handler.manager.swap_canvas.call_count == 0
 
 
 # ============================================================================

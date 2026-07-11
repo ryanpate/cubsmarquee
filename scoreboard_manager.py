@@ -516,6 +516,10 @@ class ScoreboardManager:
         self.canvas.SetImage(rgb, x, y)
         self._frame.paste(rgb, (x, y))
 
+    def get_frame_copy(self) -> Image.Image:
+        """Copy of the current composed frame (for animation overlays)"""
+        return self._frame.copy()
+
     def fill_canvas(self, r: int, g: int, b: int) -> None:
         """Fill the entire canvas with a color"""
         self.canvas.Fill(r, g, b)

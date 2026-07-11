@@ -8,7 +8,9 @@ import statsapi
 from PIL import Image
 from typing import TYPE_CHECKING, Any
 
-from scoreboard_config import Colors, Fonts, Positions, GameConfig, TeamConfig, DisplayConfig
+from scoreboard_config import (
+    Colors, Fonts, Positions, GameConfig, TeamConfig, DisplayConfig,
+    get_scroll_delay)
 from retry import retry_api_call
 from logger import get_logger
 from flight_display import FlightDisplay
@@ -17,6 +19,15 @@ logger = get_logger("live_game")
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
+
+
+def _is_shutdown_requested() -> bool:
+    """Lazy import to avoid circular dependency with main.py."""
+    try:
+        from main import is_shutdown_requested as _check
+        return _check()
+    except Exception:
+        return False
 
 
 class LiveGameHandler:
@@ -30,6 +41,7 @@ class LiveGameHandler:
         self.is_cubs_home: bool = False
         self._flight_display: FlightDisplay | None = None
         self._last_inning_state: str = ''
+        self._last_play_scroll_time: float = 0.0
 
     def display_game_on(
         self, game_data: list[dict[str, Any]], game_index: int, gameid: int
@@ -187,6 +199,14 @@ class LiveGameHandler:
                 self._show_between_innings_flights()
             self._last_inning_state = inning_state
 
+            # Scroll the full last-play description across the batter strip,
+            # leaving the static batter line up for ~8s between passes
+            description = self._get_last_play_description(play_data)
+            if (description
+                    and time.time() - self._last_play_scroll_time >= 8):
+                self._scroll_last_play(description)
+                self._last_play_scroll_time = time.time()
+
             time.sleep(GameConfig.GAME_CHECK_DELAY)
 
             # Exit loop if in split-squad mode and it's time to switch games
@@ -195,46 +215,40 @@ class LiveGameHandler:
                     # Return to main loop to switch to next game
                     break
 
-    # Compact labels for common play events (micro font fits ~24 chars)
-    PLAY_EVENT_ABBREVIATIONS: dict[str, str] = {
-        'Strikeout': 'K',
-        'Single': '1B',
-        'Double': '2B',
-        'Triple': '3B',
-        'Home Run': 'HR',
-        'Walk': 'BB',
-        'Intent Walk': 'IBB',
-        'Hit By Pitch': 'HBP',
-        'Grounded Into DP': 'GDP',
-        'Sac Fly': 'SF',
-        'Sac Bunt': 'SAC',
-        'Field Error': 'E',
-        'Groundout': 'GO',
-        'Flyout': 'FO',
-        'Lineout': 'LO',
-        'Pop Out': 'PO',
-        'Forceout': 'FC',
-        'Fielders Choice': 'FC',
-    }
-
-    def _get_last_play_text(self, play_data) -> str | None:
-        """Compact 'LAST: <event> <batter>' line for the latest finished play"""
+    def _get_last_play_description(self, play_data) -> str | None:
+        """Full 'LAST: <description>' sentence for the latest finished play"""
         try:
             for play in reversed(play_data.get('allPlays', [])):
-                event = play.get('result', {}).get('event')
-                if not event:
+                result = play.get('result', {})
+                if not result.get('event'):
                     continue  # at-bat still in progress
-                abbr = self.PLAY_EVENT_ABBREVIATIONS.get(event, event.upper())
-                batter = play['matchup']['batter']['fullName']
-                last_name = batter.split()[-1].upper()
-                rbi = play.get('result', {}).get('rbi', 0)
-                text = f"LAST: {abbr} {last_name}"
-                if rbi:
-                    text += f" +{rbi}"
-                return text[:24]  # 96px wide at 4px per micro-font char
+                description = result.get('description')
+                if not description:
+                    return None
+                return f"LAST: {description}"
         except (KeyError, IndexError, AttributeError):
             pass
         return None
+
+    def _scroll_last_play(self, text: str) -> None:
+        """Scroll the full last-play description across the batter strip once"""
+        snapshot = self.manager.get_frame_copy()
+        text_width = len(text) * Fonts.CHAR_WIDTH_MICRO
+        scroll_delay = get_scroll_delay(5)
+
+        scroll_x = DisplayConfig.MATRIX_COLS
+        while scroll_x + text_width >= 0:
+            if _is_shutdown_requested():
+                return
+            if (self.manager.split_squad_indicator
+                    and time.time() >= self.manager.split_squad_switch_time):
+                return
+            self.manager.set_image(snapshot, 0, 0)
+            self.manager.draw_text('micro', scroll_x, 45,
+                                   Colors.CUBS_BLUE, text)
+            self.manager.swap_canvas()
+            time.sleep(scroll_delay)
+            scroll_x -= 1
 
     @staticmethod
     def _get_review_banner(status: str) -> str | None:
@@ -511,13 +525,10 @@ class LiveGameHandler:
         self.manager.draw_text('tiny', 72, 30, count_color, out_text)
         self.manager.draw_text('micro', 75, 29, count_color, out_text_a)
 
-        # Batter text, alternating with the last completed play every 8s
-        last_play = self._get_last_play_text(play_data)
-        if last_play and int(time.time() / 8) % 2:
-            self.manager.draw_text('micro', 2, 45, Colors.YELLOW, last_play)
-        else:
-            batter_text = f"BAT: {matchup['batter']['fullName']}"
-            self.manager.draw_text('micro', 2, 45, run_color, batter_text)
+        # Batter text (the last-play description scrolls over this row
+        # periodically; see _scroll_last_play)
+        batter_text = f"BAT: {matchup['batter']['fullName']}"
+        self.manager.draw_text('micro', 2, 45, run_color, batter_text)
 
         # Pitcher text
         pitching_text = matchup['pitcher']['fullName']
