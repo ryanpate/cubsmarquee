@@ -552,7 +552,11 @@ class BearsDisplay:
         opp_name = (opponent['team'].get('shortDisplayName')
                     or opponent['team']['displayName']).upper()
 
-        kickoff = pendulum.parse(game['date']).in_timezone('America/Chicago')
+        if getattr(self, '_pregame_kickoff_date', None) != game['date']:
+            self._pregame_kickoff_date = game['date']
+            self._pregame_kickoff = pendulum.parse(
+                game['date']).in_timezone('America/Chicago')
+        kickoff = self._pregame_kickoff
 
         line1 = f'TODAY {vs_at}'
         x = max(0, (96 - len(line1) * Fonts.CHAR_WIDTH_TINY) // 2)
@@ -599,11 +603,14 @@ class BearsDisplay:
                                self.BEARS_WHITE, f'{opp_abbr} {opp_score}')
 
         try:
-            won = int(float(bears_score)) > int(float(opp_score))
+            bears_int = int(float(bears_score))
+            opp_int = int(float(opp_score))
         except (ValueError, TypeError):
-            won = None
+            bears_int = opp_int = None
 
-        if won:
+        if bears_int is None:
+            pass
+        elif bears_int > opp_int:
             # Alternate orange/white every second (frames are 0.5s)
             message = 'BEARS WIN!'
             if (frame_count // 2) % 2 == 0:
@@ -612,8 +619,12 @@ class BearsDisplay:
                 color = self.BEARS_WHITE
             x = max(0, (96 - len(message) * Fonts.CHAR_WIDTH_TINY) // 2)
             self.manager.draw_text('tiny_bold', x, 37, color, message)
-        elif won is False:
+        elif bears_int < opp_int:
             self.manager.draw_text('tiny_bold', 38, 37, (200, 0, 0), 'LOSS')
+        else:
+            message = 'TIE'
+            x = max(0, (96 - len(message) * Fonts.CHAR_WIDTH_TINY) // 2)
+            self.manager.draw_text('tiny_bold', x, 37, self.BEARS_WHITE, message)
 
         x = max(0, (96 - 5 * Fonts.CHAR_WIDTH_MICRO) // 2)
         self.manager.draw_text('micro', x, 46, self.BEARS_ORANGE, 'FINAL')

@@ -64,8 +64,9 @@ still visible. Opponent scoring gets no celebration.
 
 ## Pregame Screen (game today, not started)
 
-1. `TODAY` + `vs`/`at` + opponent name (`tiny`, orange). Opponent name scrolls
-   horizontally if wider than 96 px, else centered.
+1. `TODAY` + `vs`/`at` + opponent name (`tiny`, orange), centered. Opponent
+   uses ESPN `shortDisplayName` (nickname; always fits 96 px), falling back
+   to `displayName`.
 2. Kickoff time in Central (`h:mm A`), as today.
 3. **Countdown line**: `KICKOFF IN 3H 22M` (`micro`), recomputed each frame
    from the parsed game date. Under 1 hour: `KICKOFF IN 22M`. Color shifts as
@@ -88,8 +89,9 @@ Scores as today. Result logic unchanged (compare int scores).
 Replaces the scrolling one-liner with a fixed card in the PGA "UP NEXT" style:
 
 1. `UP NEXT` label (`ultra_micro`, gray, centered, ~y17)
-2. Opponent (`tiny_bold`, white, centered; scrolls if > 96 px), with `vs`/`at`
-   prefix (e.g. `AT PACKERS`), ~y25
+2. Opponent (`tiny_bold`, white, centered), with `vs`/`at` prefix (e.g.
+   `AT PACKERS`), ~y25. Opponent uses ESPN `shortDisplayName` (nickname;
+   always fits 96 px), falling back to `displayName`.
 3. Date + time (`tiny`, white, centered): `SUN DEC 14 · NOON` (12:00 PM renders
    as `NOON`; otherwise `h:mm A`), ~y33
 4. `WK 15 · FOX` (`micro`, gray-white, centered), ~y40
@@ -101,12 +103,12 @@ Replaces the scrolling one-liner with a fixed card in the PGA "UP NEXT" style:
 
 `_get_current_scores` additionally returns (all optional, `None` when absent):
 
-- `possession`: team id string from `situation.possession`
+- `possession`: resolved inside `extract_situation` to `'bears'` / `'opponent'`
+  / `None` by matching `situation.possession` against `competitors[].team.id`;
+  no team-id keys are returned
 - `down_distance`: `shortDownDistanceText` + `' '` + `possessionText`
 - `is_red_zone`: bool from `situation.isRedZone`
 - `last_play`: `situation.lastPlay.text`
-- `bears_team_id` / `opp_team_id`: from `competitors[].team.id` (needed to
-  resolve possession)
 
 Week comes from `event['week']['number']` (both schedule and scoreboard forms).
 Broadcast comes from `competitions[0].broadcasts`: scoreboard form
