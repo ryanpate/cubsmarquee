@@ -623,7 +623,65 @@ class TestLastPlayScroll:
         handler.manager.get_frame_copy.return_value = Image.new(
             'RGB', (96, 48))
         handler.manager.split_squad_indicator = False
+        handler._last_scrolled_description = None
         return handler
+
+    def test_batter_line_erased_from_scroll_background(
+            self, monkeypatch) -> None:
+        import live_game_handler as lgh
+        from PIL import Image
+
+        monkeypatch.setattr(lgh.time, 'sleep', lambda seconds: None)
+        handler = self._handler()
+        # Frame with "batter text" (red pixels) on the bottom strip
+        frame = Image.new('RGB', (96, 48), (200, 200, 200))
+        for x in range(96):
+            frame.putpixel((x, 43), (255, 0, 0))
+        handler.manager.get_frame_copy.return_value = frame
+
+        handler._scroll_last_play('LAST: Test play.')
+
+        background = handler.manager.set_image.call_args.args[0]
+        # Strip repainted with the batter-area gradient, not the old text
+        assert background.getpixel((48, 39)) == (255, 255, 255)
+        assert background.getpixel((48, 43)) == (175, 175, 175)
+        assert background.getpixel((48, 46)) == (115, 115, 115)
+        # Rest of the frame untouched
+        assert background.getpixel((48, 20)) == (200, 200, 200)
+
+    def test_each_play_scrolls_exactly_once(self, monkeypatch) -> None:
+        import live_game_handler as lgh
+
+        monkeypatch.setattr(lgh.time, 'sleep', lambda seconds: None)
+        handler = self._handler()
+        play_data = {'allPlays': [_play('Ian Happ walks.')]}
+
+        handler._maybe_scroll_last_play(play_data, banner_active=False)
+        first_pass_frames = handler.manager.swap_canvas.call_count
+        assert first_pass_frames > 0
+
+        # Same play again: no new scroll
+        handler._maybe_scroll_last_play(play_data, banner_active=False)
+        assert handler.manager.swap_canvas.call_count == first_pass_frames
+
+        # A new play scrolls again
+        play_data['allPlays'].append(_play('Seiya Suzuki homers.'))
+        handler._maybe_scroll_last_play(play_data, banner_active=False)
+        assert handler.manager.swap_canvas.call_count > first_pass_frames
+
+    def test_no_scroll_while_review_banner_active(self, monkeypatch) -> None:
+        import live_game_handler as lgh
+
+        monkeypatch.setattr(lgh.time, 'sleep', lambda seconds: None)
+        handler = self._handler()
+        play_data = {'allPlays': [_play('Ian Happ walks.')]}
+
+        handler._maybe_scroll_last_play(play_data, banner_active=True)
+        assert handler.manager.swap_canvas.call_count == 0
+
+        # Once the banner clears, the play still gets its scroll
+        handler._maybe_scroll_last_play(play_data, banner_active=False)
+        assert handler.manager.swap_canvas.call_count > 0
 
     def test_scrolls_text_across_and_off_screen(self, monkeypatch) -> None:
         import live_game_handler as lgh

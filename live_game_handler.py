@@ -41,7 +41,7 @@ class LiveGameHandler:
         self.is_cubs_home: bool = False
         self._flight_display: FlightDisplay | None = None
         self._last_inning_state: str = ''
-        self._last_play_scroll_time: float = 0.0
+        self._last_scrolled_description: str | None = None
 
     def display_game_on(
         self, game_data: list[dict[str, Any]], game_index: int, gameid: int
@@ -199,13 +199,9 @@ class LiveGameHandler:
                 self._show_between_innings_flights()
             self._last_inning_state = inning_state
 
-            # Scroll the full last-play description across the batter strip,
-            # leaving the static batter line up for ~8s between passes
-            description = self._get_last_play_description(play_data)
-            if (description
-                    and time.time() - self._last_play_scroll_time >= 8):
-                self._scroll_last_play(description)
-                self._last_play_scroll_time = time.time()
+            # Scroll each new completed play's description across the batter
+            # strip once; the static batter line shows until the next play
+            self._maybe_scroll_last_play(play_data, banner is not None)
 
             time.sleep(GameConfig.GAME_CHECK_DELAY)
 
@@ -230,9 +226,29 @@ class LiveGameHandler:
             pass
         return None
 
+    def _maybe_scroll_last_play(self, play_data, banner_active: bool) -> None:
+        """Scroll each completed play's description exactly once"""
+        description = self._get_last_play_description(play_data)
+        if not description or banner_active:
+            return
+        if description == self._last_scrolled_description:
+            return
+        self._scroll_last_play(description)
+        self._last_scrolled_description = description
+
     def _scroll_last_play(self, text: str) -> None:
         """Scroll the full last-play description across the batter strip once"""
         snapshot = self.manager.get_frame_copy()
+
+        # Erase the static batter line from the snapshot by repainting the
+        # batter strip gradient (same ramp as the frame draw in
+        # display_game_on), so the description scrolls over a clean strip
+        pixels = snapshot.load()
+        for y in range(39, 47):
+            shade = 255 - 20 * (y - 39)
+            for x in range(0, 96):
+                pixels[x, y] = (shade, shade, shade)
+
         text_width = len(text) * Fonts.CHAR_WIDTH_MICRO
         scroll_delay = get_scroll_delay(5)
 

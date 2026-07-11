@@ -16,9 +16,14 @@ bottom strip.
 
 - **Direction:** horizontal ticker, right-to-left, matching the
   existing flight/Bible tickers.
-- **Rotation:** keep the batter/last-play alternation. Batter name
-  static ~8s, then the full description scrolls across once
-  (~8–15s depending on length), then back to the batter.
+- **Rotation (revised after on-marquee review):** each completed
+  play scrolls its description across exactly once, right after the
+  play; the static batter line shows the rest of the time, until the
+  next play. (The original ~8s alternation re-scrolled the same play
+  repeatedly and was rejected on hardware.)
+- **Clean strip:** the batter line is erased from the frame snapshot
+  (batter strip gradient repainted) before scrolling, so the
+  description never overlaps the at-bat text.
 
 ## Data
 
@@ -78,11 +83,13 @@ gradient, so each frame starts clean.
 
 - `_draw_game_info_improved()` always draws the static batter line;
   the `int(time.time() / 8) % 2` alternation is removed.
-- `LiveGameHandler` tracks `self._last_play_scroll_time` (init 0).
-  In the main `display_game_on` loop, after `swap_canvas()`: if a
-  description exists and `time.time() - self._last_play_scroll_time
-  >= 8`, run one scroll pass, then set `_last_play_scroll_time =
-  time.time()` (i.e., ≥8s of static batter between passes).
+- `LiveGameHandler` tracks `self._last_scrolled_description`
+  (init None). In the main `display_game_on` loop, after
+  `swap_canvas()`, `_maybe_scroll_last_play(play_data,
+  banner_active)` runs one scroll pass only when the current
+  description differs from the last one scrolled, then records it.
+  While a review/challenge banner occupies the strip, the scroll is
+  deferred until the banner clears.
 
 ## Scroll speed
 
