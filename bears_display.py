@@ -540,25 +540,52 @@ class BearsDisplay:
             time.sleep(0.5)
 
     def _draw_pregame_content(self, game):
-        """Draw the pregame card (game today, not yet started)"""
+        """Draw the pregame card: opponent, kickoff, countdown, week/TV"""
         competition = game['competitions'][0]
         home_team = competition['competitors'][0]
         away_team = competition['competitors'][1]
         bears_home = home_team['team']['abbreviation'] == 'CHI'
         opponent = away_team if bears_home else home_team
-        opponent_name = opponent['team']['displayName']
+        vs_at = 'VS' if bears_home else 'AT'
 
-        game_datetime = pendulum.parse(game['date'])
-        game_datetime_central = game_datetime.in_timezone('America/Chicago')
-        display_time = game_datetime_central.format('h:mm A')
+        # Nickname always fits 96px (longest is BUCCANEERS = 50px in tiny_bold)
+        opp_name = (opponent['team'].get('shortDisplayName')
+                    or opponent['team']['displayName']).upper()
 
-        self.manager.draw_text('tiny', 28, 20, self.BEARS_WHITE, 'TODAY vs')
+        kickoff = pendulum.parse(game['date']).in_timezone('America/Chicago')
 
-        opp_x = max(5, (96 - len(opponent_name) * 5) // 2)
-        self.manager.draw_text('tiny', opp_x, 30, self.BEARS_ORANGE, opponent_name)
+        line1 = f'TODAY {vs_at}'
+        x = max(0, (96 - len(line1) * Fonts.CHAR_WIDTH_TINY) // 2)
+        self.manager.draw_text('tiny', x, 19, self.BEARS_WHITE, line1)
 
-        time_x = max(5, (96 - len(display_time) * 4) // 2)
-        self.manager.draw_text('micro', time_x, 40, self.BEARS_WHITE, display_time)
+        x = max(0, (96 - len(opp_name) * Fonts.CHAR_WIDTH_TINY) // 2)
+        self.manager.draw_text('tiny_bold', x, 27, self.BEARS_ORANGE, opp_name)
+
+        time_str = format_kickoff_time(kickoff)
+        x = max(0, (96 - len(time_str) * Fonts.CHAR_WIDTH_TINY) // 2)
+        self.manager.draw_text('tiny', x, 35, self.BEARS_WHITE, time_str)
+
+        # Live countdown, recomputed each frame
+        seconds = (kickoff - pendulum.now('America/Chicago')).total_seconds()
+        if seconds > 0:
+            countdown = f'KICKOFF IN {format_countdown(seconds)}'
+            color = countdown_color(seconds, yellow_under=3 * 3600,
+                                    orange_under=3600)
+            x = max(0, (96 - len(countdown) * Fonts.CHAR_WIDTH_MICRO) // 2)
+            self.manager.draw_text('micro', x, 42, color, countdown)
+
+        # Week and TV network, either part omitted when missing
+        parts = []
+        week = extract_week(game)
+        if week:
+            parts.append(f'WK {week}')
+        network = extract_broadcast(competition)
+        if network:
+            parts.append(network.upper())
+        if parts:
+            line = ' '.join(parts)
+            x = max(0, (96 - len(line) * Fonts.CHAR_WIDTH_MICRO) // 2)
+            self.manager.draw_text('micro', x, 47, self.BEARS_GRAY, line)
 
     def _draw_final_content(self, score_data, frame_count):
         """Draw the final-score screen"""
