@@ -1013,19 +1013,18 @@ class FlightDisplay:
                 if 0 <= rx < radar_w and 0 <= ry < radar_h:
                     self.manager.draw_pixel(rx, ry, *ring_color)
 
-            # Rotating radar sweep with a fading afterglow trail,
-            # kept subtle and contained within the range ring
+            # Rotating radar sweep: a single line, kept subtle and
+            # contained within the range ring
             sweep_base = self._sweep_angle(time.time() - start_time)
             sweep_reach = usable_radius
-            for trail in range(5):
-                angle = math.radians(sweep_base - trail * 7)
-                level = 55 - trail * 10
-                for r in range(3, sweep_reach):
-                    rx = int(cx + r * math.sin(angle))
-                    ry = int(cy - r * math.cos(angle))
-                    if 0 <= rx < radar_w and 0 <= ry < radar_h:
-                        self.manager.draw_pixel(
-                            rx, ry, 0, level, int(level * 0.45))
+            angle = math.radians(sweep_base)
+            level = 55
+            for r in range(3, sweep_reach):
+                rx = int(cx + r * math.sin(angle))
+                ry = int(cy - r * math.cos(angle))
+                if 0 <= rx < radar_w and 0 <= ry < radar_h:
+                    self.manager.draw_pixel(
+                        rx, ry, 0, level, int(level * 0.45))
 
             # Draw crosshair at center (your location)
             crosshair_color = (90, 180, 95)
@@ -1074,19 +1073,6 @@ class FlightDisplay:
                 is_highlighted = (i == highlighted_index)
                 alt_color = self._get_altitude_color(flight['altitude_ft'])
 
-                # Heading vector: short tail showing direction of travel
-                heading = flight.get('heading')
-                if heading is not None:
-                    length = 4 if is_highlighted else 3
-                    vx, vy = self._heading_vector(heading, length)
-                    vec_color = (200, 220, 240) if is_highlighted else \
-                        (alt_color[0] // 2, alt_color[1] // 2, alt_color[2] // 2)
-                    for t in range(2, length + 1):
-                        nx = px + round(vx * t / length)
-                        ny = py + round(vy * t / length)
-                        if 0 <= nx < radar_w and 0 <= ny < radar_h:
-                            self.manager.draw_pixel(nx, ny, *vec_color)
-
                 if is_highlighted:
                     if blink_on:
                         # Bright 3x3 dot for highlighted aircraft
@@ -1113,19 +1099,14 @@ class FlightDisplay:
                     self.manager.draw_text('micro', label_x, label_y,
                                            (200, 200, 200), cs)
                 else:
-                    # Dim 1-pixel dot that blips bright and grows as the
-                    # sweep passes over it, then fades back down
+                    # Dim 1-pixel dot that blips bright as the sweep
+                    # passes over it, then fades back down
                     dim_color = (alt_color[0] // 2, alt_color[1] // 2, alt_color[2] // 2)
                     flare = self._sweep_flare(
                         sweep_base, self._dot_bearing(cx, cy, px, py))
                     dot_color = tuple(
                         int(d + (255 - d) * flare) for d in dim_color)
                     self.manager.draw_pixel(px, py, *dot_color)
-                    if flare > 0.4:
-                        for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0)):
-                            nx, ny = px + dx, py + dy
-                            if 0 <= nx < radar_w and 0 <= ny < radar_h:
-                                self.manager.draw_pixel(nx, ny, *alt_color)
 
             # Info bar at bottom - highlighted flight details
             # Separator line

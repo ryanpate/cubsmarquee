@@ -1247,6 +1247,65 @@ class TestRadarSweepFlare:
         assert flare(350, 5) == 0.0             # dot ahead of the beam
 
 
+class TestRadarOneDotPerPlane:
+    """Every aircraft on the radar scope renders exactly one marker: no
+    detached heading-tail or sweep-halo pixels that read as phantom planes"""
+
+    def _flight(self, callsign, dlat, dlon, distance, heading):
+        return {
+            'callsign': callsign,
+            'altitude_ft': 35000,
+            'distance': distance,
+            'latitude': 41.9 + dlat,
+            'longitude': -87.6 + dlon,
+            'heading': heading,
+            'destination': 'UNKNOWN',
+        }
+
+    def _aircraft_pixels(self, monkeypatch):
+        """Render one radar frame, return aircraft-attributed draw_pixel
+        calls (all planes are high-altitude gold, red >= 127; every other
+        scope element - rings, sweep, crosshair, separator - has red < 127)"""
+        import flight_display as fd
+        from flight_display import FlightDisplay
+        from scoreboard_config import Colors
+
+        monkeypatch.setattr(fd, 'time', _FakeTime())
+
+        display = FlightDisplay.__new__(FlightDisplay)
+        display.manager = Mock()
+        display.latitude = 41.9
+        display.longitude = -87.6
+        display.flight_max_range_nm = 30
+        display.ALTITUDE_HIGH = Colors.FLIGHT_ALTITUDE_HIGH
+        display.flight_data = [
+            self._flight('UAL1', 0.0, 0.04, 2.0, 0),       # highlighted, east
+            self._flight('SWA2', -0.02, 0.03, 4.0, 90),    # southeast
+            self._flight('AAL3', 0.02, -0.005, 3.0, 180),  # north, in sweep flare
+        ]
+
+        display._display_radar_view(0, 0.05)  # exactly one frame
+
+        return [c.args for c in display.manager.draw_pixel.call_args_list
+                if c.args[2] >= 127]
+
+    def test_one_marker_per_plane_and_nothing_else(self, monkeypatch) -> None:
+        pixels = self._aircraft_pixels(monkeypatch)
+
+        whites = {(x, y) for x, y, r, g, b in pixels if (r, g, b) == (255, 255, 255)}
+        golds = [(x, y) for x, y, r, g, b in pixels if (r, g, b) != (255, 255, 255)]
+
+        # Highlighted plane: one contiguous 3x3 blinking marker
+        assert len(whites) == 9
+        xs = {x for x, y in whites}
+        ys = {y for x, y in whites}
+        assert max(xs) - min(xs) == 2 and max(ys) - min(ys) == 2
+
+        # Each other plane: exactly one pixel, nothing detached around it
+        assert len(golds) == 2
+        assert len(set(golds)) == 2
+
+
 # ============================================================================
 # Stock screen redesign: dashboard, market hours, sparkline
 # ============================================================================
