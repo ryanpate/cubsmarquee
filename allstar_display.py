@@ -177,3 +177,124 @@ class AllStarDisplay:
             'is_final': feed.get('gameData', {}).get('status', {}).get(
                 'abstractGameState') == 'Final',
         }
+
+    # --------------------------------------------------------- promo
+
+    @staticmethod
+    def _center_x(text: str, char_width: int) -> int:
+        return max(0, (DisplayConfig.MATRIX_COLS - len(text) * char_width) // 2)
+
+    def display_promo(self, duration: int) -> None:
+        """Rotation segment: Derby promo on Derby evening, ASG pregame
+        countdown otherwise. No-op outside the All-Star window or once
+        the game has started (the live takeover handles that)."""
+        info = self.fetch_asg_info()
+        if not info or not self.is_allstar_window():
+            return
+        if self._derby_active():
+            self._display_derby_promo(duration)
+        elif info.get('abstract') == 'Preview':
+            self._display_asg_pregame(duration, info)
+
+    def _display_derby_promo(self, duration: int) -> None:
+        tz = 'America/Chicago'
+        derby_start = pendulum.parse(DERBY_INFO['date'], tz=tz).add(
+            hours=DERBY_INFO['start_hour'])
+        field_text = '  *  '.join(DERBY_INFO['field'])
+        field_width = len(field_text) * Fonts.CHAR_WIDTH_MICRO
+        scroll_x = float(DisplayConfig.MATRIX_COLS)
+        start = time.time()
+
+        while time.time() - start < duration:
+            self.manager.clear_canvas()
+            self.manager.fill_canvas(*DARK_BG)
+            for x in range(DisplayConfig.MATRIX_COLS):
+                self.manager.draw_pixel(x, 0, *GOLD)
+
+            title = 'HOME RUN DERBY'
+            self.manager.draw_text(
+                'tiny_bold', self._center_x(title, Fonts.CHAR_WIDTH_TINY),
+                10, GOLD, title)
+
+            seconds = (derby_start - pendulum.now(tz)).total_seconds()
+            if seconds > 0:
+                line = f'TONIGHT {format_countdown(seconds)}'
+                color = countdown_color(seconds, yellow_under=3 * 3600,
+                                        orange_under=30 * 60)
+            else:
+                line, color = 'UNDERWAY', GOLD
+            self.manager.draw_text(
+                'micro', self._center_x(line, Fonts.CHAR_WIDTH_MICRO),
+                20, color, line)
+
+            venue = DERBY_INFO['venue']
+            self.manager.draw_text(
+                'micro', self._center_x(venue, Fonts.CHAR_WIDTH_MICRO),
+                28, (150, 150, 150), venue)
+
+            self.manager.draw_text(
+                'micro', int(scroll_x), 40, Colors.WHITE, field_text)
+            scroll_x -= 1
+            if scroll_x < -field_width:
+                scroll_x = float(DisplayConfig.MATRIX_COLS)
+
+            self.manager.swap_canvas()
+            time.sleep(0.05)
+
+    def _get_cubs_allstars(self, game_pk: int) -> list[str]:
+        feed = self._fetch_feed(game_pk, self.FEED_CACHE_SECONDS_PREGAME)
+        if not feed:
+            return []
+        return self._cubs_allstars_from_boxscore(feed)
+
+    def _display_asg_pregame(self, duration: int, info: dict) -> None:
+        tz = 'America/Chicago'
+        cubs_stars = self._get_cubs_allstars(info['game_pk'])
+        stars_text = ('CUBS ALL-STARS: ' + ', '.join(cubs_stars).upper()
+                      if cubs_stars else '')
+        stars_width = len(stars_text) * Fonts.CHAR_WIDTH_MICRO
+        scroll_x = float(DisplayConfig.MATRIX_COLS)
+        game_dt = info['date']
+        date_line = (f"{game_dt.format('ddd').upper()} "
+                     f"{format_kickoff_time(game_dt)}")
+        start = time.time()
+
+        while time.time() - start < duration:
+            self.manager.clear_canvas()
+            self.manager.fill_canvas(*DARK_BG)
+            for x in range(DisplayConfig.MATRIX_COLS):
+                self.manager.draw_pixel(x, 0, *GOLD)
+
+            title = 'ALL-STAR GAME'
+            self.manager.draw_text(
+                'tiny_bold', self._center_x(title, Fonts.CHAR_WIDTH_TINY),
+                10, GOLD, title)
+
+            self.manager.draw_text('tiny_bold', 30, 19, AL_RED, 'AL')
+            self.manager.draw_text('tiny_bold', 43, 19, Colors.WHITE, 'VS')
+            self.manager.draw_text('tiny_bold', 56, 19, NL_BLUE, 'NL')
+
+            seconds = (game_dt - pendulum.now(tz)).total_seconds()
+            if seconds > 0:
+                line = f'FIRST PITCH {format_countdown(seconds)}'
+                color = countdown_color(seconds, yellow_under=3 * 3600,
+                                        orange_under=30 * 60)
+            else:
+                line, color = 'STARTING SOON', GOLD
+            self.manager.draw_text(
+                'micro', self._center_x(line, Fonts.CHAR_WIDTH_MICRO),
+                27, color, line)
+
+            self.manager.draw_text(
+                'micro', self._center_x(date_line, Fonts.CHAR_WIDTH_MICRO),
+                35, (150, 150, 150), date_line)
+
+            if stars_text:
+                self.manager.draw_text(
+                    'micro', int(scroll_x), 45, Colors.YELLOW, stars_text)
+                scroll_x -= 1
+                if scroll_x < -stars_width:
+                    scroll_x = float(DisplayConfig.MATRIX_COLS)
+
+            self.manager.swap_canvas()
+            time.sleep(0.05)

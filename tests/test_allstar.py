@@ -145,3 +145,67 @@ class TestFeedParsing:
         assert state['batter_is_cub'] is False
         assert state['bases'] == {'first': False, 'second': False,
                                   'third': False}
+
+
+class _FakeTime:
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def time(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.now += seconds
+
+
+class TestPromoScreens:
+    def _live_display(self, monkeypatch, now):
+        import allstar_display as ad
+
+        monkeypatch.setattr(ad, 'time', _FakeTime())
+
+        class _FakePendulum:
+            @staticmethod
+            def now(tz=None):
+                return now
+            parse = staticmethod(pendulum.parse)
+            datetime = staticmethod(pendulum.datetime)
+        monkeypatch.setattr(ad, 'pendulum', _FakePendulum)
+
+        display = _display()
+        display._asg_cache = display._parse_asg_schedule(ASG_SCHEDULE_FIXTURE)
+        display._asg_cached_at = 10**12
+        display._feed_cache = FEED_FIXTURE
+        display._feed_cached_at = 10**12
+        return display
+
+    def _drawn_text(self, display):
+        return ' | '.join(
+            str(c) for c in display.manager.draw_text.call_args_list)
+
+    def test_promo_shows_derby_on_derby_evening(self, monkeypatch) -> None:
+        now = pendulum.datetime(2026, 7, 13, 17, tz='America/Chicago')
+        display = self._live_display(monkeypatch, now)
+
+        display.display_promo(1)
+        text = self._drawn_text(display)
+        assert 'HOME RUN DERBY' in text
+        assert 'SCHWARBER' in text            # scrolling field
+        assert '2H' in text                   # countdown to 7 PM
+
+    def test_promo_shows_pregame_on_asg_day(self, monkeypatch) -> None:
+        now = pendulum.datetime(2026, 7, 14, 12, tz='America/Chicago')
+        display = self._live_display(monkeypatch, now)
+
+        display.display_promo(1)
+        text = self._drawn_text(display)
+        assert 'ALL-STAR GAME' in text
+        assert 'CROW-ARMSTRONG' in text       # Cubs all-stars line
+        assert 'FIRST PITCH' in text
+
+    def test_promo_noop_outside_window(self, monkeypatch) -> None:
+        now = pendulum.datetime(2026, 7, 20, 12, tz='America/Chicago')
+        display = self._live_display(monkeypatch, now)
+
+        display.display_promo(1)
+        display.manager.draw_text.assert_not_called()
