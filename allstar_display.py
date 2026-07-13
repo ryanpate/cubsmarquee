@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 import pendulum
+import requests
 import statsapi
 from PIL import Image
 from typing import TYPE_CHECKING, Any
@@ -47,6 +48,9 @@ class AllStarDisplay:
     ASG_CACHE_SECONDS_GAMEDAY = 60
     FEED_CACHE_SECONDS_LIVE = 20
     FEED_CACHE_SECONDS_PREGAME = 1800
+    DERBY_POLL_SECONDS = 15
+    DERBY_DISCOVERY_RETRY_SECONDS = 120
+    DERBY_LIVE_SEGMENT_SECONDS = 300
 
     def __init__(self, scoreboard_manager: ScoreboardManager) -> None:
         self.manager = scoreboard_manager
@@ -54,6 +58,10 @@ class AllStarDisplay:
         self._asg_cached_at: float = 0.0
         self._feed_cache: dict[str, Any] | None = None
         self._feed_cached_at: float = 0.0
+        self._derby_pk: int | None = None
+        self._derby_pk_checked_at: float = 0.0
+        self._derby_cache: dict[str, Any] | None = None
+        self._derby_cached_at: float = 0.0
 
     # ------------------------------------------------------------ data
 
@@ -178,6 +186,144 @@ class AllStarDisplay:
                 'abstractGameState') == 'Final',
         }
 
+    # --------------------------------------------------------- derby data
+
+    def _derby_event_candidates(self) -> list[int]:
+        """Possible Derby gamePks. MLB has no stable discovery path: try
+        gameTypes=D games first (the documented shape), then July events
+        named 'Home Run Derby' from the events schedule (their ids serve as
+        homeRunDerby gamePks - verified against the 2017 derby, id 511101)."""
+        year = pendulum.now('America/Chicago').year
+        ids: list[int] = []
+        try:
+            data = statsapi.get(
+                'schedule',
+                {'sportId': 1, 'gameTypes': 'D',
+                 'startDate': f'{year}-07-01', 'endDate': f'{year}-07-31'})
+            for day in data.get('dates', []):
+                for game in day.get('games', []):
+                    ids.append(game['gamePk'])
+        except Exception as e:
+            print(f"Derby gameTypes=D lookup failed: {e}")
+        try:
+            # The statsapi wrapper doesn't allow scheduleTypes, so hit the
+            # schedule endpoint directly for non-game events
+            resp = requests.get(
+                'https://statsapi.mlb.com/api/v1/schedule',
+                params={'sportId': 1, 'scheduleTypes': 'events',
+                        'startDate': f'{year}-07-01',
+                        'endDate': f'{year}-07-31'},
+                timeout=10)
+            resp.raise_for_status()
+            events = []
+            for day in resp.json().get('dates', []):
+                for event in day.get('events', []):
+                    name = event.get('name', '').lower()
+                    if ('home run derby' in name
+                            and 'batting practice' not in name
+                            and 'test' not in name):
+                        events.append(event['id'])
+            ids.extend(events)
+        except Exception as e:
+            print(f"Derby event lookup failed: {e}")
+        return list(dict.fromkeys(ids))
+
+    def fetch_derby_data(self) -> dict[str, Any] | None:
+        """Live Derby bracket, or None while MLB hasn't published it yet
+        (the endpoint 404s until around event time)."""
+        now = time.time()
+        if (self._derby_cache is not None
+                and now - self._derby_cached_at < self.DERBY_POLL_SECONDS):
+            return self._derby_cache
+
+        if self._derby_pk is not None:
+            candidates = [self._derby_pk]
+        else:
+            # Discovery is 2+ requests; don't hammer it while unpublished
+            if now - self._derby_pk_checked_at < self.DERBY_DISCOVERY_RETRY_SECONDS:
+                return self._derby_cache
+            self._derby_pk_checked_at = now
+            candidates = self._derby_event_candidates()
+
+        for pk in candidates:
+            try:
+                data = statsapi.get('homeRunDerby', {'gamePk': str(pk)})
+            except Exception:
+                continue
+            if data.get('rounds') and self._derby_payload_is_real(data):
+                self._derby_pk = pk
+                self._derby_cache = data
+                self._derby_cached_at = now
+                return data
+        return self._derby_cache
+
+    def _derby_payload_is_real(self, data: dict[str, Any]) -> bool:
+        """Reject MLB's rehearsal derbies: the API serves 'Home Run Derby
+        Test #N' events (seen July 2026) full of junk data. Real payloads
+        aren't named test and fall on Derby day (ASG - 1)."""
+        info = data.get('info', {})
+        if 'test' in info.get('name', '').lower():
+            return False
+        asg = self.fetch_asg_info()
+        if asg and info.get('eventDate'):
+            try:
+                event_day = pendulum.parse(info['eventDate']).in_timezone(
+                    'America/Chicago').date()
+                return event_day == asg['date'].subtract(days=1).date()
+            except Exception:
+                return True
+        return True
+
+    @staticmethod
+    def _last_name(full_name: str) -> str:
+        return full_name.split()[-1].upper() if full_name else ''
+
+    @staticmethod
+    def _parse_derby(data: dict[str, Any]) -> dict[str, Any]:
+        """Flatten the bracket into what the screen needs: the active
+        matchup, who's swinging, completed results, and the champion."""
+        status = data.get('status', {})
+        rounds = data.get('rounds', [])
+        total_rounds = len(rounds)
+        state: dict[str, Any] = {
+            'state': status.get('state', ''),
+            'round': status.get('currentRound') or 1,
+            'total_rounds': total_rounds,
+            'clock': status.get('currentRoundTimeLeft', ''),
+            'matchup': None,
+            'batter': None,
+            'results': [],
+            'champion': None,
+        }
+        for rnd in rounds:
+            for mu in rnd.get('matchups', []):
+                seeds = []
+                for key in ('topSeed', 'bottomSeed'):
+                    seed = mu.get(key, {})
+                    seeds.append({
+                        'name': AllStarDisplay._last_name(
+                            seed.get('player', {}).get('fullName', '')),
+                        'hrs': seed.get('numHomeRuns', 0),
+                        'started': seed.get('isStarted', False),
+                        'complete': seed.get('isComplete', False),
+                        'winner': seed.get('isWinner', False),
+                    })
+                a, b = seeds
+                if a['complete'] and b['complete']:
+                    winner, loser = (a, b) if (
+                        a['winner'] or a['hrs'] >= b['hrs']) else (b, a)
+                    state['results'].append(
+                        f"{winner['name']} {winner['hrs']} "
+                        f"DEF {loser['name']} {loser['hrs']}")
+                    if rnd.get('round') == total_rounds:
+                        state['champion'] = winner
+                elif state['matchup'] is None:
+                    state['matchup'] = (a, b)
+                    for seed in (a, b):
+                        if seed['started'] and not seed['complete']:
+                            state['batter'] = seed['name']
+        return state
+
     # --------------------------------------------------------- promo
 
     @staticmethod
@@ -192,7 +338,13 @@ class AllStarDisplay:
         if not info or not self.is_allstar_window():
             return
         if self._derby_active():
-            self._display_derby_promo(duration)
+            if self.fetch_derby_data():
+                # Live bracket published: track it, with a longer slot
+                # than a plain promo segment
+                self._display_derby_live(
+                    max(duration, self.DERBY_LIVE_SEGMENT_SECONDS))
+            else:
+                self._display_derby_promo(duration)
         elif info.get('abstract') == 'Preview':
             self._display_asg_pregame(duration, info)
 
@@ -240,6 +392,85 @@ class AllStarDisplay:
 
             self.manager.swap_canvas()
             time.sleep(0.05)
+
+    def _display_derby_live(self, duration: int) -> None:
+        """Live Derby tracker: current matchup with HR counts and the
+        round clock, active hitter highlighted, completed results
+        scrolling along the bottom, champion screen at the end."""
+        scroll_x = float(DisplayConfig.MATRIX_COLS)
+        start = time.time()
+
+        while time.time() - start < duration:
+            data = self.fetch_derby_data()
+            if not data:
+                return
+            state = self._parse_derby(data)
+            m = self.manager
+
+            m.clear_canvas()
+            m.fill_canvas(*DARK_BG)
+            for x in range(DisplayConfig.MATRIX_COLS):
+                m.draw_pixel(x, 0, *GOLD)
+
+            m.draw_text('tiny_bold', 2, 9, GOLD, 'HR DERBY')
+            if state['champion'] or (state['total_rounds']
+                                     and state['round'] >= state['total_rounds']):
+                tag = 'FINAL'
+            else:
+                tag = f"RD {state['round']}"
+            m.draw_text('micro',
+                        DisplayConfig.MATRIX_COLS - len(tag)
+                        * Fonts.CHAR_WIDTH_MICRO - 2,
+                        8, Colors.WHITE, tag)
+
+            if state['champion'] and state['state'] == 'Final':
+                champ = state['champion']
+                m.draw_text(
+                    'tiny_bold',
+                    self._center_x('CHAMPION', Fonts.CHAR_WIDTH_TINY),
+                    22, GOLD, 'CHAMPION')
+                m.draw_text(
+                    'tiny_bold',
+                    self._center_x(champ['name'], Fonts.CHAR_WIDTH_TINY),
+                    32, Colors.WHITE, champ['name'])
+                hr_line = f"{champ['hrs']} HR"
+                m.draw_text(
+                    'micro', self._center_x(hr_line, Fonts.CHAR_WIDTH_MICRO),
+                    41, (150, 150, 150), hr_line)
+            elif state['matchup']:
+                a, b = state['matchup']
+                for hitter, y in ((a, 21), (b, 33)):
+                    active = (state['batter'] == hitter['name']
+                              and hitter['name'])
+                    name_color = Colors.YELLOW if active else Colors.WHITE
+                    if active and int(time.time()) % 2 == 0:
+                        m.draw_text('micro', 1, y, Colors.YELLOW, '>')
+                    m.draw_text('tiny', 6, y, name_color,
+                                hitter['name'][:13])
+                    hrs = str(hitter['hrs'])
+                    m.draw_text(
+                        'small_bold',
+                        DisplayConfig.MATRIX_COLS - len(hrs)
+                        * Fonts.CHAR_WIDTH_SMALL - 2,
+                        y, GOLD if active else Colors.WHITE, hrs)
+                if state['clock']:
+                    m.draw_text(
+                        'micro',
+                        self._center_x(state['clock'],
+                                       Fonts.CHAR_WIDTH_MICRO),
+                        41, (150, 150, 150), state['clock'])
+
+            if state['results']:
+                ticker = '  *  '.join(state['results'])
+                ticker_width = len(ticker) * Fonts.CHAR_WIDTH_MICRO
+                m.draw_text('micro', int(scroll_x), 47,
+                            (120, 160, 200), ticker)
+                scroll_x -= 1
+                if scroll_x < -ticker_width:
+                    scroll_x = float(DisplayConfig.MATRIX_COLS)
+
+            m.swap_canvas()
+            time.sleep(0.1)
 
     def _get_cubs_allstars(self, game_pk: int) -> list[str]:
         feed = self._fetch_feed(game_pk, self.FEED_CACHE_SECONDS_PREGAME)

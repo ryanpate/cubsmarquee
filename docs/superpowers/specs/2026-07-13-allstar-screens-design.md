@@ -111,8 +111,38 @@ pytest with mocked manager (existing pattern in `tests/test_features.py`):
 
 Visual verification on the Pi (deploy + reboot per usual workflow).
 
+## Addendum (2026-07-13): Live Derby tracker
+
+The "no Derby API" finding was wrong in a useful way. `GET
+statsapi.mlb.com/api/v1/homeRunDerby/{pk}` works when `pk` is the Derby's
+*event id*, discoverable via `schedule?gameTypes=D` (games) and
+`schedule?scheduleTypes=events` (July events named "Home Run Derby").
+MLB publishes the bracket around event time — the endpoint 404s before
+that. The API also serves rehearsal events ("Home Run Derby Test #N")
+with junk data; payloads are validated (not named test, eventDate ==
+ASG − 1) before use.
+
+`AllStarDisplay` additions:
+- `_derby_event_candidates()` — candidate pks from both discovery paths,
+  excluding batting-practice and test events.
+- `fetch_derby_data()` — polls candidates (15 s data cache, 2 min
+  discovery backoff), locks onto the first validated pk, returns None
+  while unpublished.
+- `_parse_derby()` — flattens `rounds[].matchups[]`
+  (`numHomeRuns`/`isStarted`/`isComplete`/`isWinner` per seed, `status`
+  clock/round) into: active matchup, current batter, completed-results
+  strings, champion.
+- `_display_derby_live(duration)` — header + round tag, current matchup
+  rows (blinking `>` on the active hitter, gold HR count), round clock,
+  scrolling results ticker, CHAMPION screen when Final.
+
+Routing: on Derby evening `display_promo` shows the live tracker when
+data is published (segment extended to ≥5 min), otherwise the promo.
+Falls back to the promo automatically if MLB never publishes.
+
 ## Out of scope
 
-- Live Derby bracket/scores (no API).
 - MVP display, play-by-play scroll on the ASG screen.
 - Admin-panel UI for the toggle (config key only, UI can come later).
+- Derby takeover mode (it stays a rotation segment; the ASG still takes
+  over fully when live).

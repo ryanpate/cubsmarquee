@@ -16,6 +16,10 @@ def _display():
     display._asg_cached_at = 0.0
     display._feed_cache = None
     display._feed_cached_at = 0.0
+    display._derby_pk = None
+    display._derby_pk_checked_at = 0.0
+    display._derby_cache = None
+    display._derby_cached_at = 0.0
     return display
 
 
@@ -177,6 +181,8 @@ class TestPromoScreens:
         display._asg_cached_at = 10**12
         display._feed_cache = FEED_FIXTURE
         display._feed_cached_at = 10**12
+        # Derby bracket unpublished unless a test injects one
+        display.fetch_derby_data = Mock(return_value=None)
         return display
 
     def _drawn_text(self, display):
@@ -259,6 +265,205 @@ class TestLiveScreen:
         assert 'FINAL' in text
         assert 'AL 3' in text and 'NL 5' in text
         assert display._asg_cached_at == 0.0     # cache invalidated
+
+
+def _derby_seed(name, hrs, started, complete, winner=False):
+    return {
+        'player': {'id': 1, 'fullName': name},
+        'numHomeRuns': hrs, 'isStarted': started,
+        'isComplete': complete, 'isWinner': winner,
+    }
+
+
+DERBY_FIXTURE = {
+    'status': {'state': 'In Progress', 'currentRound': 2,
+               'currentRoundTimeLeft': '1:23'},
+    'rounds': [
+        {'round': 1, 'matchups': [
+            {'topSeed': _derby_seed('Kyle Schwarber', 14, True, True, True),
+             'bottomSeed': _derby_seed('Ben Rice', 9, True, True)},
+            {'topSeed': _derby_seed('Bryce Harper', 12, True, True, True),
+             'bottomSeed': _derby_seed('Jordan Walker', 11, True, True)},
+        ]},
+        {'round': 2, 'matchups': [
+            {'topSeed': _derby_seed('Kyle Schwarber', 6, True, False),
+             'bottomSeed': _derby_seed('Bryce Harper', 0, False, False)},
+        ]},
+    ],
+}
+
+
+class TestDerbyTracker:
+    def test_parse_derby_current_matchup_and_batter(self) -> None:
+        display = _display()
+
+        state = display._parse_derby(DERBY_FIXTURE)
+        assert state['state'] == 'In Progress'
+        assert state['round'] == 2 and state['total_rounds'] == 2
+        assert state['clock'] == '1:23'
+        a, b = state['matchup']
+        assert a['name'] == 'SCHWARBER' and a['hrs'] == 6
+        assert b['name'] == 'HARPER' and b['hrs'] == 0
+        assert state['batter'] == 'SCHWARBER'
+        assert state['champion'] is None
+        assert 'SCHWARBER 14 DEF RICE 9' in state['results']
+        assert 'HARPER 12 DEF WALKER 11' in state['results']
+
+    def test_parse_derby_champion_on_final(self) -> None:
+        import copy
+
+        data = copy.deepcopy(DERBY_FIXTURE)
+        data['status']['state'] = 'Final'
+        final = data['rounds'][1]['matchups'][0]
+        final['topSeed'] = _derby_seed('Kyle Schwarber', 15, True, True, True)
+        final['bottomSeed'] = _derby_seed('Bryce Harper', 13, True, True)
+        display = _display()
+
+        state = display._parse_derby(data)
+        assert state['champion']['name'] == 'SCHWARBER'
+        assert state['champion']['hrs'] == 15
+        assert state['batter'] is None
+
+    def test_derby_candidates_prefers_gametype_then_events(
+            self, monkeypatch) -> None:
+        import allstar_display as ad
+
+        monkeypatch.setattr(ad, 'statsapi', Mock(get=Mock(return_value={
+            'dates': [{'games': [{'gamePk': 777001}]}]})))
+
+        events_json = {'dates': [{'events': [
+            {'id': 851300, 'name': 'Home Run Derby Batting Practice'},
+            {'id': 851298, 'name': 'Home Run Derby Test #3'},
+            {'id': 838655,
+             'name': '2026 MLB All-Star Workout Day: Home Run Derby'},
+            {'id': 839032, 'name': '2026 MLB Home Run Derby'},
+            {'id': 832396, 'name': 'Oracle Park Tour'},
+        ]}]}
+        fake_resp = Mock()
+        fake_resp.json.return_value = events_json
+        fake_resp.raise_for_status.return_value = None
+        monkeypatch.setattr(ad, 'requests', Mock(
+            get=Mock(return_value=fake_resp)))
+
+        display = _display()
+        candidates = display._derby_event_candidates()
+        assert candidates[0] == 777001            # gameTypes=D first
+        assert 838655 in candidates and 839032 in candidates
+        assert 851300 not in candidates           # batting practice excluded
+        assert 851298 not in candidates           # MLB test event excluded
+        assert 832396 not in candidates           # unrelated event excluded
+
+    def test_rejects_mlb_rehearsal_derby_payload(self) -> None:
+        import copy
+
+        display = _display()
+        display._asg_cache = display._parse_asg_schedule(ASG_SCHEDULE_FIXTURE)
+        display._asg_cached_at = 10**12
+
+        rehearsal = copy.deepcopy(DERBY_FIXTURE)
+        rehearsal['info'] = {'name': 'Home Run Derby Test #3',
+                             'eventDate': '2026-07-08T00:00:00Z'}
+        assert display._derby_payload_is_real(rehearsal) is False
+
+        wrong_day = copy.deepcopy(DERBY_FIXTURE)
+        wrong_day['info'] = {'name': 'Some Derby',
+                             'eventDate': '2026-07-08T00:00:00Z'}
+        assert display._derby_payload_is_real(wrong_day) is False
+
+        real = copy.deepcopy(DERBY_FIXTURE)
+        real['info'] = {'name': '2026 MLB Home Run Derby',
+                        'eventDate': '2026-07-14T00:00:00Z'}
+        assert display._derby_payload_is_real(real) is True
+
+    def test_fetch_derby_data_finds_first_published_pk(
+            self, monkeypatch) -> None:
+        import allstar_display as ad
+        import requests as real_requests
+
+        monkeypatch.setattr(ad, 'time', _FakeTime())
+
+        def fake_get(endpoint, params):
+            if params['gamePk'] == '838655':
+                raise real_requests.HTTPError('404')
+            return DERBY_FIXTURE
+        monkeypatch.setattr(ad, 'statsapi', Mock(get=Mock(
+            side_effect=fake_get)))
+
+        display = _display()
+        display._derby_event_candidates = Mock(return_value=[838655, 839032])
+
+        data = display.fetch_derby_data()
+        assert data is DERBY_FIXTURE
+        assert display._derby_pk == 839032        # remembered for next poll
+
+    def test_fetch_derby_data_none_when_unpublished(
+            self, monkeypatch) -> None:
+        import allstar_display as ad
+        import requests as real_requests
+
+        monkeypatch.setattr(ad, 'time', _FakeTime())
+        monkeypatch.setattr(ad, 'statsapi', Mock(get=Mock(
+            side_effect=real_requests.HTTPError('404'))))
+
+        display = _display()
+        display._derby_event_candidates = Mock(return_value=[838655])
+
+        assert display.fetch_derby_data() is None
+
+    def test_promo_routes_to_live_tracker_when_data_available(
+            self, monkeypatch) -> None:
+        now = pendulum.datetime(2026, 7, 13, 20, tz='America/Chicago')
+        import allstar_display as ad
+
+        monkeypatch.setattr(ad, 'time', _FakeTime())
+
+        class _FakePendulum:
+            @staticmethod
+            def now(tz=None):
+                return now
+            parse = staticmethod(pendulum.parse)
+            datetime = staticmethod(pendulum.datetime)
+        monkeypatch.setattr(ad, 'pendulum', _FakePendulum)
+
+        display = _display()
+        display._asg_cache = display._parse_asg_schedule(ASG_SCHEDULE_FIXTURE)
+        display._asg_cached_at = 10**12
+        display._derby_cache = DERBY_FIXTURE
+        display._derby_cached_at = 10**12
+        display._derby_pk = 839032
+
+        display.display_promo(1)
+        text = ' | '.join(
+            str(c) for c in display.manager.draw_text.call_args_list)
+        assert 'HR DERBY' in text
+        assert 'SCHWARBER' in text and 'HARPER' in text
+        assert "'6'" in text                      # live HR count
+        assert '1:23' in text                     # round clock
+        assert 'DEF' in text                      # results ticker
+
+    def test_live_tracker_shows_champion_when_final(
+            self, monkeypatch) -> None:
+        import copy
+        import allstar_display as ad
+
+        monkeypatch.setattr(ad, 'time', _FakeTime())
+
+        data = copy.deepcopy(DERBY_FIXTURE)
+        data['status']['state'] = 'Final'
+        final = data['rounds'][1]['matchups'][0]
+        final['topSeed'] = _derby_seed('Kyle Schwarber', 15, True, True, True)
+        final['bottomSeed'] = _derby_seed('Bryce Harper', 13, True, True)
+
+        display = _display()
+        display._derby_cache = data
+        display._derby_cached_at = 10**12
+        display._derby_pk = 839032
+
+        display._display_derby_live(1)
+        text = ' | '.join(
+            str(c) for c in display.manager.draw_text.call_args_list)
+        assert 'CHAMPION' in text
+        assert 'SCHWARBER' in text
 
 
 class TestRotationIntegration:
