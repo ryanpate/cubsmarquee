@@ -298,3 +298,143 @@ class AllStarDisplay:
 
             self.manager.swap_canvas()
             time.sleep(0.05)
+
+    # ---------------------------------------------------------- live
+
+    def display_live_game(self, display_time: int) -> bool:
+        """Run the live AL vs NL screen for display_time seconds.
+        Returns True as soon as the feed reports the game is over."""
+        info = self.fetch_asg_info()
+        if not info:
+            return False
+        start = time.time()
+        while time.time() - start < display_time:
+            feed = self._fetch_feed(info['game_pk'],
+                                    self.FEED_CACHE_SECONDS_LIVE)
+            if not feed:
+                return False
+            state = self._extract_live_state(feed)
+            if state['is_final']:
+                return True
+            self._render_live_frame(state)
+            time.sleep(0.5)
+        return False
+
+    def _draw_league_tiles(self) -> Image.Image:
+        """Base image mirroring the live-game layout: league tiles in the
+        16px logo column, white score boxes, dark info panel."""
+        base = Image.new('RGB', (96, 48))
+        px = base.load()
+        for y in range(0, 15):
+            for x in range(0, 16):
+                px[x, y] = AL_RED
+        for y in range(16, 31):
+            for x in range(0, 16):
+                px[x, y] = NL_BLUE
+        for x in range(17, 32):
+            for y in range(0, 31):
+                px[x, y] = (255, 255, 255) if y != 15 else (0, 0, 0)
+        for x in range(32, 96):
+            for y in range(0, 31):
+                px[x, y] = PANEL_BG
+        return base
+
+    def _draw_star(self, x: int, y: int) -> None:
+        for dx, dy in ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)):
+            self.manager.draw_pixel(x + dx, y + dy, *GOLD)
+
+    def _draw_bases(self, cx: int, cy: int, bases: dict[str, bool]) -> None:
+        spots = {'second': (cx, cy - 4), 'first': (cx + 4, cy),
+                 'third': (cx - 4, cy)}
+        for name, (bx, by) in spots.items():
+            color = Colors.YELLOW if bases[name] else (70, 70, 90)
+            for dx in range(2):
+                for dy in range(2):
+                    self.manager.draw_pixel(bx + dx, by + dy, *color)
+
+    def _render_live_frame(self, state: dict) -> None:
+        m = self.manager
+        m.clear_canvas()
+        m.set_image(self._draw_league_tiles(), 0, 0)
+
+        m.draw_text('tiny_bold', 3, 11, Colors.WHITE, 'AL')
+        m.draw_text('tiny_bold', 3, 27, Colors.WHITE, 'NL')
+        self._draw_star(13, 3)
+        self._draw_star(13, 19)
+
+        for runs, y in ((state['away_runs'], 11), (state['home_runs'], 27)):
+            text = str(runs)
+            x = 17 + max(0, (15 - len(text) * Fonts.CHAR_WIDTH_STANDARD) // 2)
+            m.draw_text('standard_bold', x, y, (0, 0, 0), text)
+
+        title = 'ALL-STAR GAME'
+        title_x = 32 + max(0, (64 - len(title) * Fonts.CHAR_WIDTH_MICRO) // 2)
+        m.draw_text('micro', title_x, 7, GOLD, title)
+
+        inning_line = f"{state['inning_state'][:3].upper()} {state['inning']}"
+        m.draw_text('tiny', 38, 18, Colors.WHITE, inning_line)
+        for i in range(3):
+            color = (255, 60, 60) if i < state['outs'] else (70, 70, 90)
+            for dx in range(2):
+                for dy in range(2):
+                    m.draw_pixel(40 + i * 6 + dx, 23 + dy, *color)
+        self._draw_bases(80, 20, state['bases'])
+
+        name = state['batter_name'].upper()
+        if name:
+            if state['batter_is_cub'] and int(time.time()) % 4 < 2:
+                for y in range(33, 48):
+                    for x in range(0, 96):
+                        m.draw_pixel(x, y, *Colors.YELLOW)
+                banner = 'CUBS STAR AT BAT'
+                m.draw_text(
+                    'micro', self._center_x(banner, Fonts.CHAR_WIDTH_MICRO),
+                    39, Colors.CUBS_BLUE, banner)
+                m.draw_text(
+                    'micro', self._center_x(name, Fonts.CHAR_WIDTH_MICRO),
+                    46, Colors.CUBS_BLUE, name)
+            else:
+                m.draw_text('micro', 2, 39, (150, 150, 150), 'AT BAT')
+                if len(name) * Fonts.CHAR_WIDTH_TINY > 94:
+                    name = name.split()[-1]
+                m.draw_text('tiny', 2, 46, Colors.WHITE, name)
+
+        m.swap_canvas()
+
+    def display_final(self, duration: int) -> None:
+        info = self.fetch_asg_info()
+        if not info:
+            return
+        feed = self._fetch_feed(info['game_pk'], self.FEED_CACHE_SECONDS_LIVE)
+        if not feed:
+            return
+        state = self._extract_live_state(feed)
+        away, home = state['away_runs'], state['home_runs']
+        al_color = Colors.WHITE if away > home else DIM_GRAY
+        nl_color = Colors.WHITE if home > away else DIM_GRAY
+
+        start = time.time()
+        while time.time() - start < duration:
+            self.manager.clear_canvas()
+            self.manager.fill_canvas(*DARK_BG)
+            for x in range(DisplayConfig.MATRIX_COLS):
+                self.manager.draw_pixel(x, 0, *GOLD)
+
+            title = 'ALL-STAR GAME'
+            self.manager.draw_text(
+                'tiny_bold', self._center_x(title, Fonts.CHAR_WIDTH_TINY),
+                10, GOLD, title)
+            self.manager.draw_text(
+                'tiny_bold', self._center_x('FINAL', Fonts.CHAR_WIDTH_TINY),
+                21, Colors.WHITE, 'FINAL')
+            self.manager.draw_text('tiny_bold', 18, 34, al_color,
+                                   f'AL {away}')
+            self.manager.draw_text('tiny_bold', 54, 34, nl_color,
+                                   f'NL {home}')
+
+            self.manager.swap_canvas()
+            time.sleep(0.1)
+
+        # Force the next asg_is_live() to re-check the schedule so the
+        # takeover loop exits promptly after the final screen.
+        self._asg_cached_at = 0.0

@@ -209,3 +209,53 @@ class TestPromoScreens:
 
         display.display_promo(1)
         display.manager.draw_text.assert_not_called()
+
+
+class TestLiveScreen:
+    def _live_display(self, monkeypatch, feed):
+        import allstar_display as ad
+
+        monkeypatch.setattr(ad, 'time', _FakeTime())
+        display = _display()
+        display._asg_cache = display._parse_asg_schedule(ASG_SCHEDULE_FIXTURE)
+        display._asg_cached_at = 10**12
+        display._feed_cache = feed
+        display._feed_cached_at = 10**12
+        return display
+
+    def test_live_frame_draws_score_and_cubs_banner(self, monkeypatch) -> None:
+        display = self._live_display(monkeypatch, FEED_FIXTURE)
+
+        final = display.display_live_game(1)
+        assert final is False
+        text = ' | '.join(
+            str(c) for c in display.manager.draw_text.call_args_list)
+        assert "'AL'" in text and "'NL'" in text
+        assert "'3'" in text and "'5'" in text       # away/home runs
+        assert 'TOP 5' in text
+        # Cubs batter: either the flash banner or the name is up
+        assert 'CUBS STAR AT BAT' in text or 'CROW-ARMSTRONG' in text
+
+    def test_live_game_returns_true_on_final(self, monkeypatch) -> None:
+        import copy
+
+        feed = copy.deepcopy(FEED_FIXTURE)
+        feed['gameData']['status']['abstractGameState'] = 'Final'
+        display = self._live_display(monkeypatch, feed)
+
+        assert display.display_live_game(1) is True
+
+    def test_final_screen_shows_final_score_and_invalidates(
+            self, monkeypatch) -> None:
+        import copy
+
+        feed = copy.deepcopy(FEED_FIXTURE)
+        feed['gameData']['status']['abstractGameState'] = 'Final'
+        display = self._live_display(monkeypatch, feed)
+
+        display.display_final(1)
+        text = ' | '.join(
+            str(c) for c in display.manager.draw_text.call_args_list)
+        assert 'FINAL' in text
+        assert 'AL 3' in text and 'NL 5' in text
+        assert display._asg_cached_at == 0.0     # cache invalidated
