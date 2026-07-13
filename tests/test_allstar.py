@@ -259,3 +259,17 @@ class TestLiveScreen:
         assert 'FINAL' in text
         assert 'AL 3' in text and 'NL 5' in text
         assert display._asg_cached_at == 0.0     # cache invalidated
+
+
+class TestRotationIntegration:
+    def test_rotation_cycle_has_allstar_segment(self) -> None:
+        import inspect
+        from off_season_handler import OffSeasonHandler
+
+        init_source = inspect.getsource(OffSeasonHandler.__init__)
+        assert "'allstar'" in init_source
+
+        cycle_source = inspect.getsource(
+            OffSeasonHandler._display_rotation_cycle)
+        assert 'display_promo' in cycle_source
+        assert 'enable_allstar' in cycle_source

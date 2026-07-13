@@ -19,6 +19,7 @@ from bible_display import BibleDisplay
 from newsmax_display import NewsmaxDisplay
 from stock_display import StockDisplay
 from spring_training_display import SpringTrainingDisplay
+from allstar_display import AllStarDisplay
 from flight_display import FlightDisplay
 from clock_display import WrigleyClockDisplay
 from cubs_history_display import CubsHistoryDisplay
@@ -43,6 +44,7 @@ class OffSeasonHandler:
         self.newsmax_display: NewsmaxDisplay = NewsmaxDisplay(scoreboard_manager)
         self.stock_display: StockDisplay = StockDisplay(scoreboard_manager)
         self.spring_training_display: SpringTrainingDisplay = SpringTrainingDisplay(scoreboard_manager)
+        self.allstar_display: AllStarDisplay = AllStarDisplay(scoreboard_manager)
         self.flight_display: FlightDisplay = FlightDisplay(scoreboard_manager)
         self.clock_display: WrigleyClockDisplay = WrigleyClockDisplay(
             scoreboard_manager, self.weather_display)
@@ -95,6 +97,8 @@ class OffSeasonHandler:
             'newsmax': GameConfig.NEWSMAX_DISPLAY_DURATION if hasattr(GameConfig, 'NEWSMAX_DISPLAY_DURATION') else 2,
             'stocks': GameConfig.STOCKS_DISPLAY_DURATION if hasattr(GameConfig, 'STOCKS_DISPLAY_DURATION') else 2,
             'spring_training': GameConfig.SPRING_TRAINING_DISPLAY_DURATION if hasattr(GameConfig, 'SPRING_TRAINING_DISPLAY_DURATION') else 2,
+            'allstar': 2,  # All-Star break: Derby promo / ASG countdown
+
             'flights': GameConfig.FLIGHT_DISPLAY_DURATION if hasattr(GameConfig, 'FLIGHT_DISPLAY_DURATION') else 2,
             'clock': GameConfig.CLOCK_DISPLAY_DURATION,
             'cubs_history': GameConfig.CUBS_HISTORY_DURATION,
@@ -172,6 +176,7 @@ class OffSeasonHandler:
             'enable_newsmax': True,  # Enable/disable Newsmax news
             'enable_stocks': True,  # Enable/disable Stock Exchange ticker
             'enable_spring_training': True,  # Enable/disable Spring Training countdown
+            'enable_allstar': True,  # All-Star break screens (Derby promo, ASG countdown)
             'enable_playoff_race': True,  # Enable/disable playoff race display
             'enable_flights': True,  # Enable/disable Flight Tracking display
             'enable_flight_radar': True,  # Enable/disable radar scope view
@@ -820,6 +825,21 @@ class OffSeasonHandler:
                 traceback.print_exc()
         else:
             print("Skipping season countdown (disabled in config)")
+
+        if _tick():
+            return
+
+        # All-Star break: Derby promo / ASG pregame countdown. display_promo
+        # is a no-op outside the two-day window, so this segment costs
+        # nothing the rest of the year.
+        if self.config.get('enable_allstar', True):
+            try:
+                self.allstar_display.display_promo(
+                    duration=self.rotation_schedule['allstar'] * 60)
+            except Exception as e:
+                print(f"Error in All-Star display: {e}")
+                import traceback
+                traceback.print_exc()
 
         if _tick():
             return
