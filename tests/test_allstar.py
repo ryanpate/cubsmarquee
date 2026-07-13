@@ -273,3 +273,44 @@ class TestRotationIntegration:
             OffSeasonHandler._display_rotation_cycle)
         assert 'display_promo' in cycle_source
         assert 'enable_allstar' in cycle_source
+
+
+class TestLiveTakeover:
+    def _scoreboard(self):
+        from main import CubsScoreboard
+
+        board = CubsScoreboard.__new__(CubsScoreboard)
+        board.manager = Mock()
+        board.allstar_display = Mock()
+        board.off_season_handler = Mock()
+        board.state_handler = Mock()
+        return board
+
+    def test_asg_live_takes_over_cycle(self) -> None:
+        board = self._scoreboard()
+        board.allstar_display.asg_is_live.return_value = True
+        board.allstar_display.display_live_game.return_value = False
+
+        board.process_game_cycle()
+
+        board.allstar_display.display_live_game.assert_called_once()
+        board.manager.get_schedule.assert_not_called()
+
+    def test_asg_final_shows_final_screen(self) -> None:
+        board = self._scoreboard()
+        board.allstar_display.asg_is_live.return_value = True
+        board.allstar_display.display_live_game.return_value = True
+
+        board.process_game_cycle()
+
+        board.allstar_display.display_final.assert_called_once()
+
+    def test_no_asg_runs_normal_cycle(self) -> None:
+        board = self._scoreboard()
+        board.allstar_display.asg_is_live.return_value = False
+        board.manager.get_schedule.return_value = []
+
+        board.process_game_cycle()
+
+        board.manager.get_schedule.assert_called_once()
+        board.off_season_handler.display_off_season_content.assert_called_once()

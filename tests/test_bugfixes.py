@@ -25,6 +25,7 @@ def _make_scoreboard():
     sb.state_handler = Mock()
     sb.live_handler = Mock()
     sb.off_season_handler = Mock()
+    sb.allstar_display = Mock()
     sb.process_game_cycle = Mock()
     sb._get_display_mode = Mock(return_value='auto')
     return sb

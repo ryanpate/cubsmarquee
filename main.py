@@ -15,6 +15,7 @@ from scoreboard_manager import ScoreboardManager
 from game_state_handler import GameStateHandler
 from live_game_handler import LiveGameHandler
 from off_season_handler import OffSeasonHandler
+from allstar_display import AllStarDisplay
 from scoreboard_config import GameConfig, TeamConfig
 from setup_display import SetupDisplay, needs_setup
 from logger import setup_logging, get_logger
@@ -61,6 +62,9 @@ class CubsScoreboard:
 
             self.off_season_handler: OffSeasonHandler = OffSeasonHandler(self.manager)
             logger.info("Off-season handler initialized")
+
+            self.allstar_display: AllStarDisplay = AllStarDisplay(self.manager)
+            logger.info("All-Star display initialized")
 
             # Give live handler access to off-season content for post-game cycling
             self.live_handler.off_season_handler = self.off_season_handler
@@ -199,6 +203,16 @@ class CubsScoreboard:
     def process_game_cycle(self) -> None:
         """Process one complete game cycle"""
         try:
+            # All-Star Game takes over the display while it's live (it is
+            # not in the Cubs schedule, so normal routing never sees it).
+            # Re-entered each main-loop iteration until Final.
+            if self.allstar_display.asg_is_live():
+                logger.info("All-Star Game live - taking over display")
+                self.manager.set_status('All-Star Game')
+                if self.allstar_display.display_live_game(120):
+                    self.allstar_display.display_final(60)
+                return
+
             # Get current schedule
             game_data: list[dict[str, Any]] = self.manager.get_schedule()
 
@@ -374,7 +388,10 @@ class CubsScoreboard:
             self.state_handler.display_no_game(
                 game_data, self.current_game_index, cycle_content=True)
             if not is_shutdown_requested():
-                self.off_season_handler._display_rotation_cycle()
+                # Abort the rotation between segments if the All-Star
+                # Game goes live so the takeover kicks in promptly
+                self.off_season_handler._display_rotation_cycle(
+                    between_callback=self.allstar_display.asg_is_live)
             return
 
         # Get lineup only for statuses whose displays actually scroll it
