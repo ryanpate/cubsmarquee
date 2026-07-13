@@ -16,8 +16,8 @@ if TYPE_CHECKING:
 
 BOARD_GREEN = (18, 52, 38)
 OUTLINE_WHITE = (205, 210, 200)
-FACE_WHITE = (235, 235, 222)
-HAND_GREEN = (18, 52, 38)
+FACE_GREEN = (18, 52, 38)
+HAND_WHITE = (235, 235, 222)
 SECOND_RED = (200, 50, 50)
 NAME_WHITE = (150, 160, 148)
 GRID_GREEN = (50, 86, 64)
@@ -227,17 +227,17 @@ class WrigleyClockDisplay:
             for dx in range(-face_r, face_r + 1):
                 if dx * dx + dy * dy <= face_r * face_r:
                     self.manager.draw_pixel(
-                        CLOCK_CX + dx, CLOCK_CY + dy, *FACE_WHITE)
+                        CLOCK_CX + dx, CLOCK_CY + dy, *FACE_GREEN)
         for hour_mark in range(12):
             rad = math.radians(hour_mark * 30)
             self.manager.draw_pixel(
                 CLOCK_CX + round(6 * math.sin(rad)),
-                CLOCK_CY - round(6 * math.cos(rad)), *HAND_GREEN)
+                CLOCK_CY - round(6 * math.cos(rad)), *HAND_WHITE)
 
         hour_deg, minute_deg, second_deg = self._hand_angles(
             now.hour, now.minute, now.second)
-        self._draw_hand(CLOCK_CX, CLOCK_CY, hour_deg, 4, HAND_GREEN)
-        self._draw_hand(CLOCK_CX, CLOCK_CY, minute_deg, 6, HAND_GREEN)
+        self._draw_hand(CLOCK_CX, CLOCK_CY, hour_deg, 4, HAND_WHITE)
+        self._draw_hand(CLOCK_CX, CLOCK_CY, minute_deg, 6, HAND_WHITE)
         self._draw_hand(CLOCK_CX, CLOCK_CY, second_deg, 6, SECOND_RED)
 
     def _draw_league_panels(self) -> None:

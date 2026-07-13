@@ -20,6 +20,8 @@ def _display():
     display._derby_pk_checked_at = 0.0
     display._derby_cache = None
     display._derby_cached_at = 0.0
+    display._derby_prev_hrs = {}
+    display._derby_burst = None
     return display
 
 
@@ -215,6 +217,30 @@ class TestPromoScreens:
 
         display.display_promo(1)
         display.manager.draw_text.assert_not_called()
+
+    def test_derby_promo_draws_stars_and_ball(self, monkeypatch) -> None:
+        now = pendulum.datetime(2026, 7, 13, 17, tz='America/Chicago')
+        display = self._live_display(monkeypatch, now)
+
+        display.display_promo(1)
+        pixels = display.manager.draw_pixel.call_args_list
+        stars = [c for c in pixels if c.args[1] > 0]
+        assert len(stars) >= 12                   # twinkling star field
+        whites = [c for c in pixels
+                  if tuple(c.args[2:]) == (255, 255, 255)]
+        assert whites                             # home-run ball in flight
+        assert display.manager.set_image.called   # ballpark scene background
+
+    def test_derby_promo_background_scene(self) -> None:
+        display = _display()
+        img = display._derby_promo_background()
+        assert img.getpixel((48, 4)) == (255, 215, 0)     # gold banner
+        assert img.getpixel((48, 10)) == (191, 13, 62)    # AL red stripe
+        assert img.getpixel((48, 11)) == (10, 35, 120)    # NL blue stripe
+        assert img.getpixel((48, 20)) == (8, 10, 28)      # night sky
+        assert img.getpixel((48, 45)) != (8, 10, 28)      # outfield grass
+        assert img.getpixel((11, 33)) == (235, 235, 230)  # baseball, left
+        assert img.getpixel((84, 33)) == (235, 235, 230)  # baseball, right
 
 
 class TestLiveScreen:
@@ -464,6 +490,77 @@ class TestDerbyTracker:
             str(c) for c in display.manager.draw_text.call_args_list)
         assert 'CHAMPION' in text
         assert 'SCHWARBER' in text
+
+
+class TestDerbyFlair:
+    def test_star_field_stays_in_bounds(self) -> None:
+        from scoreboard_config import DisplayConfig
+
+        display = _display()
+        display._draw_star_field(0.3)
+        calls = display.manager.draw_pixel.call_args_list
+        assert len(calls) >= 12
+        for c in calls:
+            x, y = c.args[0], c.args[1]
+            assert 0 <= x < DisplayConfig.MATRIX_COLS
+            assert 0 < y < DisplayConfig.MATRIX_ROWS   # never over the header
+
+    def test_hr_ball_arcs_only_during_flight(self) -> None:
+        display = _display()
+        display._draw_hr_ball(0.75)               # mid-flight
+        whites = [c for c in display.manager.draw_pixel.call_args_list
+                  if tuple(c.args[2:]) == (255, 255, 255)]
+        assert whites
+
+        display.manager.reset_mock()
+        display._draw_hr_ball(3.0)                # between flights
+        display.manager.draw_pixel.assert_not_called()
+
+    def test_hr_burst_fires_when_active_hitter_count_rises(
+            self, monkeypatch) -> None:
+        import copy
+        import allstar_display as ad
+
+        monkeypatch.setattr(ad, 'time', _FakeTime())
+        display = _display()
+        display._derby_pk = 839032
+        display._derby_cache = DERBY_FIXTURE
+        display._derby_cached_at = 10**12
+
+        display._display_derby_live(0.05)
+        assert display._derby_burst is None       # first look: no burst
+
+        bumped = copy.deepcopy(DERBY_FIXTURE)
+        bumped['rounds'][1]['matchups'][0]['topSeed']['numHomeRuns'] = 7
+        display._derby_cache = bumped
+        display.manager.reset_mock()
+        display._display_derby_live(0.05)
+        assert display._derby_burst is not None
+        golds = [c for c in display.manager.draw_pixel.call_args_list
+                 if c.args[1] > 0 and tuple(c.args[2:]) == (255, 215, 0)]
+        assert golds                              # burst pixels off-header
+
+    def test_champion_screen_draws_fireworks(self, monkeypatch) -> None:
+        import copy
+        import allstar_display as ad
+
+        monkeypatch.setattr(ad, 'time', _FakeTime())
+
+        data = copy.deepcopy(DERBY_FIXTURE)
+        data['status']['state'] = 'Final'
+        final = data['rounds'][1]['matchups'][0]
+        final['topSeed'] = _derby_seed('Kyle Schwarber', 15, True, True, True)
+        final['bottomSeed'] = _derby_seed('Bryce Harper', 13, True, True)
+
+        display = _display()
+        display._derby_pk = 839032
+        display._derby_cache = data
+        display._derby_cached_at = 10**12
+
+        display._display_derby_live(0.05)
+        fireworks = [c for c in display.manager.draw_pixel.call_args_list
+                     if c.args[1] > 0]
+        assert len(fireworks) >= 10
 
 
 class TestRotationIntegration:

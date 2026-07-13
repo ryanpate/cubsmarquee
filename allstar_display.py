@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 import pendulum
 import requests
@@ -39,6 +40,17 @@ DARK_BG: RGBColor = (8, 10, 28)
 PANEL_BG: RGBColor = (5, 15, 40)
 DIM_GRAY: RGBColor = (120, 120, 120)
 
+# Deterministic (no random) so the fake clock in tests reproduces frames.
+# Stars live in the promo scene's sky band (rows 13-39).
+_STARS: list[tuple[int, int, int]] = [
+    ((i * 37 + 11) % DisplayConfig.MATRIX_COLS,
+     13 + (i * 19 + 3) % 27, i)
+    for i in range(18)
+]
+FIREWORK_COLORS: list[RGBColor] = [
+    (255, 120, 40), (80, 160, 255), (255, 215, 0),
+]
+
 
 class AllStarDisplay:
     """All-Star break screens: Derby promo, ASG pregame countdown,
@@ -51,6 +63,9 @@ class AllStarDisplay:
     DERBY_POLL_SECONDS = 15
     DERBY_DISCOVERY_RETRY_SECONDS = 120
     DERBY_LIVE_SEGMENT_SECONDS = 300
+    BALL_PERIOD_SECONDS = 4.0
+    BALL_FLIGHT_SECONDS = 1.5
+    BURST_SECONDS = 1.0
 
     def __init__(self, scoreboard_manager: ScoreboardManager) -> None:
         self.manager = scoreboard_manager
@@ -62,6 +77,8 @@ class AllStarDisplay:
         self._derby_pk_checked_at: float = 0.0
         self._derby_cache: dict[str, Any] | None = None
         self._derby_cached_at: float = 0.0
+        self._derby_prev_hrs: dict[str, int] = {}
+        self._derby_burst: tuple[float, int] | None = None
 
     # ------------------------------------------------------------ data
 
@@ -348,6 +365,99 @@ class AllStarDisplay:
         elif info.get('abstract') == 'Preview':
             self._display_asg_pregame(duration, info)
 
+    # ----------------------------------------------------------- flair
+
+    def _draw_star_field(self, tick: float) -> None:
+        """Twinkling stars behind the promo text, each fading on its
+        own phase; every fourth star is gold"""
+        for x, y, i in _STARS:
+            phase = tick * (1.0 + (i % 5) * 0.35) + i * 0.7
+            level = 0.5 + 0.5 * math.sin(phase)
+            v = int(50 + 170 * level)
+            if i % 4 == 0:
+                self.manager.draw_pixel(x, y, v, int(v * 0.85), 0)
+            else:
+                self.manager.draw_pixel(x, y, v, v, v)
+
+    def _draw_hr_ball(self, tick: float) -> None:
+        """A home-run ball launching from the lower left and arcing
+        across the sky with a short fading trail"""
+        t = tick % self.BALL_PERIOD_SECONDS
+        if t >= self.BALL_FLIGHT_SECONDS:
+            return
+        for lag, color, size in (
+                (0.10, (55, 55, 55), 1), (0.05, (110, 110, 110), 1),
+                (0.0, (255, 255, 255), 2)):
+            p = (t - lag) / self.BALL_FLIGHT_SECONDS
+            if p < 0:
+                continue
+            x = int(p * (DisplayConfig.MATRIX_COLS + 6)) - 3
+            y = int(39 - 80 * p + 56 * p * p)
+            for dx in range(size):
+                for dy in range(size):
+                    px, py = x + dx, y + dy
+                    if (0 <= px < DisplayConfig.MATRIX_COLS
+                            and 11 < py < 41):     # stay in the sky band
+                        self.manager.draw_pixel(px, py, *color)
+
+    def _draw_hr_burst(self, cx: int, cy: int, age: float) -> None:
+        """Gold radial burst around a hitter's HR count when it rises"""
+        radius = 1 + age * 8
+        fade = max(0.0, 1.0 - age / self.BURST_SECONDS)
+        color = tuple(int(c * fade) for c in GOLD)
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1),
+                       (1, 1), (1, -1), (-1, 1), (-1, -1)):
+            scale = 0.7 if dx and dy else 1.0
+            px = cx + int(round(dx * radius * scale))
+            py = cy + int(round(dy * radius * scale))
+            if (0 <= px < DisplayConfig.MATRIX_COLS
+                    and 0 < py < DisplayConfig.MATRIX_ROWS):
+                self.manager.draw_pixel(px, py, *color)
+
+    def _draw_fireworks(self, tick: float) -> None:
+        """Staggered firework bursts behind the CHAMPION screen"""
+        for j, (cx, cy, stagger) in enumerate(
+                ((20, 14, 0.0), (74, 12, 0.8), (48, 38, 1.6))):
+            age = (tick + stagger) % 2.4
+            if age >= 1.2:
+                continue
+            radius = age * 9
+            fade = 1.0 - age / 1.2
+            color = tuple(int(c * fade) for c in FIREWORK_COLORS[j])
+            for k in range(12):
+                ang = k * math.pi / 6
+                px = cx + int(round(radius * math.cos(ang)))
+                py = cy + int(round(radius * math.sin(ang)))
+                if (0 <= px < DisplayConfig.MATRIX_COLS
+                        and 0 < py < DisplayConfig.MATRIX_ROWS):
+                    self.manager.draw_pixel(px, py, *color)
+
+    def _derby_promo_background(self) -> Image.Image:
+        """Promo scene: gold banner with AL/NL stripes, night sky,
+        outfield grass with mow stripes, and a baseball on each side"""
+        img = Image.new('RGB', (DisplayConfig.MATRIX_COLS,
+                                DisplayConfig.MATRIX_ROWS), DARK_BG)
+        px = img.load()
+        for x in range(DisplayConfig.MATRIX_COLS):
+            for y in range(10):
+                px[x, y] = GOLD
+            px[x, 10] = AL_RED
+            px[x, 11] = NL_BLUE
+            px[x, 41] = (6, 40, 18)
+            grass = (10, 70, 30) if (x // 8) % 2 == 0 else (8, 56, 24)
+            for y in range(42, DisplayConfig.MATRIX_ROWS):
+                px[x, y] = grass
+        for cx in (11, 84):
+            for dy in range(-4, 5):
+                for dx in range(-4, 5):
+                    if dx * dx + dy * dy <= 16:
+                        px[cx + dx, 33 + dy] = (235, 235, 230)
+            for dy in range(-3, 4):
+                off = 2 if abs(dy) <= 1 else 1
+                px[cx - off, 33 + dy] = AL_RED
+                px[cx + off, 33 + dy] = AL_RED
+        return img
+
     def _display_derby_promo(self, duration: int) -> None:
         tz = 'America/Chicago'
         derby_start = pendulum.parse(DERBY_INFO['date'], tz=tz).add(
@@ -355,18 +465,20 @@ class AllStarDisplay:
         field_text = '  *  '.join(DERBY_INFO['field'])
         field_width = len(field_text) * Fonts.CHAR_WIDTH_MICRO
         scroll_x = float(DisplayConfig.MATRIX_COLS)
+        background = self._derby_promo_background()
         start = time.time()
 
         while time.time() - start < duration:
             self.manager.clear_canvas()
-            self.manager.fill_canvas(*DARK_BG)
-            for x in range(DisplayConfig.MATRIX_COLS):
-                self.manager.draw_pixel(x, 0, *GOLD)
+            self.manager.set_image(background, 0, 0)
+
+            tick = time.time() - start
+            self._draw_star_field(tick)
 
             title = 'HOME RUN DERBY'
             self.manager.draw_text(
                 'tiny_bold', self._center_x(title, Fonts.CHAR_WIDTH_TINY),
-                10, GOLD, title)
+                8, DARK_BG, title)
 
             seconds = (derby_start - pendulum.now(tz)).total_seconds()
             if seconds > 0:
@@ -385,10 +497,12 @@ class AllStarDisplay:
                 28, (150, 150, 150), venue)
 
             self.manager.draw_text(
-                'micro', int(scroll_x), 40, Colors.WHITE, field_text)
+                'micro', int(scroll_x), 46, Colors.WHITE, field_text)
             scroll_x -= 1
             if scroll_x < -field_width:
                 scroll_x = float(DisplayConfig.MATRIX_COLS)
+
+            self._draw_hr_ball(tick)
 
             self.manager.swap_canvas()
             time.sleep(0.05)
@@ -407,6 +521,14 @@ class AllStarDisplay:
             state = self._parse_derby(data)
             m = self.manager
 
+            # Fire a gold burst by a hitter's HR count when it rises
+            if state['matchup']:
+                for hitter, row_y in zip(state['matchup'], (21, 33)):
+                    prev = self._derby_prev_hrs.get(hitter['name'])
+                    if prev is not None and hitter['hrs'] > prev:
+                        self._derby_burst = (time.time(), row_y - 2)
+                    self._derby_prev_hrs[hitter['name']] = hitter['hrs']
+
             m.clear_canvas()
             m.fill_canvas(*DARK_BG)
             for x in range(DisplayConfig.MATRIX_COLS):
@@ -424,6 +546,7 @@ class AllStarDisplay:
                         8, Colors.WHITE, tag)
 
             if state['champion'] and state['state'] == 'Final':
+                self._draw_fireworks(time.time() - start)
                 champ = state['champion']
                 m.draw_text(
                     'tiny_bold',
@@ -459,6 +582,14 @@ class AllStarDisplay:
                         self._center_x(state['clock'],
                                        Fonts.CHAR_WIDTH_MICRO),
                         41, (150, 150, 150), state['clock'])
+                if self._derby_burst:
+                    burst_age = time.time() - self._derby_burst[0]
+                    if burst_age < self.BURST_SECONDS:
+                        self._draw_hr_burst(
+                            DisplayConfig.MATRIX_COLS - 8,
+                            self._derby_burst[1], burst_age)
+                    else:
+                        self._derby_burst = None
 
             if state['results']:
                 ticker = '  *  '.join(state['results'])
