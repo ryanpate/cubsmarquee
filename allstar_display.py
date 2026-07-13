@@ -432,9 +432,10 @@ class AllStarDisplay:
                         and 0 < py < DisplayConfig.MATRIX_ROWS):
                     self.manager.draw_pixel(px, py, *color)
 
-    def _derby_promo_background(self) -> Image.Image:
-        """Promo scene: gold banner with AL/NL stripes, night sky,
-        outfield grass with mow stripes, and a baseball on each side"""
+    def _derby_scene_background(self, baseballs: bool = True) -> Image.Image:
+        """Derby scene: gold banner with AL/NL stripes, night sky, and
+        outfield grass with mow stripes; the promo adds a baseball on
+        each side (the tracker needs that room for matchup rows)"""
         img = Image.new('RGB', (DisplayConfig.MATRIX_COLS,
                                 DisplayConfig.MATRIX_ROWS), DARK_BG)
         px = img.load()
@@ -447,7 +448,7 @@ class AllStarDisplay:
             grass = (10, 70, 30) if (x // 8) % 2 == 0 else (8, 56, 24)
             for y in range(42, DisplayConfig.MATRIX_ROWS):
                 px[x, y] = grass
-        for cx in (11, 84):
+        for cx in ((11, 84) if baseballs else ()):
             for dy in range(-4, 5):
                 for dx in range(-4, 5):
                     if dx * dx + dy * dy <= 16:
@@ -465,7 +466,7 @@ class AllStarDisplay:
         field_text = '  *  '.join(DERBY_INFO['field'])
         field_width = len(field_text) * Fonts.CHAR_WIDTH_MICRO
         scroll_x = float(DisplayConfig.MATRIX_COLS)
-        background = self._derby_promo_background()
+        background = self._derby_scene_background()
         start = time.time()
 
         while time.time() - start < duration:
@@ -512,6 +513,7 @@ class AllStarDisplay:
         round clock, active hitter highlighted, completed results
         scrolling along the bottom, champion screen at the end."""
         scroll_x = float(DisplayConfig.MATRIX_COLS)
+        background = self._derby_scene_background(baseballs=False)
         start = time.time()
 
         while time.time() - start < duration:
@@ -523,18 +525,16 @@ class AllStarDisplay:
 
             # Fire a gold burst by a hitter's HR count when it rises
             if state['matchup']:
-                for hitter, row_y in zip(state['matchup'], (21, 33)):
+                for hitter, row_y in zip(state['matchup'], (22, 32)):
                     prev = self._derby_prev_hrs.get(hitter['name'])
                     if prev is not None and hitter['hrs'] > prev:
                         self._derby_burst = (time.time(), row_y - 2)
                     self._derby_prev_hrs[hitter['name']] = hitter['hrs']
 
             m.clear_canvas()
-            m.fill_canvas(*DARK_BG)
-            for x in range(DisplayConfig.MATRIX_COLS):
-                m.draw_pixel(x, 0, *GOLD)
+            m.set_image(background, 0, 0)
 
-            m.draw_text('tiny_bold', 2, 9, GOLD, 'HR DERBY')
+            m.draw_text('tiny_bold', 2, 8, DARK_BG, 'HR DERBY')
             if state['champion'] or (state['total_rounds']
                                      and state['round'] >= state['total_rounds']):
                 tag = 'FINAL'
@@ -543,7 +543,7 @@ class AllStarDisplay:
             m.draw_text('micro',
                         DisplayConfig.MATRIX_COLS - len(tag)
                         * Fonts.CHAR_WIDTH_MICRO - 2,
-                        8, Colors.WHITE, tag)
+                        8, DARK_BG, tag)
 
             if state['champion'] and state['state'] == 'Final':
                 self._draw_fireworks(time.time() - start)
@@ -551,18 +551,18 @@ class AllStarDisplay:
                 m.draw_text(
                     'tiny_bold',
                     self._center_x('CHAMPION', Fonts.CHAR_WIDTH_TINY),
-                    22, GOLD, 'CHAMPION')
+                    21, GOLD, 'CHAMPION')
                 m.draw_text(
                     'tiny_bold',
                     self._center_x(champ['name'], Fonts.CHAR_WIDTH_TINY),
-                    32, Colors.WHITE, champ['name'])
+                    31, Colors.WHITE, champ['name'])
                 hr_line = f"{champ['hrs']} HR"
                 m.draw_text(
                     'micro', self._center_x(hr_line, Fonts.CHAR_WIDTH_MICRO),
-                    41, (150, 150, 150), hr_line)
+                    39, (150, 150, 150), hr_line)
             elif state['matchup']:
                 a, b = state['matchup']
-                for hitter, y in ((a, 21), (b, 33)):
+                for hitter, y in ((a, 22), (b, 32)):
                     active = (state['batter'] == hitter['name']
                               and hitter['name'])
                     name_color = Colors.YELLOW if active else Colors.WHITE
@@ -581,7 +581,7 @@ class AllStarDisplay:
                         'micro',
                         self._center_x(state['clock'],
                                        Fonts.CHAR_WIDTH_MICRO),
-                        41, (150, 150, 150), state['clock'])
+                        40, (150, 150, 150), state['clock'])
                 if self._derby_burst:
                     burst_age = time.time() - self._derby_burst[0]
                     if burst_age < self.BURST_SECONDS:
@@ -595,7 +595,7 @@ class AllStarDisplay:
                 ticker = '  *  '.join(state['results'])
                 ticker_width = len(ticker) * Fonts.CHAR_WIDTH_MICRO
                 m.draw_text('micro', int(scroll_x), 47,
-                            (120, 160, 200), ticker)
+                            Colors.WHITE, ticker)
                 scroll_x -= 1
                 if scroll_x < -ticker_width:
                     scroll_x = float(DisplayConfig.MATRIX_COLS)

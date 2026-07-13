@@ -233,7 +233,7 @@ class TestPromoScreens:
 
     def test_derby_promo_background_scene(self) -> None:
         display = _display()
-        img = display._derby_promo_background()
+        img = display._derby_scene_background()
         assert img.getpixel((48, 4)) == (255, 215, 0)     # gold banner
         assert img.getpixel((48, 10)) == (191, 13, 62)    # AL red stripe
         assert img.getpixel((48, 11)) == (10, 35, 120)    # NL blue stripe
@@ -466,6 +466,7 @@ class TestDerbyTracker:
         assert "'6'" in text                      # live HR count
         assert '1:23' in text                     # round clock
         assert 'DEF' in text                      # results ticker
+        assert display.manager.set_image.called   # ballpark scene background
 
     def test_live_tracker_shows_champion_when_final(
             self, monkeypatch) -> None:
