@@ -10,6 +10,8 @@ AP_IP="10.0.0.1"
 MAX_WIFI_ATTEMPTS=60
 CHECK_INTERVAL=2
 WPA_SUPPLICANT_CONF="/etc/wpa_supplicant/wpa_supplicant.conf"
+# Flag read by setup_display.py: present only while the hotspot is broadcasting
+HOTSPOT_FLAG="/tmp/setup_hotspot_active"
 
 log_message() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a /var/log/wifi_manager.log
@@ -48,7 +50,8 @@ check_wifi_connection() {
 
 stop_access_point() {
     log_message "Stopping Access Point mode..."
-    
+    rm -f "$HOTSPOT_FLAG"
+
     # Stop services
     sudo systemctl stop hostapd 2>/dev/null
     sudo systemctl stop dnsmasq 2>/dev/null
@@ -128,7 +131,13 @@ EOF
     sudo systemctl unmask hostapd
     sudo systemctl start dnsmasq
     sudo systemctl start hostapd
-    
+
+    if systemctl is-active --quiet hostapd; then
+        touch "$HOTSPOT_FLAG"
+    else
+        log_message "WARNING: hostapd failed to start - hotspot may not be visible"
+    fi
+
     log_message "Access Point started: SSID=${AP_SSID}, Password=${AP_PASSWORD}"
     log_message "Connect to the AP and visit http://${AP_IP} or http://${HOSTNAME}.local/admin"
     
@@ -163,6 +172,9 @@ trap cleanup EXIT SIGTERM SIGINT
 # Main logic
 log_message "WiFi Manager starting..."
 log_message "Hostname: ${HOSTNAME}"
+
+# Clear any stale hotspot flag from a previous run
+rm -f "$HOTSPOT_FLAG"
 
 # Wait for wlan0 interface to be available (up to 30 seconds)
 log_message "Waiting for wlan0 interface to be available..."
@@ -199,11 +211,11 @@ fi
 # Check if we have a configured network
 if has_configured_network; then
     log_message "Found configured WiFi network in wpa_supplicant.conf"
-    log_message "Giving wpa_supplicant time to connect naturally (up to 3 minutes)..."
+    log_message "Giving wpa_supplicant time to connect naturally (up to 90 seconds)..."
 
-    # For configured networks, wait longer with less frequent checks
+    # For configured networks, wait with less frequent checks
     # This allows wpa_supplicant to do its job without interference
-    MAX_ATTEMPTS=36  # 36 attempts * 5 seconds = 180 seconds = 3 minutes
+    MAX_ATTEMPTS=18  # 18 attempts * 5 seconds = 90 seconds
     CHECK_INTERVAL=5
 
     attempt=0
@@ -232,7 +244,7 @@ if has_configured_network; then
         attempt=$((attempt + 1))
     done
 
-    log_message "WiFi connection failed after 3 minutes"
+    log_message "WiFi connection failed after 90 seconds"
     log_message "Configured network may be out of range or credentials incorrect"
 else
     log_message "No configured WiFi network found in wpa_supplicant.conf"

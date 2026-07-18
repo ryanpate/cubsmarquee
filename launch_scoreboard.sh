@@ -97,58 +97,52 @@ ls -la *.py >> "$LOG_FILE"
 # Wait for network to be available
 echo "Waiting for network..." | tee -a "$LOG_FILE"
 
-# First, wait for WiFi manager to complete its process
+# Wait briefly for WiFi. If it doesn't come up, start the scoreboard anyway:
+# main.py shows the setup/hotspot display while wifi_manager handles AP mode,
+# so blocking here would just leave the matrix blank.
 echo "Waiting for WiFi manager to establish connection..." | tee -a "$LOG_FILE"
 wifi_counter=0
-while [ $wifi_counter -lt 90 ]; do
-    # Check if we have a WiFi connection
-    if iwgetid -r &>/dev/null; then
+wifi_connected=false
+while [ $wifi_counter -lt 30 ]; do
+    # iwgetid can exit 0 with empty output (e.g. AP mode), so check the output
+    if [ -n "$(iwgetid -r 2>/dev/null)" ]; then
         echo "WiFi connected to: $(iwgetid -r)" | tee -a "$LOG_FILE"
+        wifi_connected=true
         break
     fi
-    
-    # If wifi-manager service failed, it means we're in AP mode
-    if ! systemctl is-active --quiet wifi-manager 2>/dev/null; then
-        echo "WiFi manager is in AP mode - waiting for configuration..." | tee -a "$LOG_FILE"
-        echo "Connect to 'CubsScoreboard-Setup' and visit 10.0.0.1/admin to configure WiFi" | tee -a "$LOG_FILE"
-        sleep 10
-        wifi_counter=$((wifi_counter + 10))
-        continue
-    fi
-    
     sleep 2
     wifi_counter=$((wifi_counter + 2))
 done
 
-if [ $wifi_counter -ge 90 ]; then
-    echo "WiFi connection timeout - network may need configuration" | tee -a "$LOG_FILE"
+if [ "$wifi_connected" = true ]; then
+    # Now wait for actual internet connectivity
+    echo "Verifying internet connectivity..." | tee -a "$LOG_FILE"
+    counter=0
+    while ! ping -c 1 8.8.8.8 &>/dev/null; do
+        echo "Internet not ready, waiting..." | tee -a "$LOG_FILE"
+        sleep 2
+        counter=$((counter + 1))
+        if [ $counter -gt 30 ]; then
+            echo "Internet timeout, proceeding anyway..." | tee -a "$LOG_FILE"
+            break
+        fi
+    done
+
+    # Verify we can reach MLB API
+    echo "Testing MLB API connectivity..." | tee -a "$LOG_FILE"
+    api_counter=0
+    while ! ping -c 1 statsapi.mlb.com &>/dev/null; do
+        echo "MLB API not reachable, waiting..." | tee -a "$LOG_FILE"
+        sleep 3
+        api_counter=$((api_counter + 1))
+        if [ $api_counter -gt 20 ]; then
+            echo "MLB API timeout - scoreboard may not function properly" | tee -a "$LOG_FILE"
+            break
+        fi
+    done
+else
+    echo "No WiFi after ${wifi_counter}s - starting scoreboard now so the setup display can appear" | tee -a "$LOG_FILE"
 fi
-
-# Now wait for actual internet connectivity
-echo "Verifying internet connectivity..." | tee -a "$LOG_FILE"
-counter=0
-while ! ping -c 1 8.8.8.8 &>/dev/null; do
-    echo "Internet not ready, waiting..." | tee -a "$LOG_FILE"
-    sleep 2
-    counter=$((counter + 1))
-    if [ $counter -gt 30 ]; then
-        echo "Internet timeout, proceeding anyway..." | tee -a "$LOG_FILE"
-        break
-    fi
-done
-
-# Verify we can reach MLB API
-echo "Testing MLB API connectivity..." | tee -a "$LOG_FILE"
-api_counter=0
-while ! ping -c 1 statsapi.mlb.com &>/dev/null; do
-    echo "MLB API not reachable, waiting..." | tee -a "$LOG_FILE"
-    sleep 3
-    api_counter=$((api_counter + 1))
-    if [ $api_counter -gt 20 ]; then
-        echo "MLB API timeout - scoreboard may not function properly" | tee -a "$LOG_FILE"
-        break
-    fi
-done
 
 echo "Network check complete" | tee -a "$LOG_FILE"
 

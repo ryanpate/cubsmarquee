@@ -53,6 +53,12 @@ def is_shutdown_requested() -> bool:
 SETUP_MESSAGE = "Connect phone to WiFi: CubsMarquee-Setup  (password: gocubsgo2024)    Open: cubsmarquee.local/admin"
 HEADER_TEXT = "SETUP"
 
+# Written by wifi_manager.sh once hostapd is actually broadcasting; until then
+# the hotspot doesn't exist yet, so we show a "starting" notice instead of
+# instructions to join a network that isn't there.
+HOTSPOT_FLAG_PATH = "/tmp/setup_hotspot_active"
+STARTING_LINES = ("Starting setup", "hotspot...")
+
 
 class SetupDisplay:
     """Shows scrolling setup instructions on the LED matrix until WiFi and config are present."""
@@ -82,13 +88,24 @@ class SetupDisplay:
             fill=Colors.YELLOW,
         )
 
-        draw.text((self.scroll_x, 18), SETUP_MESSAGE, font=self.font, fill=Colors.YELLOW)
-        bbox = draw.textbbox((0, 0), SETUP_MESSAGE, font=self.font)
-        msg_w = bbox[2] - bbox[0]
+        if os.path.exists(HOTSPOT_FLAG_PATH):
+            draw.text((self.scroll_x, 18), SETUP_MESSAGE, font=self.font, fill=Colors.YELLOW)
+            bbox = draw.textbbox((0, 0), SETUP_MESSAGE, font=self.font)
+            msg_w = bbox[2] - bbox[0]
 
-        self.scroll_x -= 1
-        if self.scroll_x < -msg_w:
-            self.scroll_x = DisplayConfig.MATRIX_COLS
+            self.scroll_x -= 1
+            if self.scroll_x < -msg_w:
+                self.scroll_x = DisplayConfig.MATRIX_COLS
+        else:
+            for i, line in enumerate(STARTING_LINES):
+                bbox = draw.textbbox((0, 0), line, font=self.font)
+                line_w = bbox[2] - bbox[0]
+                draw.text(
+                    ((DisplayConfig.MATRIX_COLS - line_w) // 2, 18 + i * 12),
+                    line,
+                    font=self.font,
+                    fill=Colors.YELLOW,
+                )
 
         return img
 
@@ -110,5 +127,7 @@ class SetupDisplay:
 
             img = self._render_frame()
             self.manager.set_image(img)
-            self.manager.canvas = self.manager.matrix.SwapOnVSync(self.manager.canvas)
+            # swap_canvas (not raw SwapOnVSync) so the admin live preview and
+            # auto-dim keep working while in setup mode
+            self.manager.swap_canvas()
             time.sleep(0.03)

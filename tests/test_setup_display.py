@@ -40,6 +40,33 @@ class TestNeedsSetup:
                 assert needs_setup() is True
 
 
+class TestRenderFrame:
+    def test_shows_starting_message_until_hotspot_flag_exists(self, tmp_path):
+        from setup_display import SetupDisplay
+
+        missing_flag = tmp_path / "setup_hotspot_active"
+        display = SetupDisplay(MagicMock())
+        start_x = display.scroll_x
+        with patch("setup_display.HOTSPOT_FLAG_PATH", str(missing_flag)):
+            img = display._render_frame()
+
+        # Static notice: scroll position must not advance
+        assert display.scroll_x == start_x
+        assert img.size == (96, 48)
+
+    def test_scrolls_connect_instructions_once_hotspot_up(self, tmp_path):
+        from setup_display import SetupDisplay
+
+        flag = tmp_path / "setup_hotspot_active"
+        flag.write_text("")
+        display = SetupDisplay(MagicMock())
+        start_x = display.scroll_x
+        with patch("setup_display.HOTSPOT_FLAG_PATH", str(flag)):
+            display._render_frame()
+
+        assert display.scroll_x == start_x - 1
+
+
 class TestSetupDisplayRunLoop:
     def test_run_until_configured_exits_when_setup_complete(self):
         from setup_display import SetupDisplay
@@ -58,7 +85,7 @@ class TestSetupDisplayRunLoop:
                 display.run_until_configured()
 
         assert call_count["n"] >= 3
-        assert mock_manager.matrix.SwapOnVSync.called
+        assert mock_manager.swap_canvas.called
 
     def test_run_until_configured_exits_on_shutdown(self):
         from setup_display import SetupDisplay
