@@ -213,6 +213,15 @@ class CubsScoreboard:
                     self.allstar_display.display_final(60)
                 return
 
+            # The Home Run Derby likewise holds the display while it's
+            # underway, re-entered until a champion is crowned.
+            if self.allstar_display.derby_is_live():
+                logger.info("Home Run Derby live - taking over display")
+                self.manager.set_status('Home Run Derby')
+                if self.allstar_display.display_live_derby(120):
+                    self.allstar_display.display_derby_final(60)
+                return
+
             # Get current schedule
             game_data: list[dict[str, Any]] = self.manager.get_schedule()
 
@@ -389,9 +398,12 @@ class CubsScoreboard:
                 game_data, self.current_game_index, cycle_content=True)
             if not is_shutdown_requested():
                 # Abort the rotation between segments if the All-Star
-                # Game goes live so the takeover kicks in promptly
+                # Game or Home Run Derby goes live so the takeover
+                # kicks in promptly
                 self.off_season_handler._display_rotation_cycle(
-                    between_callback=self.allstar_display.asg_is_live)
+                    between_callback=lambda: (
+                        self.allstar_display.asg_is_live()
+                        or self.allstar_display.derby_is_live()))
             return
 
         # Get lineup only for statuses whose displays actually scroll it

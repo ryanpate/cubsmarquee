@@ -141,6 +141,16 @@ class TestFeedParsing:
         assert state['batter_is_cub'] is True
         assert state['is_final'] is False
 
+    def test_extract_live_state_flags_warmup(self) -> None:
+        import copy
+
+        display = _display()
+        feed = copy.deepcopy(FEED_FIXTURE)
+        feed['gameData']['status']['detailedState'] = 'Warmup'
+
+        assert display._extract_live_state(feed)['is_warmup'] is True
+        assert display._extract_live_state(FEED_FIXTURE)['is_warmup'] is False
+
     def test_extract_live_state_handles_missing_fields(self) -> None:
         display = _display()
 
@@ -268,6 +278,20 @@ class TestLiveScreen:
         # Cubs batter: either the flash banner or the name is up
         assert 'CUBS STAR AT BAT' in text or 'CROW-ARMSTRONG' in text
 
+    def test_live_frame_shows_warmup_before_first_pitch(
+            self, monkeypatch) -> None:
+        import copy
+
+        feed = copy.deepcopy(FEED_FIXTURE)
+        feed['gameData']['status']['detailedState'] = 'Warmup'
+        display = self._live_display(monkeypatch, feed)
+
+        display.display_live_game(1)
+        text = ' | '.join(
+            str(c) for c in display.manager.draw_text.call_args_list)
+        assert 'WARMUP' in text
+        assert 'TOP 5' not in text
+
     def test_live_game_returns_true_on_final(self, monkeypatch) -> None:
         import copy
 
@@ -319,7 +343,53 @@ DERBY_FIXTURE = {
 }
 
 
+# 2026 format: no round clock (currentRoundTimeLeft is dead), hitters take
+# set swings one at a time, and status.currentBatter says who's up. The
+# matchup containing the current batter may not be the first incomplete one.
+DERBY_FIXTURE_2026 = {
+    'status': {'state': 'Live', 'currentRound': 1,
+               'currentRoundTimeLeft': '-:--', 'clockStopped': True,
+               'swingsRemaining': 14, 'swingsInRound': 20,
+               'currentBatter': {'id': 7, 'fullName': 'Jordan Walker'}},
+    'rounds': [
+        {'round': 1, 'matchups': [
+            {'topSeed': _derby_seed('Willson Contreras', 13, True, True),
+             'bottomSeed': _derby_seed('Bryce Harper', 0, False, False)},
+            {'topSeed': _derby_seed('Jordan Walker', 5, True, False),
+             'bottomSeed': _derby_seed('Kyle Schwarber', 0, False, False)},
+        ]},
+    ],
+}
+
+
 class TestDerbyTracker:
+    def test_parse_derby_follows_current_batter(self) -> None:
+        display = _display()
+
+        state = display._parse_derby(DERBY_FIXTURE_2026)
+        a, b = state['matchup']
+        assert a['name'] == 'WALKER' and a['hrs'] == 5
+        assert b['name'] == 'SCHWARBER'
+        assert state['batter'] == 'WALKER'
+        assert state['swings_left'] == 14
+
+    def test_live_tracker_shows_swings_when_no_clock(
+            self, monkeypatch) -> None:
+        import allstar_display as ad
+
+        monkeypatch.setattr(ad, 'time', _FakeTime())
+        display = _display()
+        display._derby_pk = 838655
+        display._derby_cache = DERBY_FIXTURE_2026
+        display._derby_cached_at = 10**12
+
+        display.display_live_derby(0.05)
+        text = ' | '.join(
+            str(c) for c in display.manager.draw_text.call_args_list)
+        assert '14 SWINGS' in text
+        assert '-:--' not in text
+        assert 'WALKER' in text
+
     def test_parse_derby_current_matchup_and_batter(self) -> None:
         display = _display()
 
@@ -378,6 +448,49 @@ class TestDerbyTracker:
         assert 851300 not in candidates           # batting practice excluded
         assert 851298 not in candidates           # MLB test event excluded
         assert 832396 not in candidates           # unrelated event excluded
+
+    def test_derby_is_live_follows_bracket_state(self) -> None:
+        import copy
+
+        display = _display()
+        display._derby_active = Mock(return_value=True)
+        display._derby_cached_at = 10**12
+        display._derby_pk = 839032
+
+        # Bracket not published yet
+        display._derby_cache = None
+        display._derby_pk_checked_at = 10**12   # keep discovery gated off
+        assert display.derby_is_live() is False
+
+        # Published but not started
+        preview = copy.deepcopy(DERBY_FIXTURE)
+        preview['status']['state'] = 'Preview'
+        display._derby_cache = preview
+        assert display.derby_is_live() is False
+
+        # Underway (API serves 'Live'; older payloads say 'In Progress')
+        for state in ('Live', 'In Progress'):
+            live = copy.deepcopy(DERBY_FIXTURE)
+            live['status']['state'] = state
+            display._derby_cache = live
+            assert display.derby_is_live() is True
+
+        # Champion crowned: takeover releases the display
+        done = copy.deepcopy(DERBY_FIXTURE)
+        final = done['rounds'][1]['matchups'][0]
+        final['topSeed'] = _derby_seed('Kyle Schwarber', 15, True, True, True)
+        final['bottomSeed'] = _derby_seed('Bryce Harper', 13, True, True)
+        display._derby_cache = done
+        assert display.derby_is_live() is False
+
+    def test_derby_is_live_false_outside_derby_window(self) -> None:
+        display = _display()
+        display._derby_active = Mock(return_value=False)
+        display._derby_cache = DERBY_FIXTURE
+        display._derby_cached_at = 10**12
+        display._derby_pk = 839032
+
+        assert display.derby_is_live() is False
 
     def test_rejects_mlb_rehearsal_derby_payload(self) -> None:
         import copy
@@ -608,12 +721,41 @@ class TestLiveTakeover:
 
         board.allstar_display.display_final.assert_called_once()
 
+    def test_derby_live_takes_over_cycle(self) -> None:
+        board = self._scoreboard()
+        board.allstar_display.asg_is_live.return_value = False
+        board.allstar_display.derby_is_live.return_value = True
+        board.allstar_display.display_live_derby.return_value = False
+
+        board.process_game_cycle()
+
+        board.allstar_display.display_live_derby.assert_called_once()
+        board.manager.get_schedule.assert_not_called()
+
+    def test_derby_champion_shows_final_screen(self) -> None:
+        board = self._scoreboard()
+        board.allstar_display.asg_is_live.return_value = False
+        board.allstar_display.derby_is_live.return_value = True
+        board.allstar_display.display_live_derby.return_value = True
+
+        board.process_game_cycle()
+
+        board.allstar_display.display_derby_final.assert_called_once()
+
     def test_no_asg_runs_normal_cycle(self) -> None:
         board = self._scoreboard()
         board.allstar_display.asg_is_live.return_value = False
+        board.allstar_display.derby_is_live.return_value = False
         board.manager.get_schedule.return_value = []
 
         board.process_game_cycle()
 
         board.manager.get_schedule.assert_called_once()
         board.off_season_handler.display_off_season_content.assert_called_once()
+
+    def test_rotation_abort_watches_derby_too(self) -> None:
+        import inspect
+        from main import CubsScoreboard
+
+        source = inspect.getsource(CubsScoreboard.route_by_status)
+        assert 'derby_is_live' in source

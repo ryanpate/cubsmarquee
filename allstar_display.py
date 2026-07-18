@@ -136,6 +136,20 @@ class AllStarDisplay:
         info = self.fetch_asg_info()
         return bool(info) and info.get('abstract') == 'Live'
 
+    def derby_is_live(self) -> bool:
+        """True while the Derby bracket is underway (drives the display
+        takeover in main, like asg_is_live). Releases once a champion
+        is crowned. The API serves state 'Live'; older payloads say
+        'In Progress'."""
+        if not self._derby_active():
+            return False
+        data = self.fetch_derby_data()
+        if not data:
+            return False
+        if data.get('status', {}).get('state') not in ('Live', 'In Progress'):
+            return False
+        return self._parse_derby(data)['champion'] is None
+
     def _derby_active(self, now: pendulum.DateTime | None = None) -> bool:
         """Derby promo window: DERBY_INFO date matches ASG - 1 (guards a
         stale constant) and it's that day before 11 PM."""
@@ -201,6 +215,10 @@ class AllStarDisplay:
             'batter_is_cub': parent_team == TeamConfig.CUBS_TEAM_ID,
             'is_final': feed.get('gameData', {}).get('status', {}).get(
                 'abstractGameState') == 'Final',
+            # MLB flips abstractGameState to Live at the scheduled start,
+            # while pregame ceremonies still run under detailedState Warmup.
+            'is_warmup': feed.get('gameData', {}).get('status', {}).get(
+                'detailedState') == 'Warmup',
         }
 
     # --------------------------------------------------------- derby data
@@ -302,11 +320,17 @@ class AllStarDisplay:
         status = data.get('status', {})
         rounds = data.get('rounds', [])
         total_rounds = len(rounds)
+        # 2026 format: no round clock, set swing counts instead, and
+        # hitters bat one at a time so status.currentBatter (not the
+        # first incomplete matchup) says whose matchup is live.
+        current_batter = AllStarDisplay._last_name(
+            status.get('currentBatter', {}).get('fullName', ''))
         state: dict[str, Any] = {
             'state': status.get('state', ''),
             'round': status.get('currentRound') or 1,
             'total_rounds': total_rounds,
             'clock': status.get('currentRoundTimeLeft', ''),
+            'swings_left': status.get('swingsRemaining'),
             'matchup': None,
             'batter': None,
             'results': [],
@@ -334,6 +358,10 @@ class AllStarDisplay:
                         f"DEF {loser['name']} {loser['hrs']}")
                     if rnd.get('round') == total_rounds:
                         state['champion'] = winner
+                elif current_batter and current_batter in (a['name'],
+                                                           b['name']):
+                    state['matchup'] = (a, b)
+                    state['batter'] = current_batter
                 elif state['matchup'] is None:
                     state['matchup'] = (a, b)
                     for seed in (a, b):
@@ -509,18 +537,27 @@ class AllStarDisplay:
             time.sleep(0.05)
 
     def _display_derby_live(self, duration: int) -> None:
+        """Rotation-segment path: live tracker, then the champion
+        screen once the bracket is decided."""
+        if self.display_live_derby(duration):
+            self.display_derby_final(duration)
+
+    def display_live_derby(self, display_time: int) -> bool:
         """Live Derby tracker: current matchup with HR counts and the
         round clock, active hitter highlighted, completed results
-        scrolling along the bottom, champion screen at the end."""
+        scrolling along the bottom. Returns True as soon as the
+        bracket crowns a champion."""
         scroll_x = float(DisplayConfig.MATRIX_COLS)
         background = self._derby_scene_background(baseballs=False)
         start = time.time()
 
-        while time.time() - start < duration:
+        while time.time() - start < display_time:
             data = self.fetch_derby_data()
             if not data:
-                return
+                return False
             state = self._parse_derby(data)
+            if state['champion']:
+                return True
             m = self.manager
 
             # Fire a gold burst by a hitter's HR count when it rises
@@ -535,8 +572,8 @@ class AllStarDisplay:
             m.set_image(background, 0, 0)
 
             m.draw_text('tiny_bold', 2, 8, DARK_BG, 'HR DERBY')
-            if state['champion'] or (state['total_rounds']
-                                     and state['round'] >= state['total_rounds']):
+            if (state['total_rounds']
+                    and state['round'] >= state['total_rounds']):
                 tag = 'FINAL'
             else:
                 tag = f"RD {state['round']}"
@@ -545,22 +582,7 @@ class AllStarDisplay:
                         * Fonts.CHAR_WIDTH_MICRO - 2,
                         8, DARK_BG, tag)
 
-            if state['champion'] and state['state'] == 'Final':
-                self._draw_fireworks(time.time() - start)
-                champ = state['champion']
-                m.draw_text(
-                    'tiny_bold',
-                    self._center_x('CHAMPION', Fonts.CHAR_WIDTH_TINY),
-                    21, GOLD, 'CHAMPION')
-                m.draw_text(
-                    'tiny_bold',
-                    self._center_x(champ['name'], Fonts.CHAR_WIDTH_TINY),
-                    31, Colors.WHITE, champ['name'])
-                hr_line = f"{champ['hrs']} HR"
-                m.draw_text(
-                    'micro', self._center_x(hr_line, Fonts.CHAR_WIDTH_MICRO),
-                    39, (150, 150, 150), hr_line)
-            elif state['matchup']:
+            if state['matchup']:
                 a, b = state['matchup']
                 for hitter, y in ((a, 22), (b, 32)):
                     active = (state['batter'] == hitter['name']
@@ -576,12 +598,20 @@ class AllStarDisplay:
                         DisplayConfig.MATRIX_COLS - len(hrs)
                         * Fonts.CHAR_WIDTH_SMALL - 2,
                         y, GOLD if active else Colors.WHITE, hrs)
-                if state['clock']:
+                # 2026 dropped the round clock (API serves '-:--'):
+                # show the active hitter's swings remaining instead
+                if state['clock'] and any(c.isdigit()
+                                          for c in state['clock']):
+                    pace = state['clock']
+                elif state['swings_left'] is not None and state['batter']:
+                    pace = f"{state['swings_left']} SWINGS"
+                else:
+                    pace = ''
+                if pace:
                     m.draw_text(
                         'micro',
-                        self._center_x(state['clock'],
-                                       Fonts.CHAR_WIDTH_MICRO),
-                        40, (150, 150, 150), state['clock'])
+                        self._center_x(pace, Fonts.CHAR_WIDTH_MICRO),
+                        40, (150, 150, 150), pace)
                 if self._derby_burst:
                     burst_age = time.time() - self._derby_burst[0]
                     if burst_age < self.BURST_SECONDS:
@@ -590,6 +620,60 @@ class AllStarDisplay:
                             self._derby_burst[1], burst_age)
                     else:
                         self._derby_burst = None
+
+            if state['results']:
+                ticker = '  *  '.join(state['results'])
+                ticker_width = len(ticker) * Fonts.CHAR_WIDTH_MICRO
+                m.draw_text('micro', int(scroll_x), 47,
+                            Colors.WHITE, ticker)
+                scroll_x -= 1
+                if scroll_x < -ticker_width:
+                    scroll_x = float(DisplayConfig.MATRIX_COLS)
+
+            m.swap_canvas()
+            time.sleep(0.1)
+        return False
+
+    def display_derby_final(self, duration: int) -> None:
+        """Champion screen with fireworks, shown once the bracket is
+        decided."""
+        scroll_x = float(DisplayConfig.MATRIX_COLS)
+        background = self._derby_scene_background(baseballs=False)
+        start = time.time()
+
+        while time.time() - start < duration:
+            data = self.fetch_derby_data()
+            if not data:
+                return
+            state = self._parse_derby(data)
+            champ = state['champion']
+            if not champ:
+                return
+            m = self.manager
+
+            m.clear_canvas()
+            m.set_image(background, 0, 0)
+
+            m.draw_text('tiny_bold', 2, 8, DARK_BG, 'HR DERBY')
+            tag = 'FINAL'
+            m.draw_text('micro',
+                        DisplayConfig.MATRIX_COLS - len(tag)
+                        * Fonts.CHAR_WIDTH_MICRO - 2,
+                        8, DARK_BG, tag)
+
+            self._draw_fireworks(time.time() - start)
+            m.draw_text(
+                'tiny_bold',
+                self._center_x('CHAMPION', Fonts.CHAR_WIDTH_TINY),
+                21, GOLD, 'CHAMPION')
+            m.draw_text(
+                'tiny_bold',
+                self._center_x(champ['name'], Fonts.CHAR_WIDTH_TINY),
+                31, Colors.WHITE, champ['name'])
+            hr_line = f"{champ['hrs']} HR"
+            m.draw_text(
+                'micro', self._center_x(hr_line, Fonts.CHAR_WIDTH_MICRO),
+                39, (150, 150, 150), hr_line)
 
             if state['results']:
                 ticker = '  *  '.join(state['results'])
@@ -706,12 +790,13 @@ class AllStarDisplay:
             self.manager.draw_pixel(x + dx, y + dy, *GOLD)
 
     def _draw_bases(self, cx: int, cy: int, bases: dict[str, bool]) -> None:
-        spots = {'second': (cx, cy - 4), 'first': (cx + 4, cy),
-                 'third': (cx - 4, cy)}
+        spots = {'second': (cx, cy - 7), 'first': (cx + 7, cy),
+                 'third': (cx - 7, cy)}
         for name, (bx, by) in spots.items():
             color = Colors.YELLOW if bases[name] else (70, 70, 90)
-            for dx in range(2):
-                for dy in range(2):
+            for dy in range(-3, 4):
+                half = 3 - abs(dy)
+                for dx in range(-half, half + 1):
                     self.manager.draw_pixel(bx + dx, by + dy, *color)
 
     def _render_live_frame(self, state: dict) -> None:
@@ -733,13 +818,17 @@ class AllStarDisplay:
         title_x = 32 + max(0, (64 - len(title) * Fonts.CHAR_WIDTH_MICRO) // 2)
         m.draw_text('micro', title_x, 7, GOLD, title)
 
-        inning_line = f"{state['inning_state'][:3].upper()} {state['inning']}"
-        m.draw_text('tiny', 38, 18, Colors.WHITE, inning_line)
+        if state['is_warmup']:
+            m.draw_text('tiny', 38, 18, GOLD, 'WARMUP')
+        else:
+            inning_line = (
+                f"{state['inning_state'][:3].upper()} {state['inning']}")
+            m.draw_text('tiny', 38, 18, Colors.WHITE, inning_line)
         for i in range(3):
             color = (255, 60, 60) if i < state['outs'] else (70, 70, 90)
-            for dx in range(2):
-                for dy in range(2):
-                    m.draw_pixel(40 + i * 6 + dx, 23 + dy, *color)
+            for dx in range(3):
+                for dy in range(3):
+                    m.draw_pixel(39 + i * 7 + dx, 22 + dy, *color)
         self._draw_bases(80, 20, state['bases'])
 
         name = state['batter_name'].upper()
