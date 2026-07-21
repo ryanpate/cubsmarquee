@@ -960,3 +960,62 @@ class TestDestinationCacheBatching:
 
         assert display._lookup_destination_airplaneslive('abc001') == 'ORD'
         display._save_destination_cache.assert_not_called()
+
+
+# ============================================================================
+# Pregame (warmup) loop exits on any status change
+# ============================================================================
+
+class TestPregameLoopExitsOnStatusChange:
+    """The WARM UP screen must return to the router whenever the game status
+    changes (e.g. to a rain delay), not only on In Progress/Final. The old
+    time-compare exit was dead code (pendulum 'MM' is month, and it compared
+    local time against a UTC slice)."""
+
+    MAX_FRAMES = 5000  # refresh_interval is 1000; well past several checks
+
+    def _handler(self, monkeypatch):
+        import game_state_handler as gsh
+        from game_state_handler import GameStateHandler
+
+        monkeypatch.setattr(gsh.time, 'sleep', lambda s: None)
+        handler = GameStateHandler.__new__(GameStateHandler)
+        handler.manager = Mock()
+        handler.scroll_position = 96
+        handler.manager.split_squad_indicator = None
+        handler.manager.get_lineup.return_value = 'LINEUP'
+
+        frames = {'n': 0}
+
+        def swap() -> None:
+            frames['n'] += 1
+            if frames['n'] > self.MAX_FRAMES:
+                raise AssertionError(
+                    'pregame loop did not exit after status change')
+
+        handler.manager.swap_canvas.side_effect = swap
+        return handler
+
+    def _game(self, status: str) -> list[dict]:
+        return [{'game_datetime': '2026-07-21T00:05:00Z',
+                 'status': status, 'game_id': 824654}]
+
+    def test_exits_when_status_changes_to_delayed(self, monkeypatch) -> None:
+        handler = self._handler(monkeypatch)
+        handler.manager.get_schedule.return_value = self._game(
+            'Delayed Start: Inclement Weather')
+
+        handler._display_pregame_base(
+            'WARM UP', (0, 255, 0), '7:05 PM', 'LINEUP',
+            self._game('Warmup'), 0, 824654)
+
+    def test_survives_schedule_fetch_errors_then_exits(self, monkeypatch) -> None:
+        handler = self._handler(monkeypatch)
+        handler.manager.get_schedule.side_effect = [
+            requests.ConnectionError('dns down'),
+            self._game('In Progress'),
+        ]
+
+        handler._display_pregame_base(
+            'WARM UP', (0, 255, 0), '7:05 PM', 'LINEUP',
+            self._game('Warmup'), 0, 824654)

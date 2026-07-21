@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-import pendulum
 import statsapi
 from PIL import Image, ImageDraw
 from rgbmatrix import graphics
@@ -251,16 +250,15 @@ class GameStateHandler:
         gameid: int
     ) -> None:
         """Base method for pregame displays (warmup, delayed, postponed) - OPTIMIZED"""
-        # Compare times for game start
-        game_datetime: str = game_data[game_index]['game_datetime'][-9:19]
-        time_compare: str = game_datetime[:5]
-        current_time: str = pendulum.now().format('HH:MM')
+        # Exit whenever the status changes (Delayed, In Progress, ...) so the
+        # main router can pick the right screen
+        entry_status: str = game_data[game_index]['status']
 
         # Counter for when to refresh data (every 100 iterations instead of constantly)
         refresh_counter: int = 0
         refresh_interval: int = 1000  # Refresh data every 100 scroll iterations
 
-        while current_time != time_compare and game_data[game_index]['status'] not in ['In Progress', 'Final']:
+        while True:
             self.manager.clear_canvas()
             self.manager.fill_canvas(*bg_color)
 
@@ -307,14 +305,13 @@ class GameStateHandler:
             # Only check for status changes periodically, not every frame
             if refresh_counter >= refresh_interval:
                 refresh_counter = 0
-                # Check for status changes
-                game_data = self.manager.get_schedule()
-                if game_data[game_index]['status'] == 'In Progress':
-                    break
-                current_time = pendulum.now().format('HH:MM')
-            else:
-                # Just update current time without hitting the API
-                current_time = pendulum.now().format('HH:MM')
+                try:
+                    game_data = self.manager.get_schedule()
+                    if game_data[game_index]['status'] != entry_status:
+                        break
+                except Exception:
+                    # If status check fails, keep showing the pregame screen
+                    pass
 
     def _draw_split_squad_indicator(self) -> None:
         """
