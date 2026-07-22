@@ -42,6 +42,7 @@ sudo systemctl start cubs-scoreboard
 | `cubs-scoreboard.service` | Systemd service definition |
 | `wifi-manager.service` | WiFi connectivity management service |
 | `wifi-web-config.service` | Web admin panel service |
+| `auto_update.sh` | Nightly self-update from GitHub (4 AM via `marquee-update.timer`): pulls main, py_compile gate, syncs tracked files to `/home/pi/`, reboots |
 
 ### Data Files
 | File | Purpose |

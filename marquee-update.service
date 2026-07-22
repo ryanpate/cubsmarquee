@@ -9,5 +9,4 @@ ExecStart=/home/pi/auto_update.sh
 User=root
 WorkingDirectory=/home/pi
 
-[Install]
-WantedBy=multi-user.target
+# No [Install] section: this service only runs via marquee-update.timer

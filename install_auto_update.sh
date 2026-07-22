@@ -4,8 +4,7 @@
 
 echo "Installing Cubs Marquee Auto-Update..."
 
-# Copy the update script
-sudo cp /home/pi/auto_update.sh /home/pi/auto_update.sh
+# Make sure the update script is executable (scp can drop the exec bit)
 sudo chmod +x /home/pi/auto_update.sh
 
 # Install the systemd service and timer

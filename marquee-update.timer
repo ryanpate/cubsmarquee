@@ -1,14 +1,11 @@
 [Unit]
-Description=Check for Cubs Marquee updates every 6 hours
+Description=Nightly Cubs Marquee update check (4 AM)
 
 [Timer]
-# Run 5 minutes after boot
-OnBootSec=5min
-# Then run every 6 hours
-OnUnitActiveSec=6h
-# Add randomized delay up to 30 min to prevent all marquees updating simultaneously
-RandomizedDelaySec=30min
-Persistent=true
+# Overnight-only window so an update reboot never interrupts a game
+OnCalendar=*-*-* 04:00:00
+# Spread multiple marquees out a bit
+RandomizedDelaySec=15min
 
 [Install]
 WantedBy=timers.target
