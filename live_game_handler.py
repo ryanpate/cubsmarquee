@@ -123,8 +123,14 @@ class LiveGameHandler:
             cubs_logo = self.manager.game_images['cubs'].resize((16, 15)).convert('RGBA')
             opp_logo = self.manager.game_images['opponent'].resize((16, 15)).convert('RGBA')
 
+            # Away team on top, home team on bottom (matches Top/Bot inning)
+            if self.is_cubs_home:
+                logo_rows = [(opp_logo, (0, 0)), (cubs_logo, (0, 16))]
+            else:
+                logo_rows = [(cubs_logo, (0, 0)), (opp_logo, (0, 16))]
+
             # Composite logos onto white background so dark logos remain visible
-            for logo, pos in [(cubs_logo, (0, 0)), (opp_logo, (0, 16))]:
+            for logo, pos in logo_rows:
                 logo_bg = Image.new("RGB", logo.size, (255, 255, 255))
                 logo_bg.paste(logo, (0, 0), logo)
                 base_image.paste(logo_bg, pos)
@@ -148,25 +154,16 @@ class LiveGameHandler:
                         batter_line_v, batter_line, 255 + m, 255 + m, 255 + m)
                 m -= 20
 
-            # Draw batting indicator box (red box)
-            if self.is_cubs_home:
-                if inning_state in ['Bot', 'Mid']:
-                    for ht_h in range(6, 8):
-                        for ht_v in range(30, 34):
-                            self.manager.draw_pixel(ht_v, ht_h, 255, 0, 0)
-                else:
-                    for at_h in range(22, 24):
-                        for at_v in range(30, 34):
-                            self.manager.draw_pixel(at_v, at_h, 255, 0, 0)
+            # Draw batting indicator box (red box): away team on top bats in
+            # Top/End states, home team on bottom bats in Bot/Mid states
+            if inning_state in ['Top', 'End']:
+                for ht_h in range(6, 8):
+                    for ht_v in range(30, 34):
+                        self.manager.draw_pixel(ht_v, ht_h, 255, 0, 0)
             else:
-                if inning_state in ['Top', 'End']:
-                    for ht_h in range(6, 8):
-                        for ht_v in range(30, 34):
-                            self.manager.draw_pixel(ht_v, ht_h, 255, 0, 0)
-                else:
-                    for at_h in range(22, 24):
-                        for at_v in range(30, 34):
-                            self.manager.draw_pixel(at_v, at_h, 255, 0, 0)
+                for at_h in range(22, 24):
+                    for at_v in range(30, 34):
+                        self.manager.draw_pixel(at_v, at_h, 255, 0, 0)
 
             # Draw bases
             self._draw_bases_original(game_info)
@@ -294,21 +291,15 @@ class LiveGameHandler:
 
     def _draw_batting_indicator_overlay(self, inning_state):
         """Draw batting indicator by overlaying on the current pixel buffer"""
-        # Determine position based on who's batting
-        batting_home_pos = (30, 5)
-        batting_away_pos = (30, 21)
+        # Away team row on top, home team row on bottom
+        batting_away_pos = (30, 5)
+        batting_home_pos = (30, 21)
 
         # Get the appropriate position
-        if self.is_cubs_home:
-            if inning_state in ['Bot', 'Mid']:
-                pos = batting_home_pos
-            else:
-                pos = batting_away_pos
+        if inning_state in ['Top', 'End']:
+            pos = batting_away_pos
         else:
-            if inning_state in ['Top', 'End']:
-                pos = batting_home_pos
-            else:
-                pos = batting_away_pos
+            pos = batting_home_pos
 
         # Get the batting indicator image
         batting_img = self.manager.game_images['batting']
@@ -494,16 +485,12 @@ class LiveGameHandler:
                 next_y += 1
 
     def _draw_scores(self, game_data, game_index):
-        """Draw team scores"""
-        if self.is_cubs_home:
-            cubs_display_score = str(game_data[game_index]['home_score'])
-            opp_display_score = str(game_data[game_index]['away_score'])
-        else:
-            cubs_display_score = str(game_data[game_index]['away_score'])
-            opp_display_score = str(game_data[game_index]['home_score'])
+        """Draw team scores (away on top, home on bottom)"""
+        away_display_score = str(game_data[game_index]['away_score'])
+        home_display_score = str(game_data[game_index]['home_score'])
 
-        self._draw_score_in_box(cubs_display_score, 12)
-        self._draw_score_in_box(opp_display_score, 29)
+        self._draw_score_in_box(away_display_score, 12)
+        self._draw_score_in_box(home_display_score, 29)
 
     def _draw_score_in_box(self, score_text: str, y: int) -> None:
         """Draw a score inside the 15px-wide score box (x=17-31).
