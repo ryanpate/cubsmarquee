@@ -9,7 +9,7 @@ import pendulum
 from PIL import Image
 from typing import TYPE_CHECKING, Any
 
-from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, get_scroll_delay, load_user_config
+from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, get_scroll_delay, load_user_config, create_team_gradient_background
 from teams import get_active_team, apply_team_defaults, data_path_candidates
 from rss_fetch import fetch_feed
 from weather_display import WeatherDisplay
@@ -133,18 +133,9 @@ class OffSeasonHandler:
             return None
 
     def _create_cubs_gradient_background(self) -> Image.Image:
-        """Pre-generate Cubs gradient background image for performance"""
-        img = Image.new("RGB", (96, 48))
-        pixels = img.load()
-        for y in range(34):
-            blue_intensity = int(102 + (y * 0.5))
-            for x in range(96):
-                pixels[x, y] = (0, 51, blue_intensity)
-        # Black background for scrolling text area (y=34-47)
-        for y in range(34, 48):
-            for x in range(96):
-                pixels[x, y] = (0, 0, 0)
-        print("Cubs gradient background cached (with black scroll area)")
+        """Pre-generate team gradient background image for performance"""
+        img = create_team_gradient_background(self.team.primary_color)
+        print("Team gradient background cached (with black scroll area)")
         return img
 
     def _create_bears_sweater_background(self) -> Image.Image:

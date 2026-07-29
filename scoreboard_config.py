@@ -240,6 +240,30 @@ def get_scroll_params(speed_setting: int) -> tuple[float, int]:
     return (delay, pixels)
 
 
+def create_team_gradient_background(color: RGBColor):
+    """96x48 vertical gradient in `color` (rows 0-33) over a black scroll
+    area (rows 34-47), for the off-season facts / pregame "next game"
+    screens.
+
+    Brightens toward the bottom by the same ratio the original Cubs-only
+    gradient applied to just its blue channel (102 -> 118.5 over 34 rows),
+    scaled here across all three channels so it works for any team color.
+    """
+    from PIL import Image
+
+    img = Image.new("RGB", (96, 48))
+    pixels = img.load()
+    for y in range(34):
+        t = (102 + y * 0.5) / 102
+        row_color = tuple(min(255, int(c * t)) for c in color)
+        for x in range(96):
+            pixels[x, y] = row_color
+    for y in range(34, 48):
+        for x in range(96):
+            pixels[x, y] = (0, 0, 0)
+    return img
+
+
 class GameConfig:
     """Game-related configuration"""
     MAX_DAYS_TO_CHECK: int = 14

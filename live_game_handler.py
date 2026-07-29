@@ -104,10 +104,10 @@ class LiveGameHandler:
                     else:
                         pixels[x, y] = (255, 255, 255)
 
-            # Paint right side Cubs blue (x=32-95, y=0-30)
+            # Paint right side team primary color (x=32-95, y=0-30)
             for x in range(32, 96):
                 for y in range(0, 31):
-                    pixels[x, y] = (0, 51, 102)
+                    pixels[x, y] = self.team.primary_color
 
             # Paint black divider line between logos (y=15, x=0-15)
             for x in range(0, 16):
@@ -483,7 +483,8 @@ class LiveGameHandler:
             for fill in range(1, 6):
                 for i in range(5):
                     self.manager.draw_pixel(
-                        hit_x + i + fill, hit_y + i - next_y, 0, 51, 102)
+                        hit_x + i + fill, hit_y + i - next_y,
+                        *self.team.primary_color)
                 next_y += 1
 
     def _draw_scores(self, game_data, game_index):
@@ -736,8 +737,8 @@ class LiveGameHandler:
         def draw_game_over_screen():
             self.manager.clear_canvas()
 
-            # Create blue background image
-            output_image = Image.new("RGB", (96, 48), (0, 51, 102))
+            # Create team-color background image
+            output_image = Image.new("RGB", (96, 48), self.team.primary_color)
 
             # Resize and paste team logos onto blue background (use alpha mask for transparency)
             cubs_resized = self.manager.game_images['team'].resize((26, 26)).convert('RGBA')

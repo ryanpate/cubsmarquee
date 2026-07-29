@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw
 from rgbmatrix import graphics
 from typing import TYPE_CHECKING, Any
 
-from scoreboard_config import Colors, Positions, GameConfig, TeamConfig, RGBColor, DisplayConfig, get_scroll_delay, load_user_config
+from scoreboard_config import Colors, Positions, GameConfig, TeamConfig, RGBColor, DisplayConfig, get_scroll_delay, load_user_config, create_team_gradient_background
 from retry import retry_api_call
 from playoff_race_display import PlayoffRaceDisplay
 from teams import get_active_team
@@ -363,22 +363,15 @@ class GameStateHandler:
         else:
             next_game_text: str = f'NEXT GAME {game_date[5:]} at {game_time} vs {away_team}     {pitchers}'
 
-        # Pre-generate Cubs gradient background (matches Cubs Facts screen)
-        gradient_bg: Image.Image = Image.new("RGB", (96, 48))
-        pixels = gradient_bg.load()
-        for y in range(34):
-            blue_intensity = int(102 + (y * 0.5))
-            for x in range(96):
-                pixels[x, y] = (0, 51, blue_intensity)
-        for y in range(34, 48):
-            for x in range(96):
-                pixels[x, y] = (0, 0, 0)
+        # Pre-generate team gradient background (matches team Facts screen)
+        gradient_bg: Image.Image = create_team_gradient_background(
+            self.team.primary_color)
 
         # Main display loop
         while True:
             self.manager.clear_canvas()
 
-            # Display Cubs gradient background with marquee image (matches Cubs Facts screen)
+            # Display team gradient background with marquee image (matches team Facts screen)
             output_image: Image.Image = gradient_bg.copy()
             output_image.paste(self.manager.game_images['marquee'], (0, 0))
             self.manager.set_image(output_image.convert("RGB"), 0, 0)

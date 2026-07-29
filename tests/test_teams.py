@@ -100,6 +100,27 @@ class TestTeamDefaults:
         apply_team_defaults(self.DEFAULTS, {'team': 'cardinals'})
         assert self.DEFAULTS == snapshot
 
+    def test_cardinals_reword_custom_message_default(self):
+        defaults = {'custom_message': 'GO CUBS GO! SEE YOU NEXT SEASON!'}
+        out = apply_team_defaults(defaults, {'team': 'cardinals'})
+        assert 'CUBS' not in out['custom_message']
+        assert 'CARDINALS' in out['custom_message']
+
+    def test_cubs_custom_message_default_unchanged(self):
+        defaults = {'custom_message': 'GO CUBS GO! SEE YOU NEXT SEASON!'}
+        out = apply_team_defaults(defaults, {'team': 'cubs'})
+        assert out['custom_message'] == 'GO CUBS GO! SEE YOU NEXT SEASON!'
+
+    def test_explicit_custom_message_wins_end_to_end(self):
+        """apply_team_defaults() only adjusts the default; the caller
+        (off_season_handler / wifi_config_server) applies the user's
+        actual value with a subsequent defaults.update(user_config)."""
+        defaults = {'custom_message': 'GO CUBS GO! SEE YOU NEXT SEASON!'}
+        user = {'team': 'cardinals', 'custom_message': 'Go Birds!'}
+        out = apply_team_defaults(defaults, user)
+        out.update(user)
+        assert out['custom_message'] == 'Go Birds!'
+
 
 def test_data_path_candidates():
     assert data_path_candidates('cubs_facts.json') == [
@@ -125,6 +146,19 @@ class TestConfigValidatorTeam:
         result = self._validator_with({'team': 'mets'}).validate_team()
         assert not result.is_valid
         assert not result.is_required
+
+    def test_file_paths_use_active_team_assets(self):
+        from config_validator import ValidationResult
+        v = self._validator_with({'team': 'cardinals'})
+        results = v.validate_file_paths()
+        assert all(isinstance(r, ValidationResult) for r in results)
+        fields = {r.field for r in results}
+        assert './cardinals_marquee.png' in fields
+        assert './logos/STL.png' in fields
+        assert './marquee.png' not in fields
+        assert './logos/cubs.png' not in fields
+        # Team-agnostic asset is unaffected
+        assert './baseball.png' in fields
 
 
 class TestTeamHistoryDisplay:
