@@ -1,0 +1,50 @@
+"""Admin panel team selection round-trip tests"""
+
+import json
+
+import pytest
+
+
+@pytest.fixture
+def client(tmp_path, monkeypatch):
+    import wifi_config_server as wcs
+    monkeypatch.setattr(wcs, 'CONFIG_PATH', str(tmp_path / 'config.json'))
+    wcs.app.config['TESTING'] = True
+    return wcs.app.test_client()
+
+
+def test_admin_page_offers_team_choices(client):
+    html = client.get('/admin').data.decode()
+    assert 'name="team"' in html
+    assert 'value="cubs"' in html
+    assert 'value="cardinals"' in html
+    assert '<details' in html
+
+
+def test_save_config_round_trips_team(client, tmp_path, monkeypatch):
+    import wifi_config_server as wcs
+    resp = client.post('/save_config', json={'team': 'cardinals'})
+    assert resp.get_json()['success']
+    saved = json.loads((tmp_path / 'config.json').read_text())
+    assert saved['team'] == 'cardinals'
+
+
+def test_load_config_defaults_team_to_cubs(client, monkeypatch):
+    import wifi_config_server as wcs
+    assert wcs.load_config()['team'] == 'cubs'
+
+
+def test_load_config_cardinals_disables_bears_by_default(
+        client, tmp_path, monkeypatch):
+    import wifi_config_server as wcs
+    (tmp_path / 'config.json').write_text(json.dumps({'team': 'cardinals'}))
+    cfg = wcs.load_config()
+    assert cfg['enable_bears'] is False
+    assert cfg['enable_clock'] is False
+
+
+def test_team_logo_route(client):
+    resp = client.get('/team_logo/cardinals')
+    assert resp.status_code == 200
+    assert resp.mimetype == 'image/png'
+    assert client.get('/team_logo/mets').status_code == 404

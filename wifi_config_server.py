@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """WiFi configuration web server - accessible at hostname.local/admin"""
 
-from flask import Flask, render_template_string, request, jsonify, redirect
+from flask import (
+    Flask, render_template_string, request, jsonify, redirect, send_file)
 import subprocess
 import os
 import socket
@@ -11,6 +12,7 @@ import time
 import re
 
 from scoreboard_config import DisplayConfig, PREVIEW_FILE_PATH
+from teams import TEAMS, DEFAULT_TEAM_SLUG, apply_team_defaults, get_active_team
 
 app = Flask(__name__)
 
@@ -138,11 +140,13 @@ def get_ip_address():
 def load_config():
     """Load configuration from JSON file"""
     default_config = {
+        'team': DEFAULT_TEAM_SLUG,
         'zip_code': '',
         'weather_api_key': '',
         'custom_message': 'GO CUBS GO! SEE YOU NEXT SEASON!',
         'display_mode': 'auto',
         'enable_weather': True,
+        'enable_allstar': True,
         'enable_bears': True,
         'enable_bears_news': True,
         'enable_pga': True,
@@ -195,6 +199,7 @@ def load_config():
         if os.path.exists(CONFIG_PATH):
             with open(CONFIG_PATH, 'r') as f:
                 loaded = json.load(f)
+                default_config = apply_team_defaults(default_config, loaded)
                 default_config.update(loaded)
     except Exception as e:
         print(f"Error loading config: {e}")
@@ -229,7 +234,7 @@ HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Cubs Scoreboard Admin</title>
+    <title>{{ active_team.short_name }} Scoreboard Admin</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body {
@@ -520,11 +525,55 @@ HTML_TEMPLATE = """
             margin-bottom: 15px;
             color: #0C2340;
         }
+        details.config-section {
+            border: 1px solid #d0d7e2;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            background: #fafbfd;
+        }
+        details.config-section > summary {
+            cursor: pointer;
+            padding: 12px 15px;
+            font-weight: bold;
+            color: #0C2340;
+            font-size: 1.05em;
+            list-style-position: inside;
+        }
+        details.config-section[open] > summary {
+            border-bottom: 1px solid #d0d7e2;
+        }
+        details.config-section > .section-body {
+            padding: 15px;
+        }
+        .team-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            border: 2px solid #d0d7e2;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+        }
+        .team-option:has(input:checked) {
+            border-color: #CC3433;
+            background: #fff5f5;
+        }
+        .team-option img { width: 28px; height: 28px; object-fit: contain; }
+        .team-swatch {
+            width: 18px; height: 18px; border-radius: 4px;
+            border: 1px solid #999; margin-left: auto;
+        }
+        .checkbox-columns {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 4px 16px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🐻 Cubs Scoreboard Admin</h1>
+        <h1>🐻 {{ active_team.short_name }} Scoreboard Admin</h1>
         <div class="subtitle">Configuration & Management Panel</div>
 
         <div class="info-box">
@@ -576,358 +625,425 @@ HTML_TEMPLATE = """
         <div id="config-tab" class="tab-content">
             <h2>Display Configuration</h2>
 
-            <div class="scroll-speeds-section">
-                <h4>Display Settings</h4>
-                <div class="speed-control">
-                    <label>Brightness:</label>
-                    <input type="range" class="speed-slider" id="brightness" min="10" max="100" value="100">
-                    <span class="speed-value" id="brightness_val">100%</span>
-                </div>
-                <p class="help-text" style="margin-top: 8px;">Controls LED matrix brightness (10% = dim, 100% = full). Changes apply within ~10 seconds.</p>
-
-                <div class="speed-control" style="margin-top: 12px;">
-                    <label><input type="checkbox" id="dim_enabled"> Auto-dim at night</label>
-                </div>
-                <div class="speed-control">
-                    <label>Dim from:</label>
-                    <input type="time" id="dim_start" value="22:00">
-                    <label>until:</label>
-                    <input type="time" id="dim_end" value="07:00">
-                </div>
-                <div class="speed-control">
-                    <label>Night brightness:</label>
-                    <input type="range" class="speed-slider" id="dim_brightness" min="10" max="100" value="30">
-                    <span class="speed-value" id="dim_brightness_val">30%</span>
-                </div>
-                <p class="help-text" style="margin-top: 8px;">Automatically lowers brightness during the set hours (handles windows past midnight, e.g. 22:00 to 07:00).</p>
-            </div>
-
-            <div class="form-group">
-                <label for="display_mode">Display Mode:</label>
-                <select id="display_mode">
-                    <option value="auto">Automatic (Games during season, off-season content otherwise)</option>
-                    <option value="game">Always show game (if available)</option>
-                    <option value="offseason">Game schedule + off-season content rotation</option>
-                    <option value="no_games">Off-season content only (never interrupt with game info)</option>
-                </select>
-            </div>
-
-            <h3 style="margin-top: 20px; color: #0C2340;">Content Display Options</h3>
-            <p class="help-text" style="margin-bottom: 15px;">Select which content to show in the off-season rotation:</p>
-
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="enable_weather">
-                    Enable Weather display
-                </label>
-            </div>
-
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="enable_bears">
-                    Enable Chicago Bears display (football season)
-                </label>
-            </div>
-
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="enable_bears_news">
-                    Enable Bears breaking news display
-                </label>
-            </div>
-
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="enable_pga">
-                    Enable PGA Tour leaderboard display (golf season)
-                </label>
-            </div>
-
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="enable_pga_news">
-                    Enable PGA Tour news display (golf season)
-                </label>
-            </div>
-
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="enable_pga_facts">
-                    Enable PGA Tour facts display (golf season)
-                </label>
-            </div>
-
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="enable_cubs_facts">
-                    Enable Cubs facts & custom message display
-                </label>
-            </div>
-
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="enable_cubs_news">
-                    Enable Cubs breaking news display
-                </label>
-            </div>
-
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="enable_bible">
-                    Enable Bible Verse of the Day display
-                </label>
-            </div>
-
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="enable_bible_facts">
-                    Enable Bible Facts display
-                </label>
-            </div>
-
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="enable_newsmax">
-                    Enable Newsmax news display
-                </label>
-            </div>
-
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="enable_stocks">
-                    Enable Stock Exchange ticker display
-                </label>
-            </div>
-
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="enable_spring_training">
-                    Enable Spring Training countdown display
-                </label>
-            </div>
-
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="enable_playoff_race">
-                    Enable playoff race display (July-September)
-                </label>
-            </div>
-
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="enable_flights">
-                    Enable Flight Tracking display
-                </label>
-            </div>
-
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="enable_flight_radar">
-                    Enable Flight Radar View (full-screen radar scope)
-                </label>
-            </div>
-
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="flights_between_displays">
-                    Show flight display between every screen (~45s interstitial)
-                </label>
-            </div>
-
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="enable_clock">
-                    Enable Wrigley scoreboard clock display
-                </label>
-            </div>
-
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="enable_cubs_history">
-                    Enable Today in Cubs History display
-                </label>
-            </div>
-
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="enable_sky">
-                    Enable Sun &amp; Sky display (sunrise arc, moon phase)
-                </label>
-            </div>
-
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="enable_iss">
-                    Enable ISS tracker display
-                </label>
-            </div>
-
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="enable_celebrations">
-                    Enable celebration days display (birthdays &amp; holidays)
-                </label>
-            </div>
-
-            <div class="scroll-speeds-section">
-                <h4>Scroll Speed Settings</h4>
-                <p class="help-text" style="margin-bottom: 15px;">Adjust scrolling text speed for each display (1 = slowest, 10 = fastest):</p>
-
-                <div class="speed-control">
-                    <label>Bears:</label>
-                    <input type="range" class="speed-slider" id="scroll_speed_bears" min="1" max="10" value="5">
-                    <span class="speed-value" id="scroll_speed_bears_val">5</span>
-                </div>
-
-                <div class="speed-control">
-                    <label>Bears News:</label>
-                    <input type="range" class="speed-slider" id="scroll_speed_bears_news" min="1" max="10" value="5">
-                    <span class="speed-value" id="scroll_speed_bears_news_val">5</span>
-                </div>
-
-                <div class="speed-control">
-                    <label>PGA:</label>
-                    <input type="range" class="speed-slider" id="scroll_speed_pga" min="1" max="10" value="5">
-                    <span class="speed-value" id="scroll_speed_pga_val">5</span>
-                </div>
-
-                <div class="speed-control">
-                    <label>PGA News:</label>
-                    <input type="range" class="speed-slider" id="scroll_speed_pga_news" min="1" max="10" value="5">
-                    <span class="speed-value" id="scroll_speed_pga_news_val">5</span>
-                </div>
-
-                <div class="speed-control">
-                    <label>PGA Facts:</label>
-                    <input type="range" class="speed-slider" id="scroll_speed_pga_facts" min="1" max="10" value="5">
-                    <span class="speed-value" id="scroll_speed_pga_facts_val">5</span>
-                </div>
-
-                <div class="speed-control">
-                    <label>Cubs Facts:</label>
-                    <input type="range" class="speed-slider" id="scroll_speed_cubs_facts" min="1" max="10" value="5">
-                    <span class="speed-value" id="scroll_speed_cubs_facts_val">5</span>
-                </div>
-
-                <div class="speed-control">
-                    <label>Cubs News:</label>
-                    <input type="range" class="speed-slider" id="scroll_speed_cubs_news" min="1" max="10" value="5">
-                    <span class="speed-value" id="scroll_speed_cubs_news_val">5</span>
-                </div>
-
-                <div class="speed-control">
-                    <label>Bible Verse:</label>
-                    <input type="range" class="speed-slider" id="scroll_speed_bible" min="1" max="10" value="5">
-                    <span class="speed-value" id="scroll_speed_bible_val">5</span>
-                </div>
-
-                <div class="speed-control">
-                    <label>Bible Facts:</label>
-                    <input type="range" class="speed-slider" id="scroll_speed_bible_facts" min="1" max="10" value="5">
-                    <span class="speed-value" id="scroll_speed_bible_facts_val">5</span>
-                </div>
-
-                <div class="speed-control">
-                    <label>Newsmax:</label>
-                    <input type="range" class="speed-slider" id="scroll_speed_newsmax" min="1" max="10" value="5">
-                    <span class="speed-value" id="scroll_speed_newsmax_val">5</span>
-                </div>
-
-                <div class="speed-control">
-                    <label>Stocks:</label>
-                    <input type="range" class="speed-slider" id="scroll_speed_stocks" min="1" max="10" value="5">
-                    <span class="speed-value" id="scroll_speed_stocks_val">5</span>
-                </div>
-
-                <div class="speed-control">
-                    <label>Spring Training:</label>
-                    <input type="range" class="speed-slider" id="scroll_speed_spring_training" min="1" max="10" value="5">
-                    <span class="speed-value" id="scroll_speed_spring_training_val">5</span>
-                </div>
-
-                <div class="speed-control">
-                    <label>Flights:</label>
-                    <input type="range" class="speed-slider" id="scroll_speed_flights" min="1" max="10" value="5">
-                    <span class="speed-value" id="scroll_speed_flights_val">5</span>
-                </div>
-            </div>
-
-            <h3 style="margin-top: 20px; color: #0C2340;">Flight Tracking Location</h3>
-            <p class="help-text" style="margin-bottom: 15px;">Set your location to track flights overhead. Enter coordinates directly or use address lookup:</p>
-
-            <div class="form-group">
-                <label for="flight_tracking_latitude">Latitude:</label>
-                <input type="text" id="flight_tracking_latitude" placeholder="e.g., 39.7500" style="width: 200px;">
-            </div>
-
-            <div class="form-group">
-                <label for="flight_tracking_longitude">Longitude:</label>
-                <input type="text" id="flight_tracking_longitude" placeholder="e.g., -89.6653" style="width: 200px;">
-                <div class="help-text">Enter decimal coordinates directly, or use address lookup below to auto-fill</div>
-            </div>
-
-            <div class="form-group" style="margin-top: 10px; padding: 10px; background: #f0f4f8; border-radius: 8px;">
-                <label for="flight_tracking_address">Address Lookup (optional):</label>
-                <input type="text" id="flight_tracking_address" placeholder="e.g., Rochester, IL">
-                <div class="help-text">Enter a city/state or full address, then click Calculate to auto-fill lat/lon above</div>
-                <button type="button" onclick="geocodeAddress()" class="button-secondary" style="margin-top: 8px;">Calculate Coordinates</button>
-                <div id="coordinates-display" style="margin-top: 5px;">
-                    <span id="coords-text" class="help-text"></span>
-                </div>
-            </div>
-
-            <div class="form-group" style="margin-top: 15px; padding: 10px; background: #f5f5f5; border-radius: 5px;">
-                <label style="font-weight: bold; color: #0C2340;">Flight Data Source:</label>
-                <div style="margin-top: 8px;">
-                    <label style="display: block; font-weight: normal; margin-bottom: 6px;">
-                        <input type="radio" name="flight_source" id="flight_source_adsb_lol" value="adsb_lol">
-                        adsb.lol (recommended &mdash; no setup)
+            <details class="config-section" open>
+                <summary>Team</summary>
+                <div class="section-body">
+                    <p class="help-text">Pick the MLB team this board follows. The whole display re-themes to the team. Reboot required after changing.</p>
+                    {% for slug, t in teams.items() %}
+                    <label class="team-option">
+                        <input type="radio" name="team" value="{{ slug }}">
+                        <img src="/team_logo/{{ slug }}" alt="{{ t.name }}">
+                        <span>{{ t.name }}</span>
+                        <span class="team-swatch" style="background: rgb({{ t.primary_color[0] }},{{ t.primary_color[1] }},{{ t.primary_color[2] }})"></span>
                     </label>
-                    <label style="display: block; font-weight: normal;">
-                        <input type="radio" name="flight_source" id="flight_source_local" value="local">
-                        Local ADS-B receiver
-                    </label>
+                    {% endfor %}
                 </div>
-                <div id="local_receiver_url_wrapper" style="margin-top: 10px; padding-left: 22px; display: none;">
-                    <label for="adsb_receiver_url" style="font-weight: normal;">Local Receiver URL:</label>
-                    <input type="text" id="adsb_receiver_url"
-                           placeholder="http://piaware.local/skyaware/data/aircraft.json"
-                           value="{{ config.adsb_receiver_url }}">
-                    <small style="display: block; margin-top: 5px; color: #666;">
-                        Enter the URL of your PiAware / readsb aircraft.json endpoint.
-                        Example: <code>http://piaware.local/skyaware/data/aircraft.json</code>
-                    </small>
+            </details>
+
+            <details class="config-section">
+                <summary>Brightness &amp; Auto-Dim</summary>
+                <div class="section-body">
+                    <div class="scroll-speeds-section">
+                        <div class="speed-control">
+                            <label>Brightness:</label>
+                            <input type="range" class="speed-slider" id="brightness" min="10" max="100" value="100">
+                            <span class="speed-value" id="brightness_val">100%</span>
+                        </div>
+                        <p class="help-text" style="margin-top: 8px;">Controls LED matrix brightness (10% = dim, 100% = full). Changes apply within ~10 seconds.</p>
+
+                        <div class="speed-control" style="margin-top: 12px;">
+                            <label><input type="checkbox" id="dim_enabled"> Auto-dim at night</label>
+                        </div>
+                        <div class="speed-control">
+                            <label>Dim from:</label>
+                            <input type="time" id="dim_start" value="22:00">
+                            <label>until:</label>
+                            <input type="time" id="dim_end" value="07:00">
+                        </div>
+                        <div class="speed-control">
+                            <label>Night brightness:</label>
+                            <input type="range" class="speed-slider" id="dim_brightness" min="10" max="100" value="30">
+                            <span class="speed-value" id="dim_brightness_val">30%</span>
+                        </div>
+                        <p class="help-text" style="margin-top: 8px;">Automatically lowers brightness during the set hours (handles windows past midnight, e.g. 22:00 to 07:00).</p>
+                    </div>
                 </div>
-            </div>
+            </details>
 
-            <div class="form-group">
-                <label for="flight_max_range_nm">Max Range (NM): <span id="flight_range_val">{{ config.flight_max_range_nm or 50 }}</span></label>
-                <input type="range" id="flight_max_range_nm" min="10" max="100" value="{{ config.flight_max_range_nm or 50 }}" oninput="document.getElementById('flight_range_val').textContent=this.value">
-                <div class="help-text">Maximum range in nautical miles for flight tracking (10-100 NM)</div>
-            </div>
+            <details class="config-section">
+                <summary>Display Mode</summary>
+                <div class="section-body">
+                    <div class="form-group">
+                        <label for="display_mode">Display Mode:</label>
+                        <select id="display_mode">
+                            <option value="auto">Automatic (Games during season, off-season content otherwise)</option>
+                            <option value="game">Always show game (if available)</option>
+                            <option value="offseason">Game schedule + off-season content rotation</option>
+                            <option value="no_games">Off-season content only (never interrupt with game info)</option>
+                        </select>
+                    </div>
+                </div>
+            </details>
 
-            <div class="form-group">
-                <label for="airlabs_api_key">AirLabs API Key (optional, for flight destinations):</label>
-                <input type="text" id="airlabs_api_key" placeholder="Optional - destinations auto-lookup via airplanes.live" value="{{ config.airlabs_api_key }}">
-                <div class="help-text">Optional. Destinations are now looked up free via airplanes.live. AirLabs is a secondary fallback.</div>
-            </div>
+            <details class="config-section">
+                <summary>Content Displays</summary>
+                <div class="section-body">
+                    <p class="help-text">Select which content to show in the rotation:</p>
+                    <h4>Baseball</h4>
+                    <div class="checkbox-columns">
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_cubs_facts">
+                                Team facts & custom message
+                            </label>
+                        </div>
 
-            <div class="form-group">
-                <label for="zip_code">ZIP Code (for weather):</label>
-                <input type="text" id="zip_code" placeholder="e.g., 60613" value="{{ config.zip_code }}">
-            </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_cubs_news">
+                                Team breaking news
+                            </label>
+                        </div>
 
-            <div class="form-group">
-                <label for="weather_api_key">OpenWeather API Key:</label>
-                <input type="text" id="weather_api_key" placeholder="Get free API key from openweathermap.org" value="{{ config.weather_api_key }}">
-                <div class="help-text">Free tier API key from <a href="https://openweathermap.org/api" target="_blank">openweathermap.org</a></div>
-            </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_cubs_history">
+                                Today in team history
+                            </label>
+                        </div>
 
-            <div class="form-group">
-                <label for="custom_message">Custom Message:</label>
-                <textarea id="custom_message">{{ config.custom_message }}</textarea>
-                <div class="help-text">This message displays during the off-season rotation</div>
-            </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_spring_training">
+                                Enable Spring Training countdown display
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_playoff_race">
+                                Enable playoff race display (July-September)
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_clock">
+                                Wrigley scoreboard clock
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_allstar">
+                                Enable All-Star Game display
+                            </label>
+                        </div>
+                    </div>
+
+                    <h4>Other Sports</h4>
+                    <div class="checkbox-columns">
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_bears">
+                                Enable Chicago Bears display (football season)
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_bears_news">
+                                Enable Bears breaking news display
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_pga">
+                                Enable PGA Tour leaderboard display (golf season)
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_pga_news">
+                                Enable PGA Tour news display (golf season)
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_pga_facts">
+                                Enable PGA Tour facts display (golf season)
+                            </label>
+                        </div>
+                    </div>
+
+                    <h4>News &amp; Info</h4>
+                    <div class="checkbox-columns">
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_weather">
+                                Enable Weather display
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_newsmax">
+                                Enable Newsmax news display
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_stocks">
+                                Enable Stock Exchange ticker display
+                            </label>
+                        </div>
+                    </div>
+
+                    <h4>Sky &amp; Flight</h4>
+                    <div class="checkbox-columns">
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_sky">
+                                Enable Sun &amp; Sky display (sunrise arc, moon phase)
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_iss">
+                                Enable ISS tracker display
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_flights">
+                                Enable Flight Tracking display
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_flight_radar">
+                                Enable Flight Radar View (full-screen radar scope)
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="flights_between_displays">
+                                Show flight display between every screen (~45s interstitial)
+                            </label>
+                        </div>
+                    </div>
+
+                    <h4>Faith &amp; Fun</h4>
+                    <div class="checkbox-columns">
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_bible">
+                                Enable Bible Verse of the Day display
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_bible_facts">
+                                Enable Bible Facts display
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_celebrations">
+                                Enable celebration days display (birthdays &amp; holidays)
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </details>
+
+            <details class="config-section">
+                <summary>Scroll Speeds</summary>
+                <div class="section-body">
+                    <div class="scroll-speeds-section">
+                        <p class="help-text" style="margin-bottom: 15px;">Adjust scrolling text speed for each display (1 = slowest, 10 = fastest):</p>
+
+                        <div class="speed-control">
+                            <label>Bears:</label>
+                            <input type="range" class="speed-slider" id="scroll_speed_bears" min="1" max="10" value="5">
+                            <span class="speed-value" id="scroll_speed_bears_val">5</span>
+                        </div>
+
+                        <div class="speed-control">
+                            <label>Bears News:</label>
+                            <input type="range" class="speed-slider" id="scroll_speed_bears_news" min="1" max="10" value="5">
+                            <span class="speed-value" id="scroll_speed_bears_news_val">5</span>
+                        </div>
+
+                        <div class="speed-control">
+                            <label>PGA:</label>
+                            <input type="range" class="speed-slider" id="scroll_speed_pga" min="1" max="10" value="5">
+                            <span class="speed-value" id="scroll_speed_pga_val">5</span>
+                        </div>
+
+                        <div class="speed-control">
+                            <label>PGA News:</label>
+                            <input type="range" class="speed-slider" id="scroll_speed_pga_news" min="1" max="10" value="5">
+                            <span class="speed-value" id="scroll_speed_pga_news_val">5</span>
+                        </div>
+
+                        <div class="speed-control">
+                            <label>PGA Facts:</label>
+                            <input type="range" class="speed-slider" id="scroll_speed_pga_facts" min="1" max="10" value="5">
+                            <span class="speed-value" id="scroll_speed_pga_facts_val">5</span>
+                        </div>
+
+                        <div class="speed-control">
+                            <label>Team Facts:</label>
+                            <input type="range" class="speed-slider" id="scroll_speed_cubs_facts" min="1" max="10" value="5">
+                            <span class="speed-value" id="scroll_speed_cubs_facts_val">5</span>
+                        </div>
+
+                        <div class="speed-control">
+                            <label>Team News:</label>
+                            <input type="range" class="speed-slider" id="scroll_speed_cubs_news" min="1" max="10" value="5">
+                            <span class="speed-value" id="scroll_speed_cubs_news_val">5</span>
+                        </div>
+
+                        <div class="speed-control">
+                            <label>Bible Verse:</label>
+                            <input type="range" class="speed-slider" id="scroll_speed_bible" min="1" max="10" value="5">
+                            <span class="speed-value" id="scroll_speed_bible_val">5</span>
+                        </div>
+
+                        <div class="speed-control">
+                            <label>Bible Facts:</label>
+                            <input type="range" class="speed-slider" id="scroll_speed_bible_facts" min="1" max="10" value="5">
+                            <span class="speed-value" id="scroll_speed_bible_facts_val">5</span>
+                        </div>
+
+                        <div class="speed-control">
+                            <label>Newsmax:</label>
+                            <input type="range" class="speed-slider" id="scroll_speed_newsmax" min="1" max="10" value="5">
+                            <span class="speed-value" id="scroll_speed_newsmax_val">5</span>
+                        </div>
+
+                        <div class="speed-control">
+                            <label>Stocks:</label>
+                            <input type="range" class="speed-slider" id="scroll_speed_stocks" min="1" max="10" value="5">
+                            <span class="speed-value" id="scroll_speed_stocks_val">5</span>
+                        </div>
+
+                        <div class="speed-control">
+                            <label>Spring Training:</label>
+                            <input type="range" class="speed-slider" id="scroll_speed_spring_training" min="1" max="10" value="5">
+                            <span class="speed-value" id="scroll_speed_spring_training_val">5</span>
+                        </div>
+
+                        <div class="speed-control">
+                            <label>Flights:</label>
+                            <input type="range" class="speed-slider" id="scroll_speed_flights" min="1" max="10" value="5">
+                            <span class="speed-value" id="scroll_speed_flights_val">5</span>
+                        </div>
+                    </div>
+                </div>
+            </details>
+
+            <details class="config-section">
+                <summary>Flight Tracking</summary>
+                <div class="section-body">
+                    <p class="help-text" style="margin-bottom: 15px;">Set your location to track flights overhead. Enter coordinates directly or use address lookup:</p>
+
+                    <div class="form-group">
+                        <label for="flight_tracking_latitude">Latitude:</label>
+                        <input type="text" id="flight_tracking_latitude" placeholder="e.g., 39.7500" style="width: 200px;">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="flight_tracking_longitude">Longitude:</label>
+                        <input type="text" id="flight_tracking_longitude" placeholder="e.g., -89.6653" style="width: 200px;">
+                        <div class="help-text">Enter decimal coordinates directly, or use address lookup below to auto-fill</div>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 10px; padding: 10px; background: #f0f4f8; border-radius: 8px;">
+                        <label for="flight_tracking_address">Address Lookup (optional):</label>
+                        <input type="text" id="flight_tracking_address" placeholder="e.g., Rochester, IL">
+                        <div class="help-text">Enter a city/state or full address, then click Calculate to auto-fill lat/lon above</div>
+                        <button type="button" onclick="geocodeAddress()" class="button-secondary" style="margin-top: 8px;">Calculate Coordinates</button>
+                        <div id="coordinates-display" style="margin-top: 5px;">
+                            <span id="coords-text" class="help-text"></span>
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 15px; padding: 10px; background: #f5f5f5; border-radius: 5px;">
+                        <label style="font-weight: bold; color: #0C2340;">Flight Data Source:</label>
+                        <div style="margin-top: 8px;">
+                            <label style="display: block; font-weight: normal; margin-bottom: 6px;">
+                                <input type="radio" name="flight_source" id="flight_source_adsb_lol" value="adsb_lol">
+                                adsb.lol (recommended &mdash; no setup)
+                            </label>
+                            <label style="display: block; font-weight: normal;">
+                                <input type="radio" name="flight_source" id="flight_source_local" value="local">
+                                Local ADS-B receiver
+                            </label>
+                        </div>
+                        <div id="local_receiver_url_wrapper" style="margin-top: 10px; padding-left: 22px; display: none;">
+                            <label for="adsb_receiver_url" style="font-weight: normal;">Local Receiver URL:</label>
+                            <input type="text" id="adsb_receiver_url"
+                                   placeholder="http://piaware.local/skyaware/data/aircraft.json"
+                                   value="{{ config.adsb_receiver_url }}">
+                            <small style="display: block; margin-top: 5px; color: #666;">
+                                Enter the URL of your PiAware / readsb aircraft.json endpoint.
+                                Example: <code>http://piaware.local/skyaware/data/aircraft.json</code>
+                            </small>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="flight_max_range_nm">Max Range (NM): <span id="flight_range_val">{{ config.flight_max_range_nm or 50 }}</span></label>
+                        <input type="range" id="flight_max_range_nm" min="10" max="100" value="{{ config.flight_max_range_nm or 50 }}" oninput="document.getElementById('flight_range_val').textContent=this.value">
+                        <div class="help-text">Maximum range in nautical miles for flight tracking (10-100 NM)</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="airlabs_api_key">AirLabs API Key (optional, for flight destinations):</label>
+                        <input type="text" id="airlabs_api_key" placeholder="Optional - destinations auto-lookup via airplanes.live" value="{{ config.airlabs_api_key }}">
+                        <div class="help-text">Optional. Destinations are now looked up free via airplanes.live. AirLabs is a secondary fallback.</div>
+                    </div>
+                </div>
+            </details>
+
+            <details class="config-section">
+                <summary>Weather &amp; Location</summary>
+                <div class="section-body">
+                    <div class="form-group">
+                        <label for="zip_code">ZIP Code (for weather):</label>
+                        <input type="text" id="zip_code" placeholder="e.g., 60613" value="{{ config.zip_code }}">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="weather_api_key">OpenWeather API Key:</label>
+                        <input type="text" id="weather_api_key" placeholder="Get free API key from openweathermap.org" value="{{ config.weather_api_key }}">
+                        <div class="help-text">Free tier API key from <a href="https://openweathermap.org/api" target="_blank">openweathermap.org</a></div>
+                    </div>
+                </div>
+            </details>
+
+            <details class="config-section">
+                <summary>Custom Message</summary>
+                <div class="section-body">
+                    <div class="form-group">
+                        <label for="custom_message">Custom Message:</label>
+                        <textarea id="custom_message">{{ config.custom_message }}</textarea>
+                        <div class="help-text">This message displays during the off-season rotation</div>
+                    </div>
+                </div>
+            </details>
 
             <button onclick="saveConfig()">Save Configuration</button>
             <div id="config-status" class="status"></div>
@@ -1037,8 +1153,14 @@ HTML_TEMPLATE = """
         // Auto-load config values on page load
         window.onload = function() {
             const config = {{ config | tojson }};
+            const teamSlug = config.team || 'cubs';
+            const teamRadio = document.querySelector(
+                `input[name="team"][value="${teamSlug}"]`);
+            if (teamRadio) teamRadio.checked = true;
+            window._loadedTeam = teamSlug;
             document.getElementById('display_mode').value = config.display_mode || 'auto';
             document.getElementById('enable_weather').checked = config.enable_weather !== false;
+            document.getElementById('enable_allstar').checked = config.enable_allstar !== false;
             document.getElementById('enable_bears').checked = config.enable_bears !== false;
             document.getElementById('enable_bears_news').checked = config.enable_bears_news !== false;
             document.getElementById('enable_pga').checked = config.enable_pga !== false;
@@ -1288,11 +1410,13 @@ HTML_TEMPLATE = """
             const lonValue = document.getElementById('flight_tracking_longitude').value;
 
             const config = {
+                team: document.querySelector('input[name="team"]:checked').value,
                 zip_code: document.getElementById('zip_code').value,
                 weather_api_key: document.getElementById('weather_api_key').value,
                 custom_message: document.getElementById('custom_message').value,
                 display_mode: document.getElementById('display_mode').value,
                 enable_weather: document.getElementById('enable_weather').checked,
+                enable_allstar: document.getElementById('enable_allstar').checked,
                 enable_bears: document.getElementById('enable_bears').checked,
                 enable_bears_news: document.getElementById('enable_bears_news').checked,
                 enable_pga: document.getElementById('enable_pga').checked,
@@ -1355,7 +1479,14 @@ HTML_TEMPLATE = """
                 const data = await response.json();
 
                 if (data.success) {
-                    showStatus('config-status', 'Configuration saved successfully! Restart the service for changes to take effect.', true);
+                    const teamChanged =
+                        config.team !== window._loadedTeam;
+                    window._loadedTeam = config.team;
+                    showStatus('config-status',
+                        teamChanged
+                            ? 'Configuration saved! REBOOT the Pi for the team change to take effect (System tab).'
+                            : 'Configuration saved successfully! Restart the service for changes to take effect.',
+                        true);
                 } else {
                     showStatus('config-status', 'Error: ' + data.message, false);
                 }
@@ -1556,8 +1687,18 @@ def admin():
         connection_mode=get_connection_mode(),
         current_network=get_current_network(),
         ip_address=get_ip_address(),
-        config=config
+        config=config,
+        teams=TEAMS,
+        active_team=get_active_team(config)
     )
+
+
+@app.route('/team_logo/<slug>')
+def team_logo(slug):
+    pack = TEAMS.get(slug)
+    if pack is None:
+        return ('Not found', 404)
+    return send_file(pack.logo_path, mimetype='image/png')
 
 
 @app.route('/scan_networks')
@@ -1830,11 +1971,13 @@ def save_config_route():
 
         # Update with new values
         current_config.update({
+            'team': data.get('team', DEFAULT_TEAM_SLUG),
             'zip_code': data.get('zip_code', ''),
             'weather_api_key': data.get('weather_api_key', ''),
             'custom_message': data.get('custom_message', 'GO CUBS GO!'),
             'display_mode': data.get('display_mode', 'auto'),
             'enable_weather': data.get('enable_weather', True),
+            'enable_allstar': data.get('enable_allstar', True),
             'enable_bears': data.get('enable_bears', True),
             'enable_bears_news': data.get('enable_bears_news', True),
             'enable_pga': data.get('enable_pga', True),
