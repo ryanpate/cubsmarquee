@@ -12,7 +12,9 @@ import time
 import re
 
 from scoreboard_config import DisplayConfig, PREVIEW_FILE_PATH
-from teams import TEAMS, DEFAULT_TEAM_SLUG, apply_team_defaults, get_active_team
+from teams import (
+    TEAMS, DEFAULT_TEAM_SLUG, NON_DEFAULT_OFF_KEYS, DEFAULT_CUSTOM_MESSAGES,
+    apply_team_defaults, get_active_team)
 
 app = Flask(__name__)
 
@@ -573,7 +575,7 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <div class="container">
-        <h1>🐻 {{ active_team.short_name }} Scoreboard Admin</h1>
+        <h1>⚾ {{ active_team.short_name }} Scoreboard Admin</h1>
         <div class="subtitle">Configuration & Management Panel</div>
 
         <div class="info-box">
@@ -1122,6 +1124,13 @@ HTML_TEMPLATE = """
     <script>
         let currentLogType = null;
 
+        // Per-team default custom_message text, keyed by slug. Rendered
+        // from teams.py so this can never drift from apply_team_defaults().
+        const TEAM_DEFAULT_MESSAGES = {{ team_default_messages | tojson }};
+        // Config keys that default to off for non-Cubs teams (see
+        // teams.NON_DEFAULT_OFF_KEYS); these double as the checkbox ids.
+        const NON_DEFAULT_OFF_KEYS = {{ non_default_off_keys | tojson }};
+
         // Poll the scoreboard heartbeat for the status row
         async function refreshScoreboardStatus() {
             const el = document.getElementById('scoreboard-status');
@@ -1158,6 +1167,40 @@ HTML_TEMPLATE = """
                 `input[name="team"][value="${teamSlug}"]`);
             if (teamRadio) teamRadio.checked = true;
             window._loadedTeam = teamSlug;
+
+            // Track the currently-selected team separately from
+            // window._loadedTeam (which reflects what's saved on the
+            // server and drives the "reboot required" notice) so the
+            // team-change handler below can tell whether the custom
+            // message is still the previous team's default.
+            let currentTeamSlug = teamSlug;
+            document.querySelectorAll('input[name="team"]').forEach(function(radio) {
+                radio.addEventListener('change', function() {
+                    const previousSlug = currentTeamSlug;
+                    const newSlug = this.value;
+
+                    // Chicago-specific content defaults to off for
+                    // non-Cubs teams; re-checked when switching back to
+                    // Cubs. The user can still override before saving.
+                    NON_DEFAULT_OFF_KEYS.forEach(function(key) {
+                        document.getElementById(key).checked = (newSlug === 'cubs');
+                    });
+
+                    // Only replace the custom message if it still matches
+                    // the previous team's default - never touch text the
+                    // user customized themselves.
+                    const messageField = document.getElementById('custom_message');
+                    const previousDefault = TEAM_DEFAULT_MESSAGES[previousSlug];
+                    if (previousDefault !== undefined &&
+                        messageField.value === previousDefault &&
+                        TEAM_DEFAULT_MESSAGES[newSlug] !== undefined) {
+                        messageField.value = TEAM_DEFAULT_MESSAGES[newSlug];
+                    }
+
+                    currentTeamSlug = newSlug;
+                });
+            });
+
             document.getElementById('display_mode').value = config.display_mode || 'auto';
             document.getElementById('enable_weather').checked = config.enable_weather !== false;
             document.getElementById('enable_allstar').checked = config.enable_allstar !== false;
@@ -1409,8 +1452,9 @@ HTML_TEMPLATE = """
             const latValue = document.getElementById('flight_tracking_latitude').value;
             const lonValue = document.getElementById('flight_tracking_longitude').value;
 
+            const checkedTeamRadio = document.querySelector('input[name="team"]:checked');
             const config = {
-                team: document.querySelector('input[name="team"]:checked').value,
+                team: checkedTeamRadio ? checkedTeamRadio.value : 'cubs',
                 zip_code: document.getElementById('zip_code').value,
                 weather_api_key: document.getElementById('weather_api_key').value,
                 custom_message: document.getElementById('custom_message').value,
@@ -1689,7 +1733,9 @@ def admin():
         ip_address=get_ip_address(),
         config=config,
         teams=TEAMS,
-        active_team=get_active_team(config)
+        active_team=get_active_team(config),
+        team_default_messages=DEFAULT_CUSTOM_MESSAGES,
+        non_default_off_keys=NON_DEFAULT_OFF_KEYS
     )
 
 
@@ -1971,7 +2017,8 @@ def save_config_route():
 
         # Update with new values
         current_config.update({
-            'team': data.get('team', DEFAULT_TEAM_SLUG),
+            'team': data.get(
+                'team', current_config.get('team', DEFAULT_TEAM_SLUG)),
             'zip_code': data.get('zip_code', ''),
             'weather_api_key': data.get('weather_api_key', ''),
             'custom_message': data.get(

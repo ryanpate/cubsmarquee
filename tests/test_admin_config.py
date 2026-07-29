@@ -48,3 +48,25 @@ def test_team_logo_route(client):
     assert resp.status_code == 200
     assert resp.mimetype == 'image/png'
     assert client.get('/team_logo/mets').status_code == 404
+
+
+def test_admin_page_wires_team_change_listener(client):
+    html = client.get('/admin').data.decode()
+    # The team-default-message map is injected from teams.py so the page
+    # JS can never drift from apply_team_defaults().
+    assert 'TEAM_DEFAULT_MESSAGES' in html
+    assert 'GO CUBS GO! SEE YOU NEXT SEASON!' in html
+    assert 'GO CARDINALS GO! SEE YOU NEXT SEASON!' in html
+    assert 'NON_DEFAULT_OFF_KEYS' in html
+    # A change listener is wired on the team radios.
+    assert "input[name=\"team\"]" in html
+    assert "addEventListener('change'" in html
+
+
+def test_save_config_without_team_key_preserves_existing_team(
+        client, tmp_path):
+    (tmp_path / 'config.json').write_text(json.dumps({'team': 'cardinals'}))
+    resp = client.post('/save_config', json={})
+    assert resp.get_json()['success']
+    saved = json.loads((tmp_path / 'config.json').read_text())
+    assert saved['team'] == 'cardinals'

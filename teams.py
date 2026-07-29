@@ -165,6 +165,15 @@ TEAMS: dict[str, TeamPack] = {
 }
 
 
+# Default custom_message text per team, keyed by slug. Shared by
+# apply_team_defaults() and the admin panel's page JS (injected via
+# render_template_string) so the two can never drift apart.
+DEFAULT_CUSTOM_MESSAGES: dict[str, str] = {
+    slug: f'GO {team.short_name.upper()} GO! SEE YOU NEXT SEASON!'
+    for slug, team in TEAMS.items()
+}
+
+
 def get_active_team(config: dict | None = None) -> TeamPack:
     """Resolve the active team pack from config (or the user config file)"""
     if config is None:
@@ -186,9 +195,8 @@ def apply_team_defaults(defaults: dict, user_config: dict) -> dict:
         for key in NON_DEFAULT_OFF_KEYS:
             if key not in user_config:
                 adjusted[key] = False
-        if 'custom_message' not in user_config and slug in TEAMS:
-            team_name = TEAMS[slug].short_name.upper()
-            adjusted['custom_message'] = f'GO {team_name} GO! SEE YOU NEXT SEASON!'
+        if 'custom_message' not in user_config and slug in DEFAULT_CUSTOM_MESSAGES:
+            adjusted['custom_message'] = DEFAULT_CUSTOM_MESSAGES[slug]
     return adjusted
 
 
