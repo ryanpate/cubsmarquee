@@ -54,6 +54,23 @@ class TestPackContents:
             assert pack.slug == slug
 
 
+class TestNewsKeywords:
+    def test_both_packs_have_keywords(self):
+        for pack in TEAMS.values():
+            assert pack.news_keywords
+
+    def test_cubs_keywords_contain_expected_terms(self):
+        assert 'CUBS' in TEAMS['cubs'].news_keywords
+        assert 'WRIGLEY FIELD' in TEAMS['cubs'].news_keywords
+
+    def test_cardinals_keywords_contain_expected_terms(self):
+        assert 'CARDINALS' in TEAMS['cardinals'].news_keywords
+        assert 'BUSCH STADIUM' in TEAMS['cardinals'].news_keywords
+
+    def test_cardinals_keywords_do_not_include_cubs(self):
+        assert 'CUBS' not in TEAMS['cardinals'].news_keywords
+
+
 class TestTeamDefaults:
     DEFAULTS = {'enable_bears': True, 'enable_bears_news': True,
                 'enable_clock': True, 'enable_weather': True}

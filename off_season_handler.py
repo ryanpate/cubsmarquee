@@ -255,64 +255,15 @@ class OffSeasonHandler:
                         # Get title and format it
                         headline = entry.title.strip().upper()
 
-                        # Comprehensive Cubs keyword filtering
-                        # Current players (2025-2026 season) and retired Cubs legends only
-                        cubs_keywords = [
-                            # Team names and variations
-                            'CUBS', 'CHICAGO CUBS', 'CHI CUBS', 'CUBBIES',
-                            'NORTH SIDERS',
+                        # Team keyword filtering (current players, retired
+                        # legends, stadium, etc.) from the active team pack
+                        is_cubs_related = any(
+                            keyword in headline
+                            for keyword in self.team.news_keywords)
 
-                            # Current players (2025-2026 season)
-                            'CODY BELLINGER', 'BELLINGER',
-                            'DANSBY SWANSON', 'SWANSON',
-                            'IAN HAPP', 'HAPP',
-                            'NICO HOERNER', 'HOERNER',
-                            'SEIYA SUZUKI', 'SUZUKI',
-                            'JUSTIN STEELE', 'STEELE',
-                            'SHOTA IMANAGA', 'IMANAGA',
-                            'MICHAEL BUSCH', 'BUSCH',
-                            'PETE CROW-ARMSTRONG', 'PCA',
-                            'MIGUEL AMAYA', 'AMAYA',
-                            'ISAAC PAREDES', 'PAREDES',
-                            'PATRICK WISDOM', 'WISDOM',
-                            'JAMESON TAILLON', 'TAILLON',
-                            'KYLE HENDRICKS', 'HENDRICKS',
-                            'JAVIER ASSAD', 'ASSAD',
-                            'HAYDEN WESNESKI', 'WESNESKI',
-                            'PORTER HODGE', 'HODGE',
-
-                            # Retired Cubs legends (who retired as Cubs only)
-                            'ERNIE BANKS', 'BANKS', 'MR. CUB',
-                            'RYNE SANDBERG', 'SANDBERG', 'RYNO',
-                            'BILLY WILLIAMS', 'WILLIAMS',
-                            'RON SANTO', 'SANTO',
-                            'KERRY WOOD', 'WOOD',
-                            'MORDECAI BROWN', 'THREE FINGER BROWN',
-                            'HACK WILSON', 'WILSON',
-                            'GABBY HARTNETT', 'HARTNETT',
-                            'PHIL CAVARRETTA', 'CAVARRETTA',
-
-                            # Current coaches and front office
-                            'CRAIG COUNSELL', 'COUNSELL',
-                            'JED HOYER', 'HOYER',
-
-                            # Stadium and facilities
-                            'WRIGLEY FIELD', 'WRIGLEY',
-                            'FRIENDLY CONFINES',
-                            'CLARK AND ADDISON',
-                            'WAVELAND',
-                            'SHEFFIELD',
-
-                            # Division
-                            'NL CENTRAL', 'NATIONAL LEAGUE'
-                        ]
-
-                        # Check if headline mentions Cubs
-                        is_cubs_related = any(keyword in headline for keyword in cubs_keywords)
-
-                        if is_cubs_related or 'cubs' in feed_url.lower():
-                            # Add "CUBS NEWS:" prefix
-                            formatted_headline = f"CUBS NEWS: {headline}"
+                        if is_cubs_related or self.team.slug in feed_url.lower():
+                            # Add team news prefix
+                            formatted_headline = f"{self.team.short_name.upper()} NEWS: {headline}"
 
                             # Avoid duplicates
                             if formatted_headline not in news_headlines:

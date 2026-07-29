@@ -36,6 +36,7 @@ class TeamPack:
     facts_basename: str        # resolved via data_path_candidates()
     history_basename: str      # resolved via data_path_candidates()
     news_rss_url: str
+    news_keywords: tuple[str, ...]  # RSS headline filter for team-related news
 
 
 TEAMS: dict[str, TeamPack] = {
@@ -54,6 +55,55 @@ TEAMS: dict[str, TeamPack] = {
         facts_basename='cubs_facts.json',
         history_basename='cubs_history.json',
         news_rss_url='https://www.mlb.com/cubs/feeds/news/rss.xml',
+        news_keywords=(
+            # Team names and variations
+            'CUBS', 'CHICAGO CUBS', 'CHI CUBS', 'CUBBIES',
+            'NORTH SIDERS',
+
+            # Current players (2025-2026 season)
+            'CODY BELLINGER', 'BELLINGER',
+            'DANSBY SWANSON', 'SWANSON',
+            'IAN HAPP', 'HAPP',
+            'NICO HOERNER', 'HOERNER',
+            'SEIYA SUZUKI', 'SUZUKI',
+            'JUSTIN STEELE', 'STEELE',
+            'SHOTA IMANAGA', 'IMANAGA',
+            'MICHAEL BUSCH', 'BUSCH',
+            'PETE CROW-ARMSTRONG', 'PCA',
+            'MIGUEL AMAYA', 'AMAYA',
+            'ISAAC PAREDES', 'PAREDES',
+            'PATRICK WISDOM', 'WISDOM',
+            'JAMESON TAILLON', 'TAILLON',
+            'KYLE HENDRICKS', 'HENDRICKS',
+            'JAVIER ASSAD', 'ASSAD',
+            'HAYDEN WESNESKI', 'WESNESKI',
+            'PORTER HODGE', 'HODGE',
+
+            # Retired Cubs legends (who retired as Cubs only)
+            'ERNIE BANKS', 'BANKS', 'MR. CUB',
+            'RYNE SANDBERG', 'SANDBERG', 'RYNO',
+            'BILLY WILLIAMS', 'WILLIAMS',
+            'RON SANTO', 'SANTO',
+            'KERRY WOOD', 'WOOD',
+            'MORDECAI BROWN', 'THREE FINGER BROWN',
+            'HACK WILSON', 'WILSON',
+            'GABBY HARTNETT', 'HARTNETT',
+            'PHIL CAVARRETTA', 'CAVARRETTA',
+
+            # Current coaches and front office
+            'CRAIG COUNSELL', 'COUNSELL',
+            'JED HOYER', 'HOYER',
+
+            # Stadium and facilities
+            'WRIGLEY FIELD', 'WRIGLEY',
+            'FRIENDLY CONFINES',
+            'CLARK AND ADDISON',
+            'WAVELAND',
+            'SHEFFIELD',
+
+            # Division
+            'NL CENTRAL', 'NATIONAL LEAGUE',
+        ),
     ),
     'cardinals': TeamPack(
         slug='cardinals',
@@ -70,6 +120,47 @@ TEAMS: dict[str, TeamPack] = {
         facts_basename='cardinals_facts.json',
         history_basename='cardinals_history.json',
         news_rss_url='https://www.mlb.com/cardinals/feeds/news/rss.xml',
+        news_keywords=(
+            # Team names and variations
+            'CARDINALS', 'ST LOUIS CARDINALS', 'STL CARDINALS', 'CARDS',
+            'REDBIRDS',
+
+            # Current players (2025-2026 season)
+            'NOLAN ARENADO', 'ARENADO',
+            'WILLSON CONTRERAS', 'CONTRERAS',
+            'MASYN WINN', 'WINN',
+            'BRENDAN DONOVAN', 'DONOVAN',
+            'LARS NOOTBAAR', 'NOOTBAAR',
+            'JORDAN WALKER',
+            'IVAN HERRERA', 'HERRERA',
+            'NOLAN GORMAN', 'GORMAN',
+            'ALEC BURLESON', 'BURLESON',
+            'MATTHEW LIBERATORE', 'LIBERATORE',
+            'ANDRE PALLANTE', 'PALLANTE',
+
+            # Retired Cardinals legends
+            'STAN MUSIAL', 'MUSIAL',
+            'BOB GIBSON', 'GIBSON',
+            'LOU BROCK', 'BROCK',
+            'OZZIE SMITH',
+            'YADIER MOLINA', 'MOLINA',
+            'ADAM WAINWRIGHT', 'WAINWRIGHT',
+            'ALBERT PUJOLS', 'PUJOLS',
+            'RED SCHOENDIENST', 'SCHOENDIENST',
+            'WHITEY HERZOG', 'HERZOG',
+            'TONY LA RUSSA', 'LA RUSSA',
+
+            # Current manager and front office
+            'OLI MARMOL', 'MARMOL',
+            'CHAIM BLOOM', 'BLOOM',
+
+            # Stadium and facilities
+            'BUSCH STADIUM', 'BUSCH',
+            'THE ARCH',
+
+            # Division
+            'NL CENTRAL', 'NATIONAL LEAGUE',
+        ),
     ),
 }
 
