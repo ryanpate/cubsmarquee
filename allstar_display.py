@@ -837,7 +837,7 @@ class AllStarDisplay:
                 for y in range(33, 48):
                     for x in range(0, 96):
                         m.draw_pixel(x, y, *Colors.YELLOW)
-                banner = 'CUBS STAR AT BAT'
+                banner = f"{self.team.short_name.upper()} STAR AT BAT"
                 m.draw_text(
                     'micro', self._center_x(banner, Fonts.CHAR_WIDTH_MICRO),
                     39, self.team.primary_color, banner)

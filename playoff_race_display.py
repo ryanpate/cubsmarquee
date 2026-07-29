@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 import pendulum
 import statsapi
+from pathlib import Path
 from PIL import Image
 from typing import TYPE_CHECKING, Any
 
@@ -192,10 +193,10 @@ class PlayoffRaceDisplay:
         title_x = max(0, (DisplayConfig.MATRIX_COLS - len(title) * 6) // 2)
         self.manager.draw_text('small_bold', title_x, 9, Colors.WHITE, title)
 
-        # Cubs logo anchors the left side, record underneath
-        cubs_logo = self._load_logo('cubs', 22)
-        if cubs_logo:
-            self._paste_logo(cubs_logo, 3, 13)
+        # Team logo anchors the left side, record underneath
+        team_logo = self._load_logo(Path(self.team.logo_path).stem, 22)
+        if team_logo:
+            self._paste_logo(team_logo, 3, 13)
         rows = self._format_race_rows(race)
         record = rows[2][1]
         record_x = 14 - len(record) * 2  # centered under the logo
