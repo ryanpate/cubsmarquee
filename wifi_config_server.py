@@ -1974,7 +1974,8 @@ def save_config_route():
             'team': data.get('team', DEFAULT_TEAM_SLUG),
             'zip_code': data.get('zip_code', ''),
             'weather_api_key': data.get('weather_api_key', ''),
-            'custom_message': data.get('custom_message', 'GO CUBS GO!'),
+            'custom_message': data.get(
+                'custom_message', current_config.get('custom_message', 'GO CUBS GO!')),
             'display_mode': data.get('display_mode', 'auto'),
             'enable_weather': data.get('enable_weather', True),
             'enable_allstar': data.get('enable_allstar', True),

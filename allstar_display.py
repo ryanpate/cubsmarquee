@@ -696,7 +696,8 @@ class AllStarDisplay:
     def _display_asg_pregame(self, duration: int, info: dict) -> None:
         tz = 'America/Chicago'
         cubs_stars = self._get_cubs_allstars(info['game_pk'])
-        stars_text = ('CUBS ALL-STARS: ' + ', '.join(cubs_stars).upper()
+        stars_text = (f'{self.team.short_name.upper()} ALL-STARS: '
+                      + ', '.join(cubs_stars).upper()
                       if cubs_stars else '')
         stars_width = len(stars_text) * Fonts.CHAR_WIDTH_MICRO
         scroll_x = float(DisplayConfig.MATRIX_COLS)

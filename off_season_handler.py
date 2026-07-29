@@ -1091,7 +1091,8 @@ class OffSeasonHandler:
 
         # If no news available, show message
         if not live_news:
-            live_news = ["CUBS NEWS: STAY TUNED FOR THE LATEST CUBS UPDATES!"]
+            team_name = self.team.short_name.upper()
+            live_news = [f"{team_name} NEWS: STAY TUNED FOR THE LATEST {team_name} UPDATES!"]
 
         start_time = time.time()
         message_index = 0
@@ -1153,7 +1154,8 @@ class OffSeasonHandler:
     def _display_custom_message(self, duration=180):
         """Display custom scrolling message combined with random Cubs facts"""
         # Get custom message from config
-        custom_message = self.config.get('custom_message', 'GO CUBS GO!')
+        custom_message = self.config.get(
+            'custom_message', f'GO {self.team.short_name.upper()} GO!')
 
         start_time = time.time()
         self.scroll_position = 96

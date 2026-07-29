@@ -177,13 +177,18 @@ def apply_team_defaults(defaults: dict, user_config: dict) -> dict:
     """Return a copy of defaults adjusted for the active team.
 
     Chicago-specific content defaults to off for non-Cubs teams, but an
-    explicit user setting always wins.
+    explicit user setting always wins. The default custom message is
+    likewise re-worded for the active team.
     """
     adjusted = dict(defaults)
-    if user_config.get('team', DEFAULT_TEAM_SLUG) != DEFAULT_TEAM_SLUG:
+    slug = user_config.get('team', DEFAULT_TEAM_SLUG)
+    if slug != DEFAULT_TEAM_SLUG:
         for key in NON_DEFAULT_OFF_KEYS:
             if key not in user_config:
                 adjusted[key] = False
+        if 'custom_message' not in user_config and slug in TEAMS:
+            team_name = TEAMS[slug].short_name.upper()
+            adjusted['custom_message'] = f'GO {team_name} GO! SEE YOU NEXT SEASON!'
     return adjusted
 
 

@@ -1,4 +1,4 @@
-"""Playoff race display - Cubs division and wild card position"""
+"""Playoff race display - division and wild card position"""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ STRIP_NAVY = (10, 25, 55)
 
 
 class PlayoffRaceDisplay:
-    """Shows the Cubs' playoff position during the second half of the season"""
+    """Shows the team's playoff position during the second half of the season"""
 
     def __init__(self, scoreboard_manager: ScoreboardManager) -> None:
         self.manager = scoreboard_manager
@@ -178,7 +178,7 @@ class PlayoffRaceDisplay:
     def _draw_race_frame(
         self, race: dict[str, Any], tick: float | None = None
     ) -> None:
-        """Cubs logo, color-coded standings rows, and a playoff status strip"""
+        """Team logo, color-coded standings rows, and a playoff status strip"""
         self.manager.clear_canvas()
         background = Image.new(
             'RGB', (DisplayConfig.MATRIX_COLS, DisplayConfig.MATRIX_ROWS),
@@ -229,7 +229,7 @@ class PlayoffRaceDisplay:
         elif in_position:
             text = 'PLAYOFF SPOT!'
         else:
-            text = 'OUT - GO CUBS'
+            text = f'OUT - GO {self.team.short_name.upper()}'
 
         self._fill_strip(strip_color)
         text_x = 28 + max(0, (DisplayConfig.MATRIX_COLS - 28 - len(text) * 4) // 2)

@@ -26,6 +26,7 @@ sudo systemctl start cubs-scoreboard
 | `live_game_handler.py` | Live game display with scores, bases, innings, batter info |
 | `off_season_handler.py` | Off-season content rotation manager |
 | `scoreboard_config.py` | Configuration constants (colors, positions, fonts) |
+| `teams.py` | Team packs (Cubs, Cardinals): identity, colors, assets, content sources incl. news keywords |
 
 ### Content Displays
 | File | Purpose |
@@ -159,6 +160,7 @@ User configuration stored at `/home/pi/config.json`:
 - Custom display message
 - Feature toggles (Bears, PGA, news feeds)
 - Weather location
+- `team` — active team pack slug (`cubs` default, `cardinals`)
 
 Access admin panel at `http://cubsmarquee.local/admin` for GUI configuration.
 

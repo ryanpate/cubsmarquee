@@ -174,10 +174,12 @@ class ConfigValidator:
         """Validate that required files exist"""
         results: list[ValidationResult] = []
 
+        from teams import get_active_team
+        team = get_active_team(self.config)
         required_files = [
-            ("./marquee.png", "Marquee background image"),
+            (team.marquee_path, "Marquee background image"),
             ("./baseball.png", "Batting indicator image"),
-            ("./logos/cubs.png", "Cubs logo"),
+            (team.logo_path, f"{team.short_name} logo"),
         ]
 
         for file_path, description in required_files:
