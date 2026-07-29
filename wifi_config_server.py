@@ -184,7 +184,11 @@ def load_config():
         'adsb_receiver_url': '',
         'flight_max_range_nm': 50,
         'airlabs_api_key': '',
-        'brightness': 100
+        'brightness': 100,
+        'dim_enabled': False,
+        'dim_start': '22:00',
+        'dim_end': '07:00',
+        'dim_brightness': 30
     }
 
     try:
