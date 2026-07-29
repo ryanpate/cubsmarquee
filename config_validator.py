@@ -35,6 +35,7 @@ class ConfigValidator:
     OPTIONAL_FIELDS: list[tuple[str, str]] = [
         ("zip_code", "ZIP code for weather display"),
         ("weather_api_key", "OpenWeatherMap API key for weather display"),
+        ("team", "Active team pack slug (cubs, cardinals)"),
     ]
 
     def __init__(self, config_path: Path | None = None) -> None:
@@ -155,6 +156,20 @@ class ConfigValidator:
             is_required=False
         )
 
+    def validate_team(self) -> ValidationResult:
+        """Validate the team slug, if present, names a known team pack"""
+        from teams import TEAMS, DEFAULT_TEAM_SLUG
+        slug = self.config.get("team", DEFAULT_TEAM_SLUG)
+        if slug in TEAMS:
+            return ValidationResult(
+                is_valid=True, field="team",
+                message=f"Team pack: {slug}", is_required=False)
+        return ValidationResult(
+            is_valid=False, field="team",
+            message=(f"Unknown team '{slug}' - will fall back to "
+                     f"{DEFAULT_TEAM_SLUG}. Known: {', '.join(TEAMS)}"),
+            is_required=False)
+
     def validate_file_paths(self) -> list[ValidationResult]:
         """Validate that required files exist"""
         results: list[ValidationResult] = []
@@ -239,6 +254,7 @@ class ConfigValidator:
         self.validation_results.extend(self.validate_required_fields())
         self.validation_results.extend(self.validate_optional_fields())
         self.validation_results.append(self.validate_weather_config())
+        self.validation_results.append(self.validate_team())
         self.validation_results.extend(self.validate_file_paths())
         self.validation_results.extend(self.validate_fonts())
 
