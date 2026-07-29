@@ -213,6 +213,8 @@ class TestRssCallSitesUseTimeout:
 
         seen = self._patch_network(monkeypatch)
         handler = osh.OffSeasonHandler.__new__(osh.OffSeasonHandler)
+        from teams import get_active_team
+        handler.team = get_active_team({})
 
         result = handler._fetch_cubs_news_rss()
 

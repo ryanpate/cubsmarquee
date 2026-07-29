@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import time
 import json
-import os
 import random
 import pendulum
 from PIL import Image
 from typing import TYPE_CHECKING, Any
 
 from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, get_scroll_delay, load_user_config
+from teams import get_active_team, apply_team_defaults, data_path_candidates
 from rss_fetch import fetch_feed
 from weather_display import WeatherDisplay
 from bears_display import BearsDisplay
@@ -37,6 +37,7 @@ class OffSeasonHandler:
     def __init__(self, scoreboard_manager: ScoreboardManager) -> None:
         """Initialize with reference to main scoreboard manager"""
         self.manager = scoreboard_manager
+        self.team = get_active_team()
         self.weather_display: WeatherDisplay = WeatherDisplay(scoreboard_manager)
         self.bears_display: BearsDisplay = BearsDisplay(scoreboard_manager)
         self.pga_display: PGADisplay = PGADisplay(scoreboard_manager)
@@ -121,11 +122,11 @@ class OffSeasonHandler:
     def _load_marquee_image(self) -> Image.Image | None:
         """Load and cache the marquee image"""
         try:
-            marquee = Image.open('./marquee.png')
+            marquee = Image.open(self.team.marquee_path)
             print("Marquee image loaded and cached")
             return marquee
         except FileNotFoundError:
-            print("Warning: marquee.png not found")
+            print(f"Warning: {self.team.marquee_path} not found")
             return None
         except Exception as e:
             print(f"Error loading marquee image: {e}")
@@ -195,36 +196,29 @@ class OffSeasonHandler:
         }
 
         # Merge with defaults (cached loader; only re-parses on file change)
-        default_config.update(load_user_config())
+        user_config = load_user_config()
+        default_config = apply_team_defaults(default_config, user_config)
+        default_config.update(user_config)
         return default_config
 
     def _load_cubs_facts(self) -> list[str]:
-        """Load Cubs facts from JSON file"""
-        facts_path: str = '/home/pi/cubs_facts.json'
-
-        # Default facts in case file doesn't exist
+        """Load team facts from the active team pack's JSON file"""
         default_facts: list[str] = [
-            "CUBS WON THE 2016 WORLD SERIES!",
-            "WRIGLEY FIELD - HOME OF THE CUBS SINCE 1916",
-            "FLY THE W! GO CUBS GO!",
-            "108 YEARS - WORTH THE WAIT!",
-            "THE FRIENDLY CONFINES"
+            f"GO {self.team.short_name.upper()}!",
+            f"{self.team.name.upper()} BASEBALL",
         ]
-
-        try:
-            if os.path.exists(facts_path):
+        for facts_path in data_path_candidates(self.team.facts_basename):
+            try:
                 with open(facts_path, 'r') as f:
-                    data = json.load(f)
-                    facts = data.get('facts', default_facts)
-                    print(f"Loaded {len(facts)} Cubs facts from file")
+                    facts = json.load(f).get('facts', [])
+                if facts:
+                    print(f"Loaded {len(facts)} {self.team.short_name} "
+                          f"facts from {facts_path}")
                     return facts
-            else:
-                print(
-                    f"Cubs facts file not found at {facts_path}, using defaults")
-                return default_facts
-        except Exception as e:
-            print(f"Error loading Cubs facts: {e}")
-            return default_facts
+            except (OSError, json.JSONDecodeError) as e:
+                continue
+        print(f"{self.team.facts_basename} not found, using defaults")
+        return default_facts
 
     def _fetch_cubs_news_rss(self):
         """
@@ -233,16 +227,16 @@ class OffSeasonHandler:
         """
         news_headlines = []
 
-        # List of RSS feed URLs for Cubs/MLB news
+        # List of RSS feed URLs for team/MLB news
         rss_feeds = [
             'https://www.espn.com/espn/rss/mlb/news',
-            'https://www.mlb.com/cubs/feeds/news/rss.xml',
+            self.team.news_rss_url,
             'https://www.cbssports.com/rss/headlines/mlb/'
         ]
 
         for feed_url in rss_feeds:
             try:
-                print(f"Fetching Cubs news from {feed_url}")
+                print(f"Fetching {self.team.short_name} news from {feed_url}")
                 feed = fetch_feed(feed_url)
 
                 # Check if feed has entries even if bozo flag is set
@@ -323,7 +317,7 @@ class OffSeasonHandler:
                             # Avoid duplicates
                             if formatted_headline not in news_headlines:
                                 news_headlines.append(formatted_headline)
-                                print(f"Added Cubs headline: {headline[:50]}...")
+                                print(f"Added {self.team.short_name} headline: {headline[:50]}...")
 
                     except AttributeError as e:
                         print(f"Error parsing entry: {e}")
@@ -334,9 +328,9 @@ class OffSeasonHandler:
                 continue
 
         if not news_headlines:
-            print("No Cubs news found, using fallback message")
+            print(f"No {self.team.short_name} news found, using fallback message")
         else:
-            print(f"Total Cubs headlines collected: {len(news_headlines)}")
+            print(f"Total {self.team.short_name} headlines collected: {len(news_headlines)}")
 
         # Return up to 12 news items (increased from 8 for more variety)
         return news_headlines[:12]

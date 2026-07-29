@@ -120,3 +120,31 @@ class TestTeamHistoryDisplay:
         display = TeamHistoryDisplay(MagicMock())
         assert display.team.slug == 'cardinals'
         assert display.history  # cardinals_history.json parsed
+
+
+class TestOffSeasonTeamContent:
+    def _handler(self, monkeypatch, team_slug):
+        import teams
+        monkeypatch.setattr(teams, 'load_user_config',
+                            lambda: {'team': team_slug})
+        import off_season_handler as osh
+        monkeypatch.setattr(osh, 'load_user_config',
+                            lambda: {'team': team_slug})
+        from unittest.mock import MagicMock
+        return osh.OffSeasonHandler(MagicMock())
+
+    def test_cardinals_facts_loaded(self, monkeypatch):
+        handler = self._handler(monkeypatch, 'cardinals')
+        facts = handler._load_cubs_facts()
+        assert len(facts) >= 150
+        assert not any('CUBS' in f and 'CARDINALS' not in f
+                       for f in facts[:20])
+
+    def test_cardinals_defaults_disable_bears(self, monkeypatch):
+        handler = self._handler(monkeypatch, 'cardinals')
+        assert handler.config['enable_bears'] is False
+        assert handler.config['enable_clock'] is False
+
+    def test_cubs_defaults_keep_bears(self, monkeypatch):
+        handler = self._handler(monkeypatch, 'cubs')
+        assert handler.config['enable_bears'] is True
