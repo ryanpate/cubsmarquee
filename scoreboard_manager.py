@@ -9,7 +9,7 @@ import statsapi
 from PIL import BdfFontFile, Image, ImageDraw, ImageFont
 from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
 from scoreboard_config import (
-    DisplayConfig, TeamConfig, Colors, Positions, Fonts, GameConfig, RGBColor,
+    DisplayConfig, Colors, Positions, Fonts, GameConfig, RGBColor,
     load_user_config, PREVIEW_FILE_PATH
 )
 from typing import Any
@@ -17,6 +17,7 @@ from retry import retry_api_call
 import json
 from logger import get_logger
 from status_heartbeat import write_status_heartbeat
+from teams import get_active_team
 
 # Config file location for runtime settings. Module-level so tests can patch it.
 USER_CONFIG_PATH = '/home/pi/config.json'
@@ -32,6 +33,7 @@ class ScoreboardManager:
 
     def __init__(self) -> None:
         """Initialize the scoreboard manager"""
+        self.team = get_active_team()
         self.matrix: RGBMatrix = self._setup_matrix()
         self.canvas = self.matrix.CreateFrameCanvas()
         self.fonts: dict[str, graphics.Font] = self._load_fonts()
@@ -196,20 +198,20 @@ class ScoreboardManager:
             opp_abv: str = 'UNK'
             for team_type in game_info['gameData']['teams']:
                 team_data = game_info['gameData']['teams'][team_type]
-                if team_data['abbreviation'] != 'CHC':
+                if team_data['abbreviation'] != self.team.abbrev:
                     opp_abv = team_data['abbreviation']
                     break
 
             # Load images with individual error handling
             self.game_images = {}
 
-            # Load Cubs logo (required)
-            cubs_logo_path = './logos/cubs.png'
+            # Load team logo (required)
+            team_logo_path = self.team.logo_path
             try:
-                self.game_images['cubs'] = Image.open(cubs_logo_path)
+                self.game_images['team'] = Image.open(team_logo_path)
             except FileNotFoundError:
-                print(f"Warning: Cubs logo not found at {cubs_logo_path}")
-                self.game_images['cubs'] = self._create_placeholder_image()
+                print(f"Warning: Team logo not found at {team_logo_path}")
+                self.game_images['team'] = self._create_placeholder_image()
 
             # Load opponent logo (fall back to placeholder)
             opp_logo_path = f'./logos/{opp_abv}.png'
@@ -228,7 +230,7 @@ class ScoreboardManager:
                 self.game_images['batting'] = self._create_placeholder_image(size=(8, 8))
 
             # Load marquee image (optional)
-            marquee_path = './marquee.png'
+            marquee_path = self.team.marquee_path
             try:
                 self.game_images['marquee'] = Image.open(marquee_path)
             except FileNotFoundError:
@@ -254,7 +256,7 @@ class ScoreboardManager:
     def _create_fallback_images(self) -> dict[str, Image.Image]:
         """Create a complete set of fallback images for error recovery"""
         return {
-            'cubs': self._create_placeholder_image(),
+            'team': self._create_placeholder_image(),
             'opponent': self._create_placeholder_image(),
             'batting': self._create_placeholder_image(size=(8, 8)),
             'marquee': self._create_placeholder_image(size=(96, 32))
@@ -266,7 +268,7 @@ class ScoreboardManager:
         date_string: str = current_date.format('MM/DD/YYYY')
         sched: list[dict[str, Any]] = retry_api_call(
             statsapi.schedule,
-            start_date=date_string, team=TeamConfig.CUBS_TEAM_ID
+            start_date=date_string, team=self.team.mlb_team_id
         )
         if sched:
             return sched
@@ -284,7 +286,7 @@ class ScoreboardManager:
             start_date=current_date.add(days=1).format('MM/DD/YYYY'),
             end_date=current_date.add(
                 days=GameConfig.MAX_DAYS_TO_CHECK).format('MM/DD/YYYY'),
-            team=TeamConfig.CUBS_TEAM_ID
+            team=self.team.mlb_team_id
         )
 
         if future:
@@ -309,12 +311,12 @@ class ScoreboardManager:
             statsapi.get, 'game', {'gamePk': gameid}
         )
 
-        if game_data[game_index]['home_id'] == TeamConfig.CUBS_TEAM_ID:
+        if game_data[game_index]['home_id'] == self.team.mlb_team_id:
             away_team: str = game_info['gameData']['teams']['away']['teamName']
-            return f'Cubs Pitcher: {home_pitcher}    {away_team} Pitcher: {away_pitcher}'
+            return f'{self.team.short_name} Pitcher: {home_pitcher}    {away_team} Pitcher: {away_pitcher}'
         else:
             home_team: str = game_info['gameData']['teams']['home']['teamName']
-            return f'Cubs Pitcher: {away_pitcher}    {home_team} Pitcher: {home_pitcher}'
+            return f'{self.team.short_name} Pitcher: {away_pitcher}    {home_team} Pitcher: {home_pitcher}'
 
     def get_lineup(self, gameid: int) -> str:
         """Get the lineup for both teams"""

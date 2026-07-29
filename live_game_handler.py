@@ -9,11 +9,12 @@ from PIL import Image
 from typing import TYPE_CHECKING, Any
 
 from scoreboard_config import (
-    Colors, Fonts, Positions, GameConfig, TeamConfig, DisplayConfig,
+    Colors, Fonts, Positions, GameConfig, DisplayConfig,
     get_scroll_delay)
 from retry import retry_api_call
 from logger import get_logger
 from flight_display import FlightDisplay
+from teams import get_active_team
 
 logger = get_logger("live_game")
 
@@ -36,6 +37,7 @@ class LiveGameHandler:
     def __init__(self, scoreboard_manager: ScoreboardManager) -> None:
         """Initialize with reference to main scoreboard manager"""
         self.manager = scoreboard_manager
+        self.team = get_active_team()
         self.cubs_score: int = 0
         self.opp_score: int = 0
         self.is_cubs_home: bool = False
@@ -48,7 +50,7 @@ class LiveGameHandler:
     ) -> None:
         """Main game display loop"""
         self.is_cubs_home = (
-            game_data[game_index]['home_id'] == TeamConfig.CUBS_TEAM_ID)
+            game_data[game_index]['home_id'] == self.team.mlb_team_id)
 
         # Initialize scores
         if self.is_cubs_home:
@@ -120,7 +122,7 @@ class LiveGameHandler:
                 pixels[70, y] = (255, 255, 255)
 
             # Add team logos (resized to 16x15 to fill logo area edge-to-edge)
-            cubs_logo = self.manager.game_images['cubs'].resize((16, 15)).convert('RGBA')
+            cubs_logo = self.manager.game_images['team'].resize((16, 15)).convert('RGBA')
             opp_logo = self.manager.game_images['opponent'].resize((16, 15)).convert('RGBA')
 
             # Away team on top, home team on bottom (matches Top/Bot inning)
@@ -262,7 +264,7 @@ class LiveGameHandler:
                 break
             self.manager.set_image(snapshot, 0, 0)
             self.manager.draw_text('micro', scroll_x, 45,
-                                   Colors.CUBS_BLUE, text)
+                                   self.team.primary_color, text)
             self.manager.swap_canvas()
             time.sleep(scroll_delay)
             scroll_x -= 1
@@ -706,7 +708,7 @@ class LiveGameHandler:
 
         # Determine if Cubs are home team directly from game_info
         home_team_id = game_info['gameData']['teams']['home']['id']
-        cubs_are_home = (home_team_id == TeamConfig.CUBS_TEAM_ID)
+        cubs_are_home = (home_team_id == self.team.mlb_team_id)
 
         # Get the actual final scores from the boxscore
         home_score = boxscore['home']['teamStats']['batting']['runs']
@@ -738,7 +740,7 @@ class LiveGameHandler:
             output_image = Image.new("RGB", (96, 48), (0, 51, 102))
 
             # Resize and paste team logos onto blue background (use alpha mask for transparency)
-            cubs_resized = self.manager.game_images['cubs'].resize((26, 26)).convert('RGBA')
+            cubs_resized = self.manager.game_images['team'].resize((26, 26)).convert('RGBA')
             opp_resized = self.manager.game_images['opponent'].resize((26, 26)).convert('RGBA')
             output_image.paste(cubs_resized, Positions.CUBS_IMAGE_GAMEOVER, cubs_resized)
             output_image.paste(opp_resized, Positions.OPP_IMAGE_GAMEOVER, opp_resized)
@@ -792,7 +794,7 @@ class LiveGameHandler:
         def display_w_flag_cycle():
             try:
                 # Load the W flag GIF
-                w_flag = Image.open('./W.gif')
+                w_flag = Image.open(self.team.celebration_path)
 
                 # Get all frames from the GIF
                 frames = []
@@ -807,7 +809,7 @@ class LiveGameHandler:
                     pass  # End of frames
 
                 if not frames:
-                    print("No frames found in W.gif")
+                    print(f"No frames found in {self.team.celebration_path}")
                     return False
 
                 # Get frame duration (in milliseconds, default to 100ms if not specified)
@@ -832,7 +834,7 @@ class LiveGameHandler:
                 return True
 
             except FileNotFoundError:
-                print("W.gif not found in ./logos/ directory")
+                print(f"{self.team.celebration_path} not found")
                 return False
             except Exception as e:
                 print(f"Error displaying W flag: {e}")

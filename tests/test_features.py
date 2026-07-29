@@ -616,9 +616,11 @@ class TestLastPlayScroll:
     def _handler(self):
         from PIL import Image
         from live_game_handler import LiveGameHandler
+        from teams import get_active_team
 
         handler = LiveGameHandler.__new__(LiveGameHandler)
         handler.manager = Mock()
+        handler.team = get_active_team()
         handler.manager.get_frame_copy.return_value = Image.new(
             'RGB', (96, 48))
         handler.manager.split_squad_indicator = False
@@ -1149,6 +1151,7 @@ class TestGameOverInterleave:
         from PIL import Image
         import live_game_handler as lgh
         from live_game_handler import LiveGameHandler
+        from teams import get_active_team
 
         monkeypatch.setattr(lgh, 'time', _FakeTime())
         monkeypatch.setattr(lgh, 'pendulum', fake_pendulum)
@@ -1157,8 +1160,9 @@ class TestGameOverInterleave:
 
         handler = LiveGameHandler.__new__(LiveGameHandler)
         handler.manager = Mock()
+        handler.team = get_active_team()
         handler.manager.game_images = {
-            'cubs': Image.new('RGBA', (26, 26)),
+            'team': Image.new('RGBA', (26, 26)),
             'opponent': Image.new('RGBA', (26, 26)),
         }
         handler.off_season_handler = Mock()

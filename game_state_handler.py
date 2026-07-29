@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 from scoreboard_config import Colors, Positions, GameConfig, TeamConfig, RGBColor, DisplayConfig, get_scroll_delay, load_user_config
 from retry import retry_api_call
 from playoff_race_display import PlayoffRaceDisplay
+from teams import get_active_team
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
@@ -22,6 +23,7 @@ class GameStateHandler:
     def __init__(self, scoreboard_manager: ScoreboardManager) -> None:
         """Initialize with reference to main scoreboard manager"""
         self.manager = scoreboard_manager
+        self.team = get_active_team()
         self.scroll_position: int = 96  # For scrolling text
         self.rain_drops: list[dict[str, Any]] = []  # Lazy-initialized
         self.playoff_race: PlayoffRaceDisplay = PlayoffRaceDisplay(scoreboard_manager)
@@ -62,12 +64,12 @@ class GameStateHandler:
     ) -> None:
         """Display postponed game screen with rain animation.
 
-        Shows 'CHICAGO CUBS VS {OPPONENT}' instead of lineup since the game
+        Shows '{TEAM} VS {OPPONENT}' instead of lineup since the game
         isn't being played. Single-pass so the caller can cycle other content.
         """
         start_time: str = self.manager.format_game_time(game_data, game_index)
         opponent_name: str = self._get_opponent_name(gameid)
-        matchup_text: str = f"CHICAGO CUBS VS {opponent_name.upper()}"
+        matchup_text: str = f"{self.team.matchup_name} VS {opponent_name.upper()}"
         self._display_delay_animated(
             "POSTPONED", start_time, lineup or "", game_data, game_index, gameid,
             single_pass=True, scroll_text_override=matchup_text)
@@ -80,7 +82,7 @@ class GameStateHandler:
             )
             home = game_info['gameData']['teams']['home']
             away = game_info['gameData']['teams']['away']
-            if home['abbreviation'] == 'CHC':
+            if home['abbreviation'] == self.team.abbrev:
                 return away['name']
             return home['name']
         except Exception:
@@ -348,7 +350,7 @@ class GameStateHandler:
         game_info: dict[str, Any] = retry_api_call(
             statsapi.get, 'game', {'gamePk': gameid}
         )
-        if game_info['gameData']['teams']['home']['abbreviation'] == 'CHC':
+        if game_info['gameData']['teams']['home']['abbreviation'] == self.team.abbrev:
             away: str = 'away'
         else:
             away = 'home'
@@ -493,7 +495,7 @@ class GameStateHandler:
     ) -> None:
         """Display playoff series information"""
         self.manager.clear_canvas()
-        self.manager.fill_canvas(*Colors.CUBS_BLUE)
+        self.manager.fill_canvas(*self.team.primary_color)
 
         # Get game data
         gameid: int = game_data[game_index]['game_id']
@@ -506,7 +508,7 @@ class GameStateHandler:
         )
 
         # Determine opponent
-        if game_info['gameData']['teams']['home']['abbreviation'] == 'CHC':
+        if game_info['gameData']['teams']['home']['abbreviation'] == self.team.abbrev:
             opp_team: dict[str, Any] = game_info['gameData']['teams']['away']
         else:
             opp_team = game_info['gameData']['teams']['home']
@@ -546,9 +548,9 @@ class GameStateHandler:
 
                 color: RGBColor
                 display_text: str
-                if team_part == 'CHC':
+                if team_part == self.team.abbrev:
                     color = Colors.BRIGHT_YELLOW
-                    display_text = "CUBS LEAD"
+                    display_text = f"{self.team.short_name.upper()} LEAD"
                 elif status_word.lower() == 'tied':
                     color = Colors.WHITE
                     display_text = "SERIES TIED"

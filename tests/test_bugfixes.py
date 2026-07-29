@@ -762,8 +762,10 @@ class TestScheduleLookahead:
 
     def _make_manager(self):
         from scoreboard_manager import ScoreboardManager
+        from teams import get_active_team
 
         manager = ScoreboardManager.__new__(ScoreboardManager)
+        manager.team = get_active_team()
         manager._lookahead_cache = None
         manager._lookahead_cached_at = 0.0
         return manager
