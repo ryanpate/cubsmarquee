@@ -11,10 +11,11 @@ from PIL import Image
 from typing import TYPE_CHECKING, Any
 
 from scoreboard_config import (
-    Colors, DisplayConfig, Fonts, RGBColor, TeamConfig,
+    Colors, DisplayConfig, Fonts, RGBColor,
 )
 from bears_display import format_countdown, countdown_color, format_kickoff_time
 from retry import retry_api_call
+from teams import get_active_team
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
@@ -69,6 +70,7 @@ class AllStarDisplay:
 
     def __init__(self, scoreboard_manager: ScoreboardManager) -> None:
         self.manager = scoreboard_manager
+        self.team = get_active_team()
         self._asg_cache: dict[str, Any] | None = None
         self._asg_cached_at: float = 0.0
         self._feed_cache: dict[str, Any] | None = None
@@ -175,20 +177,18 @@ class AllStarDisplay:
             print(f"ASG feed fetch failed: {e}")
         return self._feed_cache
 
-    @staticmethod
-    def _cubs_allstars_from_boxscore(feed: dict[str, Any]) -> list[str]:
+    def _cubs_allstars_from_boxscore(self, feed: dict[str, Any]) -> list[str]:
         names = []
         teams = feed.get('liveData', {}).get('boxscore', {}).get('teams', {})
         for side in ('away', 'home'):
             for player in teams.get(side, {}).get('players', {}).values():
-                if player.get('parentTeamId') == TeamConfig.CUBS_TEAM_ID:
+                if player.get('parentTeamId') == self.team.mlb_team_id:
                     name = player.get('person', {}).get('fullName', '')
                     if name:
                         names.append(name)
         return names
 
-    @staticmethod
-    def _extract_live_state(feed: dict[str, Any]) -> dict[str, Any]:
+    def _extract_live_state(self, feed: dict[str, Any]) -> dict[str, Any]:
         live = feed.get('liveData', {})
         linescore = live.get('linescore', {})
         offense = linescore.get('offense', {})
@@ -212,7 +212,7 @@ class AllStarDisplay:
             'bases': {base: base in offense
                       for base in ('first', 'second', 'third')},
             'batter_name': batter.get('fullName', ''),
-            'batter_is_cub': parent_team == TeamConfig.CUBS_TEAM_ID,
+            'batter_is_cub': parent_team == self.team.mlb_team_id,
             'is_final': feed.get('gameData', {}).get('status', {}).get(
                 'abstractGameState') == 'Final',
             # MLB flips abstractGameState to Live at the scheduled start,
@@ -840,10 +840,10 @@ class AllStarDisplay:
                 banner = 'CUBS STAR AT BAT'
                 m.draw_text(
                     'micro', self._center_x(banner, Fonts.CHAR_WIDTH_MICRO),
-                    39, Colors.CUBS_BLUE, banner)
+                    39, self.team.primary_color, banner)
                 m.draw_text(
                     'micro', self._center_x(name, Fonts.CHAR_WIDTH_MICRO),
-                    46, Colors.CUBS_BLUE, name)
+                    46, self.team.primary_color, name)
             else:
                 m.draw_text('micro', 2, 39, (150, 150, 150), 'AT BAT')
                 if len(name) * Fonts.CHAR_WIDTH_TINY > 94:

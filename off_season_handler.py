@@ -22,7 +22,7 @@ from spring_training_display import SpringTrainingDisplay
 from allstar_display import AllStarDisplay
 from flight_display import FlightDisplay
 from clock_display import WrigleyClockDisplay
-from cubs_history_display import CubsHistoryDisplay
+from cubs_history_display import TeamHistoryDisplay
 from sky_display import SkyDisplay
 from iss_display import ISSDisplay
 from celebration_display import CelebrationDisplay
@@ -48,7 +48,7 @@ class OffSeasonHandler:
         self.flight_display: FlightDisplay = FlightDisplay(scoreboard_manager)
         self.clock_display: WrigleyClockDisplay = WrigleyClockDisplay(
             scoreboard_manager, self.weather_display)
-        self.cubs_history_display: CubsHistoryDisplay = CubsHistoryDisplay(scoreboard_manager)
+        self.cubs_history_display: TeamHistoryDisplay = TeamHistoryDisplay(scoreboard_manager)
         self.sky_display: SkyDisplay = SkyDisplay(scoreboard_manager, self.weather_display)
         self.iss_display: ISSDisplay = ISSDisplay(
             scoreboard_manager, self.flight_display.latitude,

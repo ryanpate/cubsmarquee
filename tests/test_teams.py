@@ -108,3 +108,15 @@ class TestConfigValidatorTeam:
         result = self._validator_with({'team': 'mets'}).validate_team()
         assert not result.is_valid
         assert not result.is_required
+
+
+class TestTeamHistoryDisplay:
+    def test_loads_active_team_history(self, monkeypatch):
+        import teams
+        monkeypatch.setattr(teams, 'load_user_config',
+                            lambda: {'team': 'cardinals'})
+        from cubs_history_display import TeamHistoryDisplay
+        from unittest.mock import MagicMock
+        display = TeamHistoryDisplay(MagicMock())
+        assert display.team.slug == 'cardinals'
+        assert display.history  # cardinals_history.json parsed

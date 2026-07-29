@@ -10,6 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from logger import get_logger
 from scoreboard_config import Colors, DisplayConfig
+from teams import get_active_team
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
@@ -78,7 +79,7 @@ class SetupDisplay:
         img = Image.new("RGB", (DisplayConfig.MATRIX_COLS, DisplayConfig.MATRIX_ROWS), Colors.BLACK)
         draw = ImageDraw.Draw(img)
 
-        draw.rectangle([(0, 0), (DisplayConfig.MATRIX_COLS - 1, 9)], fill=Colors.CUBS_BLUE)
+        draw.rectangle([(0, 0), (DisplayConfig.MATRIX_COLS - 1, 9)], fill=get_active_team().primary_color)
         bbox = draw.textbbox((0, 0), HEADER_TEXT, font=self.font)
         text_w = bbox[2] - bbox[0]
         draw.text(

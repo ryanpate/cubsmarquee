@@ -28,7 +28,6 @@ class DisplayConfig:
 
 class TeamConfig:
     """Team-specific configuration"""
-    CUBS_TEAM_ID: int = 112
     # MLB League IDs
     NL_LEAGUE_ID: int = 104
     AL_LEAGUE_ID: int = 103

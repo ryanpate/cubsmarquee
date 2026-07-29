@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 from scoreboard_config import Colors, DisplayConfig, GameConfig, TeamConfig
 from retry import retry_api_call
 from logger import get_logger
+from teams import get_active_team
 
 logger = get_logger("playoff_race")
 
@@ -31,6 +32,7 @@ class PlayoffRaceDisplay:
 
     def __init__(self, scoreboard_manager: ScoreboardManager) -> None:
         self.manager = scoreboard_manager
+        self.team = get_active_team()
         self._race_cache: dict[str, Any] | None = None
         self._race_cached_at: float = 0.0
         self._abbr_cache: dict[int, str] = {}
@@ -45,15 +47,14 @@ class PlayoffRaceDisplay:
     def _ordinal(rank: int) -> str:
         return {1: '1ST', 2: '2ND', 3: '3RD'}.get(rank, f'{rank}TH')
 
-    @staticmethod
-    def _parse_race_data(standings: dict[str, Any]) -> dict[str, Any] | None:
+    def _parse_race_data(self, standings: dict[str, Any]) -> dict[str, Any] | None:
         """Extract the Cubs' division/wild-card position from a standings
         API response, or None if the Cubs aren't in it."""
         for record in standings.get('records', []):
             team_records = record.get('teamRecords', [])
             cubs = next(
                 (tr for tr in team_records
-                 if tr.get('team', {}).get('id') == TeamConfig.CUBS_TEAM_ID),
+                 if tr.get('team', {}).get('id') == self.team.mlb_team_id),
                 None)
             if cubs is None:
                 continue
@@ -180,7 +181,7 @@ class PlayoffRaceDisplay:
         self.manager.clear_canvas()
         background = Image.new(
             'RGB', (DisplayConfig.MATRIX_COLS, DisplayConfig.MATRIX_ROWS),
-            Colors.CUBS_BLUE)
+            self.team.primary_color)
         self.manager.set_image(background, 0, 0)
 
         # Wrigley marquee-style header: white letters on a red band
@@ -257,6 +258,6 @@ class PlayoffRaceDisplay:
 
     def _paste_logo(self, logo: Image.Image, x: int, y: int) -> None:
         """Paste a transparent logo over the current frame background"""
-        base = Image.new('RGB', logo.size, Colors.CUBS_BLUE)
+        base = Image.new('RGB', logo.size, self.team.primary_color)
         base.paste(logo, (0, 0), logo)
         self.manager.set_image(base, x, y)

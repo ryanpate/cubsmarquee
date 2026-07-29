@@ -16,7 +16,7 @@ from game_state_handler import GameStateHandler
 from live_game_handler import LiveGameHandler
 from off_season_handler import OffSeasonHandler
 from allstar_display import AllStarDisplay
-from scoreboard_config import GameConfig, TeamConfig
+from scoreboard_config import GameConfig
 from setup_display import SetupDisplay, needs_setup
 from logger import setup_logging, get_logger
 from config_validator import validate_config_on_startup

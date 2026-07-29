@@ -1,4 +1,4 @@
-"""Today in Cubs history - date-keyed moments from franchise history"""
+"""Today in team history - date-keyed moments from franchise history"""
 
 from __future__ import annotations
 
@@ -9,32 +9,31 @@ from PIL import Image
 from typing import TYPE_CHECKING, Any
 
 from scoreboard_config import Colors, DisplayConfig
+from teams import get_active_team, data_path_candidates
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
 
-HISTORY_PATHS = ['./cubs_history.json', '/home/pi/cubs_history.json']
 MARQUEE_RED = (196, 30, 58)
-CUBS_BLUE = (0, 51, 102)
 STORY_WHITE = (225, 232, 240)
 
 
-class CubsHistoryDisplay:
-    """Shows what happened on today's date in Cubs history"""
+class TeamHistoryDisplay:
+    """Shows what happened on today's date in the active team's history"""
 
     def __init__(self, scoreboard_manager: ScoreboardManager) -> None:
         self.manager = scoreboard_manager
+        self.team = get_active_team()
         self.history: dict[str, list[dict[str, Any]]] = self._load_history()
 
-    @staticmethod
-    def _load_history() -> dict[str, list[dict[str, Any]]]:
-        for path in HISTORY_PATHS:
+    def _load_history(self) -> dict[str, list[dict[str, Any]]]:
+        for path in data_path_candidates(self.team.history_basename):
             try:
                 with open(path) as f:
                     return json.load(f)
             except (OSError, json.JSONDecodeError):
                 continue
-        print("cubs_history.json not found")
+        print(f"{self.team.history_basename} not found")
         return {}
 
     def _entries_for(self, month: int, day: int) -> list[dict[str, Any]]:
@@ -62,14 +61,14 @@ class CubsHistoryDisplay:
         self.manager.clear_canvas()
         background = Image.new(
             'RGB', (DisplayConfig.MATRIX_COLS, DisplayConfig.MATRIX_ROWS),
-            CUBS_BLUE)
+            self.team.primary_color)
         self.manager.set_image(background, 0, 0)
 
         # Marquee red band with the screen title
         for y in range(0, 9):
             for x in range(DisplayConfig.MATRIX_COLS):
                 self.manager.draw_pixel(x, y, *MARQUEE_RED)
-        title = 'CUBS HISTORY'
+        title = f'{self.team.short_name.upper()} HISTORY'
         title_x = (DisplayConfig.MATRIX_COLS - len(title) * 4) // 2
         self.manager.draw_text('micro', title_x, 7, Colors.WHITE, title)
 
@@ -92,10 +91,10 @@ class CubsHistoryDisplay:
         now = pendulum.now('America/Chicago')
         entries = self._entries_for(now.month, now.day)
         if not entries:
-            print(f"No Cubs history entry for {now.format('MM-DD')}")
+            print(f"No {self.team.short_name} history entry for {now.format('MM-DD')}")
             return False
 
-        print(f"Displaying Cubs history for {now.format('MM-DD')}")
+        print(f"Displaying {self.team.short_name} history for {now.format('MM-DD')}")
         per_entry = max(20, duration // len(entries))
         start = time.time()
         for entry in entries:

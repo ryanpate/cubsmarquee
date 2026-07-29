@@ -204,10 +204,10 @@ class TestScoreCalculations:
         self, sample_live_game_data: list[dict[str, Any]]
     ) -> None:
         """Test extracting Cubs score when Cubs are home"""
-        from scoreboard_config import TeamConfig
+        from teams import TEAMS
 
         game = sample_live_game_data[0]
-        is_cubs_home = game['home_id'] == TeamConfig.CUBS_TEAM_ID
+        is_cubs_home = game['home_id'] == TEAMS['cubs'].mlb_team_id
 
         assert is_cubs_home is True
         cubs_score = game['home_score'] if is_cubs_home else game['away_score']
@@ -217,7 +217,7 @@ class TestScoreCalculations:
         self, sample_live_game_data: list[dict[str, Any]]
     ) -> None:
         """Test extracting Cubs score when Cubs are away"""
-        from scoreboard_config import TeamConfig
+        from teams import TEAMS
 
         # Swap home/away
         game = sample_live_game_data[0]
@@ -226,7 +226,7 @@ class TestScoreCalculations:
         game['home_score'] = 2
         game['away_score'] = 4
 
-        is_cubs_home = game['home_id'] == TeamConfig.CUBS_TEAM_ID
+        is_cubs_home = game['home_id'] == TEAMS['cubs'].mlb_team_id
 
         assert is_cubs_home is False
         cubs_score = game['home_score'] if is_cubs_home else game['away_score']
@@ -236,10 +236,10 @@ class TestScoreCalculations:
         self, sample_final_game_data: list[dict[str, Any]]
     ) -> None:
         """Test detecting a Cubs win"""
-        from scoreboard_config import TeamConfig
+        from teams import TEAMS
 
         game = sample_final_game_data[0]
-        is_cubs_home = game['home_id'] == TeamConfig.CUBS_TEAM_ID
+        is_cubs_home = game['home_id'] == TEAMS['cubs'].mlb_team_id
 
         cubs_score = game['home_score'] if is_cubs_home else game['away_score']
         opp_score = game['away_score'] if is_cubs_home else game['home_score']
@@ -350,8 +350,8 @@ class TestConfiguration:
 
     def test_cubs_team_id(self) -> None:
         """Test Cubs team ID constant"""
-        from scoreboard_config import TeamConfig
-        assert TeamConfig.CUBS_TEAM_ID == 112
+        from teams import TEAMS
+        assert TEAMS['cubs'].mlb_team_id == 112
 
     def test_league_ids(self) -> None:
         """Test league ID constants"""

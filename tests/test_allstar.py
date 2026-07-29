@@ -9,9 +9,11 @@ from unittest.mock import Mock
 
 def _display():
     from allstar_display import AllStarDisplay
+    from teams import TEAMS
 
     display = AllStarDisplay.__new__(AllStarDisplay)
     display.manager = Mock()
+    display.team = TEAMS['cubs']
     display._asg_cache = None
     display._asg_cached_at = 0.0
     display._feed_cache = None

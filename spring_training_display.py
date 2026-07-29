@@ -9,8 +9,9 @@ from PIL import Image
 import os
 from typing import TYPE_CHECKING
 
-from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, TeamConfig, get_scroll_delay, load_user_config
+from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, get_scroll_delay, load_user_config
 from retry import retry_api_call
+from teams import get_active_team
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
@@ -22,10 +23,11 @@ class SpringTrainingDisplay:
     def __init__(self, scoreboard_manager: ScoreboardManager) -> None:
         """Initialize Spring Training display"""
         self.manager = scoreboard_manager
+        self.team = get_active_team()
         self.scroll_position: int = DisplayConfig.MATRIX_COLS
 
-        # Color scheme - Cubs colors
-        self.CUBS_BLUE: RGBColor = Colors.CUBS_BLUE
+        # Color scheme - team colors
+        self.TEAM_COLOR: RGBColor = self.team.primary_color
         self.CUBS_YELLOW: RGBColor = Colors.YELLOW
         self.WHITE: RGBColor = Colors.WHITE
 
@@ -94,7 +96,7 @@ class SpringTrainingDisplay:
             games = retry_api_call(
                 statsapi.schedule,
                 start_date=f'03/01/{year}', end_date=f'04/15/{year}',
-                team=TeamConfig.CUBS_TEAM_ID,
+                team=self.team.mlb_team_id,
             )
             for game in games:
                 if game.get('game_type') == 'R':
@@ -170,9 +172,9 @@ class SpringTrainingDisplay:
             return f"{label} is HERE!"
 
     def _draw_header(self) -> None:
-        """Draw the Spring Training header image at the top, centered with Cubs blue background"""
-        # Create a full-screen image with Cubs blue background
-        background = Image.new("RGB", (96, 48), self.CUBS_BLUE)
+        """Draw the Spring Training header image at the top, centered with the team's background color"""
+        # Create a full-screen image with the team's background color
+        background = Image.new("RGB", (96, 48), self.TEAM_COLOR)
 
         if self._header_image:
             # Center the header image horizontally

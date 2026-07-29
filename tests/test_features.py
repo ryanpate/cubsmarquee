@@ -265,6 +265,7 @@ class TestCountdownMilestones:
         self, monkeypatch
     ) -> None:
         import spring_training_display as std
+        from teams import TEAMS
 
         frozen = pendulum.datetime(2026, 3, 1, tz='America/Chicago')
         monkeypatch.setattr(std.pendulum, 'now', lambda tz=None: frozen)
@@ -276,6 +277,7 @@ class TestCountdownMilestones:
         monkeypatch.setattr(std.statsapi, 'schedule', schedule)
 
         display = std.SpringTrainingDisplay.__new__(std.SpringTrainingDisplay)
+        display.team = TEAMS['cubs']
         display._opening_day_cache = None
         display._opening_day_cached_on = None
 
@@ -310,9 +312,11 @@ STANDINGS_FIXTURE = {
 class TestPlayoffRace:
     def _display(self):
         from playoff_race_display import PlayoffRaceDisplay
+        from teams import TEAMS
 
         display = PlayoffRaceDisplay.__new__(PlayoffRaceDisplay)
         display.manager = Mock()
+        display.team = TEAMS['cubs']
         display._race_cache = None
         display._race_cached_at = 0.0
         return display
@@ -1394,9 +1398,9 @@ class TestWrigleyClock:
 
 class TestCubsHistory:
     def _display(self):
-        from cubs_history_display import CubsHistoryDisplay
+        from cubs_history_display import TeamHistoryDisplay
 
-        return CubsHistoryDisplay.__new__(CubsHistoryDisplay)
+        return TeamHistoryDisplay.__new__(TeamHistoryDisplay)
 
     def test_entry_lookup_by_date(self) -> None:
         display = self._display()
@@ -1406,9 +1410,11 @@ class TestCubsHistory:
         assert display._entries_for(7, 4) == []
 
     def test_history_file_loads_with_famous_dates(self) -> None:
-        from cubs_history_display import CubsHistoryDisplay
+        from teams import TEAMS
 
-        history = CubsHistoryDisplay._load_history()
+        display = self._display()
+        display.team = TEAMS['cubs']
+        history = display._load_history()
         assert any(e['year'] == 2016 for e in history.get('11-02', []))
         assert any(e['year'] == 1998 for e in history.get('05-06', []))
         for date_key, entries in history.items():
