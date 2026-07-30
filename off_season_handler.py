@@ -10,7 +10,7 @@ from PIL import Image
 from typing import TYPE_CHECKING, Any
 
 from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, get_scroll_delay, load_user_config, create_team_gradient_background
-from teams import get_active_team, apply_team_defaults, data_path_candidates
+from teams import get_active_team, get_active_nfl_team, apply_team_defaults, data_path_candidates
 from rss_fetch import fetch_feed
 from weather_display import WeatherDisplay
 from bears_display import BearsDisplay
@@ -73,15 +73,15 @@ class OffSeasonHandler:
         self.last_cubs_news_update: float | None = None
         self.cubs_news_update_interval: int = GameConfig.NEWS_UPDATE_INTERVAL
 
-        # RSS news caching for Bears
+        # RSS news caching for the NFL team
         self.bears_news: list[str] | None = None
         self.last_bears_news_update: float | None = None
         self.bears_news_update_interval: int = GameConfig.NEWS_UPDATE_INTERVAL
 
-        # Classic Bears colors for news display (using centralized config)
-        self.BEARS_NAVY: RGBColor = Colors.BEARS_NAVY
-        self.BEARS_ORANGE: RGBColor = Colors.BEARS_ORANGE
-        self.BEARS_WHITE: RGBColor = Colors.WHITE
+        # NFL pack drives the football news theming (colors, feed, prefix)
+        self.nfl_team = get_active_nfl_team()
+        self.NFL_PRIMARY: RGBColor = self.nfl_team.primary_color
+        self.NFL_ACCENT: RGBColor = self.nfl_team.accent_color
 
         # Content rotation schedule (in minutes) - using centralized config
         self.rotation_schedule: dict[str, int] = {
@@ -140,12 +140,12 @@ class OffSeasonHandler:
 
     def _create_bears_sweater_background(self) -> Image.Image:
         """Pre-generate compact Bears sweater header background for performance"""
-        img = Image.new("RGB", (96, 48), self.BEARS_NAVY)
+        img = Image.new("RGB", (96, 48), self.NFL_PRIMARY)
         pixels = img.load()
         for y in (0, 1, 10, 11):
             for x in range(96):
-                pixels[x, y] = self.BEARS_ORANGE
-        print("Bears sweater background cached")
+                pixels[x, y] = self.NFL_ACCENT
+        print("NFL sweater background cached")
         return img
 
     def _load_config(self) -> dict[str, Any]:
@@ -303,29 +303,30 @@ class OffSeasonHandler:
 
     def _fetch_bears_news_rss(self):
         """
-        Fetch latest Bears news from official Chicago Bears RSS feed
+        Fetch latest news for the active NFL team from its official RSS feed
         Falls back to ESPN/CBS if official feed fails
         """
         news_headlines = []
 
-        # Primary source: Official Chicago Bears RSS feed
-        official_feed = 'https://www.chicagobears.com/rss/news'
+        # Primary source: Official NFL team RSS feed
+        official_feed = self.nfl_team.news_rss_url
+        news_prefix = f"{self.nfl_team.short_name.upper()} NEWS - "
 
         try:
-            print(f"Fetching Bears news from official source: {official_feed}")
+            print(f"Fetching {self.nfl_team.short_name} news from official source: {official_feed}")
             feed = fetch_feed(official_feed)
 
             if feed.entries:
-                print(f"Found {len(feed.entries)} entries from chicagobears.com")
+                print(f"Found {len(feed.entries)} entries from {self.nfl_team.short_name}")
 
                 for entry in feed.entries[:15]:
                     try:
                         headline = entry.title.strip().upper()
-                        formatted_headline = f"BEARS NEWS - {headline}"
+                        formatted_headline = f"{news_prefix}{headline}"
 
                         if formatted_headline not in news_headlines:
                             news_headlines.append(formatted_headline)
-                            print(f"Added Bears headline: {headline[:50]}...")
+                            print(f"Added {self.nfl_team.short_name} headline: {headline[:50]}...")
 
                     except AttributeError as e:
                         print(f"Error parsing entry: {e}")
@@ -336,7 +337,7 @@ class OffSeasonHandler:
                     print(f"Feed error: {feed.get('bozo_exception', 'Unknown error')}")
 
         except Exception as e:
-            print(f"Error fetching from official Bears feed: {e}")
+            print(f"Error fetching from official {self.nfl_team.short_name} feed: {e}")
 
         # Fallback to other sources if official feed didn't provide enough news
         if len(news_headlines) < 5:
@@ -346,20 +347,9 @@ class OffSeasonHandler:
                 'https://www.cbssports.com/rss/headlines/nfl/'
             ]
 
-            # Keywords for filtering NFL feeds for Bears content
-            bears_keywords = [
-                'BEARS', 'CHICAGO BEARS', 'CHI BEARS', 'DA BEARS',
-                'CALEB WILLIAMS', 'DJ MOORE', 'D.J. MOORE',
-                'KEENAN ALLEN', 'ROME ODUNZE', 'COLE KMET',
-                'MONTEZ SWEAT', 'TREMAINE EDMUNDS', 'JAYLON JOHNSON',
-                'D\'ANDRE SWIFT', 'KYLER GORDON', 'JAQUAN BRISKER',
-                'BEN JOHNSON', 'RYAN POLES',
-                'SOLDIER FIELD', 'HALAS HALL'
-            ]
-
             for feed_url in fallback_feeds:
                 try:
-                    print(f"Fetching Bears news from {feed_url}")
+                    print(f"Fetching {self.nfl_team.short_name} news from {feed_url}")
                     feed = fetch_feed(feed_url)
 
                     if not feed.entries:
@@ -368,13 +358,13 @@ class OffSeasonHandler:
                     for entry in feed.entries[:20]:
                         try:
                             headline = entry.title.strip().upper()
-                            is_bears_related = any(keyword in headline for keyword in bears_keywords)
+                            is_team_related = any(keyword in headline for keyword in self.nfl_team.news_keywords)
 
-                            if is_bears_related:
-                                formatted_headline = f"BEARS NEWS - {headline}"
+                            if is_team_related:
+                                formatted_headline = f"{news_prefix}{headline}"
                                 if formatted_headline not in news_headlines:
                                     news_headlines.append(formatted_headline)
-                                    print(f"Added Bears headline: {headline[:50]}...")
+                                    print(f"Added {self.nfl_team.short_name} headline: {headline[:50]}...")
 
                         except AttributeError:
                             continue
@@ -384,9 +374,9 @@ class OffSeasonHandler:
                     continue
 
         if not news_headlines:
-            print("No Bears news found, using fallback message")
+            print(f"No {self.nfl_team.short_name} news found, using fallback message")
         else:
-            print(f"Total Bears headlines collected: {len(news_headlines)}")
+            print(f"Total {self.nfl_team.short_name} headlines collected: {len(news_headlines)}")
 
         # Return up to 12 news items
         return news_headlines[:12]
@@ -982,7 +972,7 @@ class OffSeasonHandler:
         message_width = len(message) * 5
         x_pos = max(0, (96 - message_width) // 2)
         self.manager.draw_text('small_bold', x_pos, 32,
-                               self.BEARS_WHITE, message)
+                               Colors.WHITE, message)
 
         self.manager.swap_canvas()
 
@@ -1008,12 +998,11 @@ class OffSeasonHandler:
         self.manager.swap_canvas()
 
     def _draw_sweater_header(self):
-        """Draw the compact Bears sweater header using the cached image"""
+        """Draw the compact sweater header using the cached image"""
         self.manager.set_image(self._bears_sweater_bg, 0, 0)
-
-        # "CHICAGO BEARS" in tiny_bold (5px/char, 13 chars = 65px), centered
-        self.manager.draw_text('tiny_bold', 15, 9,
-                               self.BEARS_WHITE, 'CHICAGO BEARS')
+        header = self.nfl_team.header_name
+        x = max(0, (96 - len(header) * 5) // 2)
+        self.manager.draw_text('tiny_bold', x, 9, Colors.WHITE, header)
 
     def display_bears_news(self, duration=180):
         """Display scrolling Bears breaking news with sweater header"""
@@ -1022,7 +1011,7 @@ class OffSeasonHandler:
 
         # If no news available, show message
         if not live_news:
-            live_news = ["BREAKING NEWS - STAY TUNED FOR THE LATEST BEARS UPDATES!"]
+            live_news = [f"BREAKING NEWS - STAY TUNED FOR THE LATEST {self.nfl_team.short_name.upper()} UPDATES!"]
 
         start_time = time.time()
         message_index = 0
@@ -1058,7 +1047,7 @@ class OffSeasonHandler:
                 # Draw scrolling text
                 self.manager.draw_text(
                     'medium_bold', int(self.scroll_position), 32,
-                    self.BEARS_WHITE, current_headline
+                    Colors.WHITE, current_headline
                 )
 
                 self.manager.swap_canvas()

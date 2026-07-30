@@ -45,3 +45,59 @@ class TestHistoryFiles:
                 assert 1876 <= entry['year'] <= 2026
                 assert entry['text'] == entry['text'].upper()
                 assert all(ord(c) < 128 for c in entry['text'])
+
+
+class TestNflNewsTheming:
+    def _make_handler(self, nfl_slug):
+        import off_season_handler as osh
+        from teams import get_active_nfl_team
+        handler = osh.OffSeasonHandler.__new__(osh.OffSeasonHandler)
+        handler.nfl_team = get_active_nfl_team({'nfl_team': nfl_slug})
+        return handler
+
+    def test_chiefs_news_uses_pack_feed_and_prefix(self, monkeypatch):
+        import off_season_handler as osh
+
+        fetched = []
+
+        class FakeFeed:
+            bozo = False
+
+            class Entry:
+                title = 'Patrick Mahomes throws for 300 yards'
+
+            entries = [Entry()]
+
+            def get(self, *args):
+                return None
+
+        def fake_fetch(url):
+            fetched.append(url)
+            return FakeFeed()
+
+        monkeypatch.setattr(osh, 'fetch_feed', fake_fetch)
+        handler = self._make_handler('chiefs')
+        headlines = handler._fetch_bears_news_rss()
+
+        assert fetched[0] == 'https://www.chiefs.com/rss/news'
+        assert headlines
+        assert headlines[0].startswith('CHIEFS NEWS - ')
+
+    def test_bears_news_prefix_unchanged(self, monkeypatch):
+        import off_season_handler as osh
+
+        class FakeFeed:
+            bozo = False
+
+            class Entry:
+                title = 'Caleb Williams named starter'
+
+            entries = [Entry()]
+
+            def get(self, *args):
+                return None
+
+        monkeypatch.setattr(osh, 'fetch_feed', lambda url: FakeFeed())
+        handler = self._make_handler('bears')
+        headlines = handler._fetch_bears_news_rss()
+        assert headlines[0] == 'BEARS NEWS - CALEB WILLIAMS NAMED STARTER'
