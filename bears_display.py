@@ -1,4 +1,4 @@
-"""Chicago Bears game display - Classic Bears Sweater Style"""
+"""NFL team game display - Classic sweater style, themed by the active NFL pack"""
 
 from __future__ import annotations
 
@@ -11,12 +11,13 @@ from typing import TYPE_CHECKING, Any
 from scoreboard_config import (
     Colors, Fonts, GameConfig, RGBColor, get_scroll_delay, load_user_config)
 from retry import retry_http_request
+from teams import get_active_nfl_team
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
 
 
-def extract_situation(competition: dict) -> dict:
+def extract_situation(competition: dict, team_abbrev: str = 'CHI') -> dict:
     """Extract the live in-game situation from an ESPN competition dict.
 
     All fields are optional in the ESPN payload (absent between plays,
@@ -37,8 +38,8 @@ def extract_situation(competition: dict) -> dict:
         for competitor in competition.get('competitors', []):
             team = competitor.get('team', {})
             if str(team.get('id')) == str(possession_id):
-                if team.get('abbreviation') == 'CHI':
-                    result['possession'] = 'bears'
+                if team.get('abbreviation') == team_abbrev:
+                    result['possession'] = 'team'
                 else:
                     result['possession'] = 'opponent'
                 break
@@ -95,7 +96,7 @@ def countdown_color(seconds: float, yellow_under: float,
     return Colors.WHITE
 
 
-def celebration_message(delta: int) -> str:
+def celebration_message(delta: int, team_name: str = 'BEARS') -> str:
     """Pick the scoring celebration text from the score change"""
     if delta in (6, 7, 8):
         return 'TOUCHDOWN!'
@@ -103,7 +104,7 @@ def celebration_message(delta: int) -> str:
         return 'FIELD GOAL!'
     if delta == 2:
         return 'SAFETY!'
-    return 'BEARS SCORE!'
+    return f'{team_name} SCORE!'
 
 
 def format_kickoff_time(dt) -> str:
@@ -114,7 +115,7 @@ def format_kickoff_time(dt) -> str:
 
 
 class BearsDisplay:
-    """Handles Chicago Bears game information display"""
+    """Handles NFL game information display for the configured team"""
 
     def __init__(self, scoreboard_manager: ScoreboardManager) -> None:
         """Initialize Bears display"""
@@ -124,11 +125,20 @@ class BearsDisplay:
         self.update_interval: int = GameConfig.SCHEDULE_UPDATE_INTERVAL
         self.live_update_interval: int = GameConfig.LIVE_SCORE_UPDATE_INTERVAL
 
-        # Classic Bears colors (using centralized config)
-        self.BEARS_NAVY: RGBColor = Colors.BEARS_NAVY
-        self.BEARS_ORANGE: RGBColor = Colors.BEARS_ORANGE
-        self.BEARS_WHITE: RGBColor = Colors.WHITE
-        self.BEARS_GRAY: RGBColor = (170, 170, 170)
+        # Team pack drives all theming; default (missing/unknown key) is
+        # the Bears, so existing boards render exactly as before.
+        self.nfl_team = get_active_nfl_team()
+        self.schedule_url = (
+            'https://site.api.espn.com/apis/site/v2/sports/football/nfl/'
+            f'teams/{self.nfl_team.espn_slug}/schedule')
+
+        self.PRIMARY: RGBColor = self.nfl_team.primary_color
+        self.ACCENT: RGBColor = self.nfl_team.accent_color
+        self.TEXT_WHITE: RGBColor = Colors.WHITE
+        self.TEXT_GRAY: RGBColor = (170, 170, 170)
+
+        # Team logos keyed by (abbrev, size); None = file missing
+        self._logo_cache: dict[tuple[str, int], Image.Image | None] = {}
 
         # Pre-generate cached background image for performance
         self._bears_sweater_bg: Image.Image = self._create_bears_sweater_background()
@@ -139,11 +149,11 @@ class BearsDisplay:
         Full 96x48 navy frame with orange stripes at y0-1 and y10-11; the
         header band is y0-11 and content draws on navy from y12 down.
         """
-        img = Image.new("RGB", (96, 48), self.BEARS_NAVY)
+        img = Image.new("RGB", (96, 48), self.PRIMARY)
         pixels = img.load()
         for y in (0, 1, 10, 11):
             for x in range(96):
-                pixels[x, y] = self.BEARS_ORANGE
+                pixels[x, y] = self.ACCENT
         print("Bears sweater background cached")
         return img
 
@@ -179,15 +189,14 @@ class BearsDisplay:
         ESPN API is free and doesn't require authentication
         """
         try:
-            # ESPN API endpoint for Chicago Bears (team ID: 3)
-            url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/chi/schedule"
+            url = self.schedule_url
 
             response = retry_http_request(url, timeout=10)
             data = response.json()
 
             self.bears_data = data
             self.last_update = time.time()
-            print("Bears schedule updated")
+            print(f"{self.nfl_team.short_name} schedule updated")
             return True
 
         except Exception as e:
@@ -259,7 +268,7 @@ class BearsDisplay:
             away_team = competition['competitors'][1]
 
             # Determine if Bears are home or away
-            bears_home = home_team['team']['abbreviation'] == 'CHI'
+            bears_home = home_team['team']['abbreviation'] == self.nfl_team.abbrev
 
             if bears_home:
                 bears = home_team
@@ -292,7 +301,7 @@ class BearsDisplay:
                     away_team = competition['competitors'][1]
 
                     # Re-determine Bears and opponent with fresh data
-                    if home_team['team']['abbreviation'] == 'CHI':
+                    if home_team['team']['abbreviation'] == self.nfl_team.abbrev:
                         bears = home_team
                         opponent = away_team
                     else:
@@ -327,7 +336,7 @@ class BearsDisplay:
             # Live in-game situation (possession, down & distance, last play).
             # Uses the final `competition` value, which is the live scoreboard
             # data when a refetch happened above.
-            situation = extract_situation(competition)
+            situation = extract_situation(competition, self.nfl_team.abbrev)
 
             return {
                 'status': status,
@@ -349,12 +358,53 @@ class BearsDisplay:
             return None
 
     def _draw_sweater_header(self):
-        """Draw the compact Bears sweater header using the cached background"""
+        """Draw the compact sweater header using the cached background"""
         self.manager.set_image(self._bears_sweater_bg, 0, 0)
+        header = self.nfl_team.header_name
+        x = max(0, (96 - len(header) * Fonts.CHAR_WIDTH_TINY) // 2)
+        self.manager.draw_text('tiny_bold', x, 9, self.TEXT_WHITE, header)
 
-        # "CHICAGO BEARS" in tiny_bold (5px/char, 13 chars = 65px), centered
-        self.manager.draw_text('tiny_bold', 15, 9,
-                               self.BEARS_WHITE, 'CHICAGO BEARS')
+    def _get_team_logo(self, abbrev: str, size: int) -> Image.Image | None:
+        """Team logo flattened onto the sweater color, or None if missing"""
+        key = (abbrev, size)
+        if key not in self._logo_cache:
+            try:
+                logo = Image.open(f'./logos/nfl/{abbrev}.png').convert(
+                    'RGBA').resize((size, size), Image.LANCZOS)
+                flat = Image.new('RGB', (size, size), self.PRIMARY)
+                flat.paste(logo, (0, 0), logo)
+                self._logo_cache[key] = flat
+            except OSError:
+                self._logo_cache[key] = None
+        return self._logo_cache[key]
+
+    def _draw_score_row(self, score_data):
+        """Both scores on one row, each side with a 14x14 logo when the
+        file exists; a missing logo falls back to today's text-only row
+        for that side. Positions are a starting point for on-hardware
+        iteration."""
+        team_score = score_data['bears_score']
+        opp_score = score_data['opp_score']
+        opp_abbr = score_data['opponent_abbr']
+
+        team_logo = self._get_team_logo(self.nfl_team.abbrev, 14)
+        if team_logo is not None:
+            self.manager.set_image(team_logo, 7, 13)
+            self.manager.draw_text('small_bold', 24, 24,
+                                   self.TEXT_WHITE, f'{team_score}')
+        else:
+            self.manager.draw_text(
+                'small_bold', 8, 24, self.TEXT_WHITE,
+                f'{self.nfl_team.abbrev} {team_score}')
+
+        opp_logo = self._get_team_logo(opp_abbr, 14)
+        if opp_logo is not None:
+            self.manager.draw_text('small_bold', 56, 24,
+                                   self.TEXT_WHITE, f'{opp_score}')
+            self.manager.set_image(opp_logo, 75, 13)
+        else:
+            self.manager.draw_text('small_bold', 52, 24, self.TEXT_WHITE,
+                                   f'{opp_abbr} {opp_score}')
 
     def display_bears_info(self, duration=180):
         """Display Bears game information"""
@@ -457,19 +507,12 @@ class BearsDisplay:
 
     def _draw_live_content(self, score_data, frame_count):
         """Draw scores, possession dot, down & distance, and clock (y12-47)"""
-        bears_score = score_data['bears_score']
-        opp_score = score_data['opp_score']
-        opp_abbr = score_data['opponent_abbr']
-
         # Score row
-        self.manager.draw_text('small_bold', 8, 24,
-                               self.BEARS_WHITE, f'CHI {bears_score}')
-        self.manager.draw_text('small_bold', 52, 24,
-                               self.BEARS_WHITE, f'{opp_abbr} {opp_score}')
+        self._draw_score_row(score_data)
 
         # Orange possession dot beside the team with the ball
         possession = score_data.get('possession')
-        if possession == 'bears':
+        if possession == 'team':
             self._draw_possession_dot(3)
         elif possession == 'opponent':
             self._draw_possession_dot(91)
@@ -480,7 +523,7 @@ class BearsDisplay:
             if score_data.get('is_red_zone'):
                 color = (255, 60, 60) if frame_count % 2 == 0 else None
             else:
-                color = self.BEARS_WHITE
+                color = self.TEXT_WHITE
             if color:
                 x = max(0, (96 - len(down_distance) * Fonts.CHAR_WIDTH_TINY) // 2)
                 self.manager.draw_text('tiny', x, 31, color, down_distance)
@@ -489,13 +532,13 @@ class BearsDisplay:
         game_time = score_data.get('game_time') or ''
         if game_time:
             x = max(0, (96 - len(game_time) * Fonts.CHAR_WIDTH_MICRO) // 2)
-            self.manager.draw_text('micro', x, 38, self.BEARS_ORANGE, game_time)
+            self.manager.draw_text('micro', x, 38, self.ACCENT, game_time)
 
     def _draw_possession_dot(self, x):
         """Draw a 3x3 orange football dot at the given x, beside the score row"""
         for px in range(x, x + 3):
             for py in range(18, 21):
-                self.manager.draw_pixel(px, py, *self.BEARS_ORANGE)
+                self.manager.draw_pixel(px, py, *self.ACCENT)
 
     def _scroll_last_play(self, text):
         """Scroll a play description once across the bottom strip (y40-47)"""
@@ -506,7 +549,7 @@ class BearsDisplay:
         pixels = snapshot.load()
         for y in range(40, 48):
             for x in range(96):
-                pixels[x, y] = self.BEARS_NAVY
+                pixels[x, y] = self.PRIMARY
 
         text = text.upper()
         text_width = len(text) * Fonts.CHAR_WIDTH_MICRO
@@ -517,7 +560,7 @@ class BearsDisplay:
         while scroll_x + text_width >= 0:
             self.manager.set_image(snapshot, 0, 0)
             self.manager.draw_text('micro', scroll_x, 46,
-                                   self.BEARS_WHITE, text)
+                                   self.TEXT_WHITE, text)
             self.manager.swap_canvas()
             time.sleep(scroll_delay)
             scroll_x -= 1
@@ -528,13 +571,13 @@ class BearsDisplay:
 
     def _play_scoring_celebration(self, delta):
         """Flash a scoring message for ~4 seconds when the Bears score"""
-        message = celebration_message(delta)
+        message = celebration_message(delta, self.nfl_team.short_name.upper())
         x = max(0, (96 - len(message) * Fonts.CHAR_WIDTH_SMALL) // 2)
 
         for i in range(8):
             self.manager.clear_canvas()
             self._draw_sweater_header()
-            color = self.BEARS_ORANGE if i % 2 == 0 else self.BEARS_WHITE
+            color = self.ACCENT if i % 2 == 0 else self.TEXT_WHITE
             self.manager.draw_text('small_bold', x, 32, color, message)
             self.manager.swap_canvas()
             time.sleep(0.5)
@@ -544,7 +587,7 @@ class BearsDisplay:
         competition = game['competitions'][0]
         home_team = competition['competitors'][0]
         away_team = competition['competitors'][1]
-        bears_home = home_team['team']['abbreviation'] == 'CHI'
+        bears_home = home_team['team']['abbreviation'] == self.nfl_team.abbrev
         opponent = away_team if bears_home else home_team
         vs_at = 'VS' if bears_home else 'AT'
 
@@ -560,14 +603,14 @@ class BearsDisplay:
 
         line1 = f'TODAY {vs_at}'
         x = max(0, (96 - len(line1) * Fonts.CHAR_WIDTH_TINY) // 2)
-        self.manager.draw_text('tiny', x, 19, self.BEARS_WHITE, line1)
+        self.manager.draw_text('tiny', x, 19, self.TEXT_WHITE, line1)
 
         x = max(0, (96 - len(opp_name) * Fonts.CHAR_WIDTH_TINY) // 2)
-        self.manager.draw_text('tiny_bold', x, 27, self.BEARS_ORANGE, opp_name)
+        self.manager.draw_text('tiny_bold', x, 27, self.ACCENT, opp_name)
 
         time_str = format_kickoff_time(kickoff)
         x = max(0, (96 - len(time_str) * Fonts.CHAR_WIDTH_TINY) // 2)
-        self.manager.draw_text('tiny', x, 35, self.BEARS_WHITE, time_str)
+        self.manager.draw_text('tiny', x, 35, self.TEXT_WHITE, time_str)
 
         # Live countdown, recomputed each frame
         seconds = (kickoff - pendulum.now('America/Chicago')).total_seconds()
@@ -589,18 +632,14 @@ class BearsDisplay:
         if parts:
             line = ' '.join(parts)
             x = max(0, (96 - len(line) * Fonts.CHAR_WIDTH_MICRO) // 2)
-            self.manager.draw_text('micro', x, 47, self.BEARS_GRAY, line)
+            self.manager.draw_text('micro', x, 47, self.TEXT_GRAY, line)
 
     def _draw_final_content(self, score_data, frame_count):
         """Draw the final-score screen with a win celebration"""
         bears_score = score_data['bears_score']
         opp_score = score_data['opp_score']
-        opp_abbr = score_data['opponent_abbr']
 
-        self.manager.draw_text('small_bold', 8, 24,
-                               self.BEARS_WHITE, f'CHI {bears_score}')
-        self.manager.draw_text('small_bold', 52, 24,
-                               self.BEARS_WHITE, f'{opp_abbr} {opp_score}')
+        self._draw_score_row(score_data)
 
         try:
             bears_int = int(float(bears_score))
@@ -612,11 +651,11 @@ class BearsDisplay:
             pass
         elif bears_int > opp_int:
             # Alternate orange/white every second (frames are 0.5s)
-            message = 'BEARS WIN!'
+            message = f'{self.nfl_team.short_name.upper()} WIN!'
             if (frame_count // 2) % 2 == 0:
-                color = self.BEARS_ORANGE
+                color = self.ACCENT
             else:
-                color = self.BEARS_WHITE
+                color = self.TEXT_WHITE
             x = max(0, (96 - len(message) * Fonts.CHAR_WIDTH_TINY) // 2)
             self.manager.draw_text('tiny_bold', x, 37, color, message)
         elif bears_int < opp_int:
@@ -624,10 +663,10 @@ class BearsDisplay:
         else:
             message = 'TIE'
             x = max(0, (96 - len(message) * Fonts.CHAR_WIDTH_TINY) // 2)
-            self.manager.draw_text('tiny_bold', x, 37, self.BEARS_WHITE, message)
+            self.manager.draw_text('tiny_bold', x, 37, self.TEXT_WHITE, message)
 
         x = max(0, (96 - 5 * Fonts.CHAR_WIDTH_MICRO) // 2)
-        self.manager.draw_text('micro', x, 46, self.BEARS_ORANGE, 'FINAL')
+        self.manager.draw_text('micro', x, 46, self.ACCENT, 'FINAL')
 
     def _display_next_game(self, game, duration):
         """Display the next upcoming Bears game as a structured card"""
@@ -637,12 +676,17 @@ class BearsDisplay:
             competition = game['competitions'][0]
             home_team = competition['competitors'][0]
             away_team = competition['competitors'][1]
-            bears_home = home_team['team']['abbreviation'] == 'CHI'
+            bears_home = home_team['team']['abbreviation'] == self.nfl_team.abbrev
             opponent = away_team if bears_home else home_team
             vs_at = 'VS' if bears_home else 'AT'
             opp_name = (opponent['team'].get('shortDisplayName')
                         or opponent['team']['displayName']).upper()
             opp_line = f'{vs_at} {opp_name}'
+
+            team_logo = self._get_team_logo(self.nfl_team.abbrev, 18)
+            opp_logo = self._get_team_logo(
+                opponent['team'].get('abbreviation', ''), 18)
+            use_logos = team_logo is not None and opp_logo is not None
 
             kickoff = pendulum.parse(game['date']).in_timezone('America/Chicago')
             date_line = (f"{kickoff.format('ddd MMM D').upper()} "
@@ -661,30 +705,56 @@ class BearsDisplay:
                 self.manager.clear_canvas()
                 self._draw_sweater_header()
 
-                self.manager.draw_text('ultra_micro', 36, 18,
-                                       (150, 150, 150), 'UP NEXT')
+                if use_logos:
+                    self.manager.draw_text('ultra_micro', 36, 17,
+                                           (150, 150, 150), 'UP NEXT')
+                    self.manager.set_image(team_logo, 12, 19)
+                    self.manager.draw_text(
+                        'tiny_bold', 43, 30, self.TEXT_WHITE, vs_at)
+                    self.manager.set_image(opp_logo, 66, 19)
 
-                x = max(0, (96 - len(opp_line) * Fonts.CHAR_WIDTH_TINY) // 2)
-                self.manager.draw_text('tiny_bold', x, 26,
-                                       self.BEARS_WHITE, opp_line)
+                    x = max(0, (96 - len(date_line) * Fonts.CHAR_WIDTH_TINY) // 2)
+                    self.manager.draw_text('tiny', x, 42,
+                                           self.TEXT_WHITE, date_line)
 
-                x = max(0, (96 - len(date_line) * Fonts.CHAR_WIDTH_TINY) // 2)
-                self.manager.draw_text('tiny', x, 34,
-                                       self.BEARS_WHITE, date_line)
+                    seconds = (kickoff
+                               - pendulum.now('America/Chicago')).total_seconds()
+                    parts = [week_line] if week_line else []
+                    if seconds > 0:
+                        parts.append(f'IN {format_countdown(seconds)}')
+                        color = countdown_color(seconds, yellow_under=24 * 3600,
+                                                orange_under=3 * 3600)
+                    else:
+                        color = self.TEXT_GRAY
+                    if parts:
+                        line = ' '.join(parts)
+                        x = max(0, (96 - len(line) * Fonts.CHAR_WIDTH_MICRO) // 2)
+                        self.manager.draw_text('micro', x, 47, color, line)
+                else:
+                    self.manager.draw_text('ultra_micro', 36, 18,
+                                           (150, 150, 150), 'UP NEXT')
 
-                if week_line:
-                    x = max(0, (96 - len(week_line) * Fonts.CHAR_WIDTH_MICRO) // 2)
-                    self.manager.draw_text('micro', x, 41,
-                                           self.BEARS_GRAY, week_line)
+                    x = max(0, (96 - len(opp_line) * Fonts.CHAR_WIDTH_TINY) // 2)
+                    self.manager.draw_text('tiny_bold', x, 26,
+                                           self.TEXT_WHITE, opp_line)
 
-                seconds = (kickoff
-                           - pendulum.now('America/Chicago')).total_seconds()
-                if seconds > 0:
-                    countdown = f'IN {format_countdown(seconds)}'
-                    color = countdown_color(seconds, yellow_under=24 * 3600,
-                                            orange_under=3 * 3600)
-                    x = max(0, (96 - len(countdown) * Fonts.CHAR_WIDTH_MICRO) // 2)
-                    self.manager.draw_text('micro', x, 47, color, countdown)
+                    x = max(0, (96 - len(date_line) * Fonts.CHAR_WIDTH_TINY) // 2)
+                    self.manager.draw_text('tiny', x, 34,
+                                           self.TEXT_WHITE, date_line)
+
+                    if week_line:
+                        x = max(0, (96 - len(week_line) * Fonts.CHAR_WIDTH_MICRO) // 2)
+                        self.manager.draw_text('micro', x, 41,
+                                               self.TEXT_GRAY, week_line)
+
+                    seconds = (kickoff
+                               - pendulum.now('America/Chicago')).total_seconds()
+                    if seconds > 0:
+                        countdown = f'IN {format_countdown(seconds)}'
+                        color = countdown_color(seconds, yellow_under=24 * 3600,
+                                                orange_under=3 * 3600)
+                        x = max(0, (96 - len(countdown) * Fonts.CHAR_WIDTH_MICRO) // 2)
+                        self.manager.draw_text('micro', x, 47, color, countdown)
 
                 self.manager.swap_canvas()
                 time.sleep(0.5)

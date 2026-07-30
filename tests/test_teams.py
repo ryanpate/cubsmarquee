@@ -290,3 +290,40 @@ class TestOffSeasonTeamContent:
     def test_cubs_defaults_keep_bears(self, monkeypatch):
         handler = self._handler(monkeypatch, 'cubs')
         assert handler.config['enable_bears'] is True
+
+
+class TestBearsDisplayTheming:
+    def _make_display(self, monkeypatch, config):
+        from unittest.mock import MagicMock
+        import teams
+        import bears_display
+        monkeypatch.setattr(teams, 'load_user_config', lambda: config)
+        return bears_display.BearsDisplay(MagicMock())
+
+    def test_bears_default_theming(self, monkeypatch):
+        d = self._make_display(monkeypatch, {})
+        assert d.nfl_team.slug == 'bears'
+        assert '/teams/chi/schedule' in d.schedule_url
+        assert d.PRIMARY == (11, 22, 42)
+        assert d.ACCENT == (200, 56, 3)
+
+    def test_chiefs_theming(self, monkeypatch):
+        d = self._make_display(monkeypatch, {'nfl_team': 'chiefs'})
+        assert d.nfl_team.slug == 'chiefs'
+        assert '/teams/kc/schedule' in d.schedule_url
+        assert d.PRIMARY == (227, 24, 55)
+        assert d.ACCENT == (255, 184, 28)
+
+    def test_win_message_strings(self, monkeypatch):
+        from unittest.mock import MagicMock
+        for config, expected in (
+                ({}, 'BEARS WIN!'),
+                ({'nfl_team': 'chiefs'}, 'CHIEFS WIN!')):
+            d = self._make_display(monkeypatch, config)
+            d.manager = MagicMock()
+            d._draw_final_content(
+                {'bears_score': '21', 'opp_score': '14',
+                 'opponent_abbr': 'GB'}, frame_count=0)
+            drawn = [call.args[4] for call in
+                     d.manager.draw_text.call_args_list]
+            assert expected in drawn

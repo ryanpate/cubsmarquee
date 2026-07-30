@@ -507,12 +507,20 @@ class TestBearsSituation:
     def test_bears_possession(self) -> None:
         from bears_display import extract_situation
         competition = self._competition_with_situation({'possession': '3'})
-        assert extract_situation(competition)['possession'] == 'bears'
+        assert extract_situation(competition)['possession'] == 'team'
 
     def test_opponent_possession(self) -> None:
         from bears_display import extract_situation
         competition = self._competition_with_situation({'possession': '9'})
         assert extract_situation(competition)['possession'] == 'opponent'
+
+    def test_possession_with_custom_team_abbrev(self) -> None:
+        from bears_display import extract_situation
+        competition = self._competition_with_situation({'possession': '3'})
+        # abbreviation 'CHI' belongs to team id 3 in this fixture; asking
+        # for KC means neither side matches the selected team's abbrev
+        result = extract_situation(competition, team_abbrev='KC')
+        assert result['possession'] == 'opponent'
 
     def test_down_distance_string(self) -> None:
         from bears_display import extract_situation
@@ -611,6 +619,7 @@ class TestBearsCelebrationAndTime:
         assert celebration_message(3) == 'FIELD GOAL!'
         assert celebration_message(2) == 'SAFETY!'
         assert celebration_message(1) == 'BEARS SCORE!'
+        assert celebration_message(1, 'CHIEFS') == 'CHIEFS SCORE!'
 
     def test_noon_kickoff(self) -> None:
         import pendulum
@@ -637,8 +646,8 @@ class TestBearsCompactHeader:
         from bears_display import BearsDisplay
 
         display = BearsDisplay.__new__(BearsDisplay)
-        display.BEARS_NAVY = Colors.BEARS_NAVY
-        display.BEARS_ORANGE = Colors.BEARS_ORANGE
+        display.PRIMARY = Colors.BEARS_NAVY
+        display.ACCENT = Colors.BEARS_ORANGE
         img = display._create_bears_sweater_background()
 
         assert img.size == (96, 48)
@@ -661,8 +670,10 @@ class TestBearsCurrentScores:
         self, sample_bears_event: dict[str, Any]
     ) -> None:
         from bears_display import BearsDisplay
+        from teams import NFL_TEAMS
 
         display = BearsDisplay.__new__(BearsDisplay)
+        display.nfl_team = NFL_TEAMS['bears']
         result = display._get_current_scores(sample_bears_event, '401547417')
 
         assert result['bears_score'] == '17'
