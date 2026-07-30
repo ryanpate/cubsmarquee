@@ -161,6 +161,7 @@ User configuration stored at `/home/pi/config.json`:
 - Feature toggles (Bears, PGA, news feeds)
 - Weather location
 - `team` — active team pack slug (`cubs` default, `cardinals`)
+- `nfl_team` — active NFL team pack slug (`bears` default, `chiefs`)
 
 Access admin panel at `http://cubsmarquee.local/admin` for GUI configuration.
 

@@ -70,3 +70,50 @@ def test_save_config_without_team_key_preserves_existing_team(
     assert resp.get_json()['success']
     saved = json.loads((tmp_path / 'config.json').read_text())
     assert saved['team'] == 'cardinals'
+
+
+def test_admin_page_offers_nfl_team_choices(client):
+    html = client.get('/admin').data.decode()
+    assert 'name="nfl_team"' in html
+    assert 'value="bears"' in html
+    assert 'value="chiefs"' in html
+    assert '/nfl_logo/chiefs' in html
+
+
+def test_admin_page_non_default_off_keys_is_clock_only(client):
+    html = client.get('/admin').data.decode()
+    assert 'const NON_DEFAULT_OFF_KEYS = ["enable_clock"];' in html
+
+
+def test_nfl_logo_route(client):
+    resp = client.get('/nfl_logo/chiefs')
+    assert resp.status_code == 200
+    assert resp.mimetype == 'image/png'
+    assert client.get('/nfl_logo/packers').status_code == 404
+
+
+def test_save_config_round_trips_nfl_team(client):
+    resp = client.post('/save_config', json={'nfl_team': 'chiefs'})
+    assert resp.status_code == 200
+    import wifi_config_server as wcs
+    assert wcs.load_config()['nfl_team'] == 'chiefs'
+
+
+def test_load_config_defaults_nfl_team_to_bears(client):
+    import wifi_config_server as wcs
+    assert wcs.load_config()['nfl_team'] == 'bears'
+
+
+def test_save_config_without_nfl_key_preserves_existing(client):
+    client.post('/save_config', json={'nfl_team': 'chiefs'})
+    resp = client.post('/save_config', json={'custom_message': 'HI'})
+    assert resp.status_code == 200
+    import wifi_config_server as wcs
+    assert wcs.load_config()['nfl_team'] == 'chiefs'
+
+
+def test_admin_page_relabels_bears_controls(client):
+    html = client.get('/admin').data.decode()
+    assert 'Enable NFL team game display' in html
+    assert 'Enable NFL breaking news display' in html
+    assert 'Enable Chicago Bears display' not in html

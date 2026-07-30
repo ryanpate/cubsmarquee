@@ -14,7 +14,7 @@ import re
 from scoreboard_config import DisplayConfig, PREVIEW_FILE_PATH
 from teams import (
     TEAMS, DEFAULT_TEAM_SLUG, NON_DEFAULT_OFF_KEYS, DEFAULT_CUSTOM_MESSAGES,
-    apply_team_defaults, get_active_team)
+    apply_team_defaults, get_active_team, NFL_TEAMS, DEFAULT_NFL_TEAM_SLUG)
 
 app = Flask(__name__)
 
@@ -143,6 +143,7 @@ def load_config():
     """Load configuration from JSON file"""
     default_config = {
         'team': DEFAULT_TEAM_SLUG,
+        'nfl_team': DEFAULT_NFL_TEAM_SLUG,
         'zip_code': '',
         'weather_api_key': '',
         'custom_message': 'GO CUBS GO! SEE YOU NEXT SEASON!',
@@ -639,6 +640,16 @@ HTML_TEMPLATE = """
                         <span class="team-swatch" style="background: rgb({{ t.primary_color[0] }},{{ t.primary_color[1] }},{{ t.primary_color[2] }})"></span>
                     </label>
                     {% endfor %}
+                    <hr style="border: none; border-top: 1px solid #444; margin: 12px 0;">
+                    <p class="help-text">Pick the NFL team for the football screens (game info and breaking news). Reboot required after changing.</p>
+                    {% for slug, t in nfl_teams.items() %}
+                    <label class="team-option">
+                        <input type="radio" name="nfl_team" value="{{ slug }}">
+                        <img src="/nfl_logo/{{ slug }}" alt="{{ t.name }}">
+                        <span>{{ t.name }}</span>
+                        <span class="team-swatch" style="background: rgb({{ t.primary_color[0] }},{{ t.primary_color[1] }},{{ t.primary_color[2] }})"></span>
+                    </label>
+                    {% endfor %}
                 </div>
             </details>
 
@@ -748,14 +759,14 @@ HTML_TEMPLATE = """
                         <div class="form-group">
                             <label>
                                 <input type="checkbox" id="enable_bears">
-                                Enable Chicago Bears display (football season)
+                                Enable NFL team game display (football season)
                             </label>
                         </div>
 
                         <div class="form-group">
                             <label>
                                 <input type="checkbox" id="enable_bears_news">
-                                Enable Bears breaking news display
+                                Enable NFL breaking news display
                             </label>
                         </div>
 
@@ -876,13 +887,13 @@ HTML_TEMPLATE = """
                         <p class="help-text" style="margin-bottom: 15px;">Adjust scrolling text speed for each display (1 = slowest, 10 = fastest):</p>
 
                         <div class="speed-control">
-                            <label>Bears:</label>
+                            <label>NFL Game:</label>
                             <input type="range" class="speed-slider" id="scroll_speed_bears" min="1" max="10" value="5">
                             <span class="speed-value" id="scroll_speed_bears_val">5</span>
                         </div>
 
                         <div class="speed-control">
-                            <label>Bears News:</label>
+                            <label>NFL News:</label>
                             <input type="range" class="speed-slider" id="scroll_speed_bears_news" min="1" max="10" value="5">
                             <span class="speed-value" id="scroll_speed_bears_news_val">5</span>
                         </div>
@@ -1167,6 +1178,12 @@ HTML_TEMPLATE = """
                 `input[name="team"][value="${teamSlug}"]`);
             if (teamRadio) teamRadio.checked = true;
             window._loadedTeam = teamSlug;
+
+            const nflSlug = config.nfl_team || 'bears';
+            const nflRadio = document.querySelector(
+                `input[name="nfl_team"][value="${nflSlug}"]`);
+            if (nflRadio) nflRadio.checked = true;
+            window._loadedNflTeam = nflSlug;
 
             // Track the currently-selected team separately from
             // window._loadedTeam (which reflects what's saved on the
@@ -1453,8 +1470,10 @@ HTML_TEMPLATE = """
             const lonValue = document.getElementById('flight_tracking_longitude').value;
 
             const checkedTeamRadio = document.querySelector('input[name="team"]:checked');
+            const checkedNflRadio = document.querySelector('input[name="nfl_team"]:checked');
             const config = {
                 team: checkedTeamRadio ? checkedTeamRadio.value : 'cubs',
+                nfl_team: checkedNflRadio ? checkedNflRadio.value : 'bears',
                 zip_code: document.getElementById('zip_code').value,
                 weather_api_key: document.getElementById('weather_api_key').value,
                 custom_message: document.getElementById('custom_message').value,
@@ -1525,9 +1544,12 @@ HTML_TEMPLATE = """
                 if (data.success) {
                     const teamChanged =
                         config.team !== window._loadedTeam;
+                    const nflTeamChanged =
+                        config.nfl_team !== window._loadedNflTeam;
                     window._loadedTeam = config.team;
+                    window._loadedNflTeam = config.nfl_team;
                     showStatus('config-status',
-                        teamChanged
+                        (teamChanged || nflTeamChanged)
                             ? 'Configuration saved! REBOOT the Pi for the team change to take effect (System tab).'
                             : 'Configuration saved successfully! Restart the service for changes to take effect.',
                         true);
@@ -1733,6 +1755,7 @@ def admin():
         ip_address=get_ip_address(),
         config=config,
         teams=TEAMS,
+        nfl_teams=NFL_TEAMS,
         active_team=get_active_team(config),
         team_default_messages=DEFAULT_CUSTOM_MESSAGES,
         non_default_off_keys=NON_DEFAULT_OFF_KEYS
@@ -1742,6 +1765,14 @@ def admin():
 @app.route('/team_logo/<slug>')
 def team_logo(slug):
     pack = TEAMS.get(slug)
+    if pack is None:
+        return ('Not found', 404)
+    return send_file(pack.logo_path, mimetype='image/png')
+
+
+@app.route('/nfl_logo/<slug>')
+def nfl_logo(slug):
+    pack = NFL_TEAMS.get(slug)
     if pack is None:
         return ('Not found', 404)
     return send_file(pack.logo_path, mimetype='image/png')
@@ -2019,6 +2050,8 @@ def save_config_route():
         current_config.update({
             'team': data.get(
                 'team', current_config.get('team', DEFAULT_TEAM_SLUG)),
+            'nfl_team': data.get(
+                'nfl_team', current_config.get('nfl_team', DEFAULT_NFL_TEAM_SLUG)),
             'zip_code': data.get('zip_code', ''),
             'weather_api_key': data.get('weather_api_key', ''),
             'custom_message': data.get(
