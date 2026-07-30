@@ -47,3 +47,15 @@ class TestNflLogos:
             assert os.path.exists(pack.logo_path)
             assert pack.abbrev in {
                 os.path.splitext(f)[0] for f in os.listdir('./logos/nfl')}
+
+
+class TestOpponentLogos:
+    def test_every_pack_team_has_an_opponent_logo(self):
+        """Any pack team can appear as the OTHER board's opponent, which is
+        looked up by abbreviation at logos/{abbrev}.png (see
+        scoreboard_manager.load_game_images)."""
+        from teams import TEAMS
+        for pack in TEAMS.values():
+            path = f'./logos/{pack.abbrev}.png'
+            assert os.path.exists(path), (
+                f'{pack.slug} has no opponent logo at {path}')
