@@ -101,3 +101,49 @@ class TestNflNewsTheming:
         handler = self._make_handler('bears')
         headlines = handler._fetch_bears_news_rss()
         assert headlines[0] == 'BEARS NEWS - CALEB WILLIAMS NAMED STARTER'
+
+
+class TestEnglishOnlyTicker:
+    def test_is_probably_english_accepts_real_headlines(self):
+        from rss_fetch import is_probably_english
+        for headline in (
+                "FIVE OBSERVATIONS FROM THURSDAY'S PRACTICE | CHIEFS",
+                'CHRIS JONES LANDS AT NO. 43 IN "NFL TOP 100" RANKINGS',
+                'KANSAS CITY CHIEFS ANNOUNCE 2026 SEASON KICKOFF',
+                'VON MILLER VISITS DES MOINES YOUTH CAMP',
+                'BEARS SIGN CALEB WILLIAMS TO EXTENSION'):
+            assert is_probably_english(headline), headline
+
+    def test_is_probably_english_rejects_foreign_headlines(self):
+        from rss_fetch import is_probably_english
+        for headline in (
+                'EIN NEU GEDACHTES VERMÄCHTNIS: DIE KANSAS CITY CHIEFS',
+                'DIE KANSAS CITY CHIEFS UND EQUIP SPORT BRINGEN KOSTENLOSE',
+                'UN LEGADO REIMAGINADO: KANSAS CITY CHIEFS PUBLICAN RENOVACIÓN',
+                'UN LEGADO REIMAGINADO: KANSAS CITY CHIEFS'):
+            assert not is_probably_english(headline), headline
+
+    def test_nfl_ticker_drops_foreign_headlines(self, monkeypatch):
+        import off_season_handler as osh
+        from teams import get_active_nfl_team
+
+        class FakeFeed:
+            bozo = False
+
+            class E1:
+                title = 'Chiefs announce 2026 season kickoff'
+
+            class E2:
+                title = 'Die Kansas City Chiefs und Equip Sport bringen'
+
+            entries = [E1(), E2()]
+
+            def get(self, *args):
+                return None
+
+        monkeypatch.setattr(osh, 'fetch_feed', lambda url: FakeFeed())
+        handler = osh.OffSeasonHandler.__new__(osh.OffSeasonHandler)
+        handler.nfl_team = get_active_nfl_team({'nfl_team': 'chiefs'})
+        headlines = handler._fetch_bears_news_rss()
+        assert any('KICKOFF' in h for h in headlines)
+        assert not any('EQUIP SPORT' in h for h in headlines)

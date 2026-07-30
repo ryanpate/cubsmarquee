@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, get_scroll_delay, load_user_config, create_team_gradient_background
 from teams import get_active_team, get_active_nfl_team, apply_team_defaults, data_path_candidates
-from rss_fetch import fetch_feed
+from rss_fetch import fetch_feed, is_probably_english
 from weather_display import WeatherDisplay
 from bears_display import BearsDisplay
 from pga_display import PGADisplay
@@ -252,7 +252,8 @@ class OffSeasonHandler:
                             keyword in headline
                             for keyword in self.team.news_keywords)
 
-                        if is_cubs_related or self.team.slug in feed_url.lower():
+                        if ((is_cubs_related or self.team.slug in feed_url.lower())
+                                and is_probably_english(headline)):
                             # Add team news prefix
                             formatted_headline = f"{self.team.short_name.upper()} NEWS: {headline}"
 
@@ -322,6 +323,8 @@ class OffSeasonHandler:
                 for entry in feed.entries[:15]:
                     try:
                         headline = entry.title.strip().upper()
+                        if not is_probably_english(headline):
+                            continue
                         formatted_headline = f"{news_prefix}{headline}"
 
                         if formatted_headline not in news_headlines:
@@ -360,7 +363,7 @@ class OffSeasonHandler:
                             headline = entry.title.strip().upper()
                             is_team_related = any(keyword in headline for keyword in self.nfl_team.news_keywords)
 
-                            if is_team_related:
+                            if is_team_related and is_probably_english(headline):
                                 formatted_headline = f"{news_prefix}{headline}"
                                 if formatted_headline not in news_headlines:
                                     news_headlines.append(formatted_headline)
