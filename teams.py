@@ -34,6 +34,7 @@ class TeamPack:
     logo_path: str
     marquee_path: str
     celebration_path: str      # animated GIF shown after a win
+    run_scored_path: str       # 21x24 batter sprite for the run animation
     facts_basename: str        # resolved via data_path_candidates()
     history_basename: str      # resolved via data_path_candidates()
     news_rss_url: str
@@ -53,6 +54,7 @@ TEAMS: dict[str, TeamPack] = {
         logo_path='./logos/cubs.png',
         marquee_path='./marquee.png',
         celebration_path='./W.gif',
+        run_scored_path='./logos/run_scored.png',
         facts_basename='cubs_facts.json',
         history_basename='cubs_history.json',
         news_rss_url='https://www.mlb.com/cubs/feeds/news/rss.xml',
@@ -118,6 +120,7 @@ TEAMS: dict[str, TeamPack] = {
         logo_path='./logos/STL.png',
         marquee_path='./cardinals_marquee.png',
         celebration_path='./cards_win.gif',
+        run_scored_path='./logos/cardinals_run.png',
         facts_basename='cardinals_facts.json',
         history_basename='cardinals_history.json',
         news_rss_url='https://www.mlb.com/cardinals/feeds/news/rss.xml',

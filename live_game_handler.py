@@ -601,7 +601,7 @@ class LiveGameHandler:
         """Animate Cubs scoring a run"""
         # Baseball flying animation
         baseball_image = Image.open('./logos/baseball.png')
-        run_image = Image.open('./logos/run_scored.png')
+        run_image = Image.open(self.team.run_scored_path)
         run_image_flipped = run_image.transpose(Image.FLIP_LEFT_RIGHT)
 
         run_y = 15

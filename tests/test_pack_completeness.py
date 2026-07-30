@@ -59,3 +59,14 @@ class TestOpponentLogos:
             path = f'./logos/{pack.abbrev}.png'
             assert os.path.exists(path), (
                 f'{pack.slug} has no opponent logo at {path}')
+
+
+class TestRunScoredSprites:
+    def test_every_pack_has_a_run_scored_sprite(self):
+        from teams import TEAMS
+        for pack in TEAMS.values():
+            assert os.path.exists(pack.run_scored_path), (
+                f'{pack.slug} missing run sprite at {pack.run_scored_path}')
+            with Image.open(pack.run_scored_path) as img:
+                assert img.size == (21, 24), f'{pack.run_scored_path} is {img.size}'
+                assert img.mode == 'RGBA'

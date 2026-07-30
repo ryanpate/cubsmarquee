@@ -327,3 +327,53 @@ class TestBearsDisplayTheming:
             drawn = [call.args[4] for call in
                      d.manager.draw_text.call_args_list]
             assert expected in drawn
+
+
+class TestLiveGameRunAnimations:
+    """Score animations must work for any active team pack"""
+
+    def _make_handler(self, monkeypatch, slug):
+        from unittest.mock import MagicMock
+        import teams
+        import live_game_handler
+        monkeypatch.setattr(teams, 'load_user_config', lambda: {'team': slug})
+        monkeypatch.setattr(live_game_handler.time, 'sleep', lambda s: None)
+        return live_game_handler.LiveGameHandler(MagicMock())
+
+    def test_team_run_animation_uses_pack_sprite(self, monkeypatch):
+        import live_game_handler
+        opened = []
+        real_open = live_game_handler.Image.open
+
+        def spy_open(path, *args, **kwargs):
+            opened.append(str(path))
+            return real_open(path, *args, **kwargs)
+
+        monkeypatch.setattr(live_game_handler.Image, 'open', spy_open)
+        handler = self._make_handler(monkeypatch, 'cardinals')
+        handler.animate_cubs_run()
+        assert './logos/cardinals_run.png' in opened
+        assert not any('run_scored.png' in p for p in opened)
+
+    def test_team_run_animation_default_cubs_sprite(self, monkeypatch):
+        import live_game_handler
+        opened = []
+        real_open = live_game_handler.Image.open
+
+        def spy_open(path, *args, **kwargs):
+            opened.append(str(path))
+            return real_open(path, *args, **kwargs)
+
+        monkeypatch.setattr(live_game_handler.Image, 'open', spy_open)
+        handler = self._make_handler(monkeypatch, 'cubs')
+        handler.animate_cubs_run()
+        assert './logos/run_scored.png' in opened
+
+    def test_opponent_run_animation_with_non_cubs_team(self, monkeypatch):
+        from PIL import Image as PILImage
+        handler = self._make_handler(monkeypatch, 'cardinals')
+        # Cardinals board playing the Cubs: opponent logo is CHC
+        handler.manager.game_images = {
+            'opponent': PILImage.open('./logos/CHC.png')}
+        handler.animate_opponent_run()
+        assert handler.manager.set_image.call_count == 72
