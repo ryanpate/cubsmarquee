@@ -89,7 +89,7 @@ behavior otherwise unchanged; its tests update accordingly.
 - Keyword filter: pack `news_keywords`.
 - Loading/news screens + the handler's own sweater background: pack colors
   and `header_name`; news prefix becomes
-  `f'{short_name.upper()} NEWS: '` (byte-identical for Bears).
+  `f'{short_name.upper()} NEWS - '` (byte-identical for Bears).
 
 ### Logo assets
 
