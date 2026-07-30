@@ -517,28 +517,36 @@ class BearsDisplay:
         elif possession == 'opponent':
             self._draw_possession_dot(91)
 
-        # Down & distance; red and blinking in the red zone
+        # Down & distance; alert-colored and blinking in the red zone
         down_distance = score_data.get('down_distance')
         if down_distance:
             if score_data.get('is_red_zone'):
-                color = (255, 60, 60) if frame_count % 2 == 0 else None
+                color = self._red_zone_alert_color() if frame_count % 2 == 0 else None
             else:
                 color = self.TEXT_WHITE
             if color:
                 x = max(0, (96 - len(down_distance) * Fonts.CHAR_WIDTH_TINY) // 2)
-                self.manager.draw_text('tiny', x, 31, color, down_distance)
+                self.manager.draw_text('tiny', x, 33, color, down_distance)
 
         # Quarter / clock
         game_time = score_data.get('game_time') or ''
         if game_time:
             x = max(0, (96 - len(game_time) * Fonts.CHAR_WIDTH_MICRO) // 2)
-            self.manager.draw_text('micro', x, 38, self.ACCENT, game_time)
+            self.manager.draw_text('micro', x, 39, self.ACCENT, game_time)
 
     def _draw_possession_dot(self, x):
         """Draw a 3x3 orange football dot at the given x, beside the score row"""
         for px in range(x, x + 3):
             for py in range(18, 21):
                 self.manager.draw_pixel(px, py, *self.ACCENT)
+
+    def _red_zone_alert_color(self) -> RGBColor:
+        """Red alert text, except on a red-dominant sweater (Chiefs)
+        where red-on-red vanishes - bright yellow pops there instead."""
+        r, g, b = self.PRIMARY
+        if r > max(g, b) + 60:
+            return Colors.BRIGHT_YELLOW
+        return (255, 60, 60)
 
     def _scroll_last_play(self, text):
         """Scroll a play description once across the bottom strip (y40-47)"""
@@ -706,7 +714,7 @@ class BearsDisplay:
                 self._draw_sweater_header()
 
                 if use_logos:
-                    self.manager.draw_text('ultra_micro', 36, 16,
+                    self.manager.draw_text('ultra_micro', 36, 18,
                                            (150, 150, 150), 'UP NEXT')
                     self.manager.set_image(team_logo, 13, 18)
                     self.manager.draw_text(

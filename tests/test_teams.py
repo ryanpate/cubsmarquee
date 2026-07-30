@@ -377,3 +377,21 @@ class TestLiveGameRunAnimations:
             'opponent': PILImage.open('./logos/CHC.png')}
         handler.animate_opponent_run()
         assert handler.manager.set_image.call_count == 72
+
+
+class TestRedZoneAlertColor:
+    def _make_display(self, monkeypatch, config):
+        from unittest.mock import MagicMock
+        import teams
+        import bears_display
+        monkeypatch.setattr(teams, 'load_user_config', lambda: config)
+        return bears_display.BearsDisplay(MagicMock())
+
+    def test_bears_navy_sweater_uses_red(self, monkeypatch):
+        d = self._make_display(monkeypatch, {})
+        assert d._red_zone_alert_color() == (255, 60, 60)
+
+    def test_chiefs_red_sweater_uses_yellow(self, monkeypatch):
+        from scoreboard_config import Colors
+        d = self._make_display(monkeypatch, {'nfl_team': 'chiefs'})
+        assert d._red_zone_alert_color() == Colors.BRIGHT_YELLOW

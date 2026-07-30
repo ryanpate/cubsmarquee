@@ -84,7 +84,9 @@ try:
     handler = OffSeasonHandler(manager)
     handler.display_bears_news(duration=30)
 except Exception as e:
-    print(f'news screen failed: {e}')
+    import traceback
+    traceback.print_exc()
+    print(f'news screen failed: {e}; sys.path tail: {sys.path[-2:]}')
 
 manager.clear_canvas()
 manager.swap_canvas()
