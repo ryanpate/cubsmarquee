@@ -85,8 +85,8 @@ class TestTeamDefaults:
 
     def test_cardinals_turns_off_chicago_content(self):
         out = apply_team_defaults(self.DEFAULTS, {'team': 'cardinals'})
-        assert out['enable_bears'] is False
-        assert out['enable_bears_news'] is False
+        assert out['enable_bears'] is True
+        assert out['enable_bears_news'] is True
         assert out['enable_clock'] is False
         assert out['enable_weather'] is True
 
@@ -173,6 +173,96 @@ class TestTeamHistoryDisplay:
         assert display.history  # cardinals_history.json parsed
 
 
+class TestGetActiveNflTeam:
+    def test_default_is_bears_when_config_empty(self):
+        from teams import get_active_nfl_team
+        assert get_active_nfl_team({}).slug == 'bears'
+
+    def test_explicit_bears(self):
+        from teams import get_active_nfl_team
+        assert get_active_nfl_team({'nfl_team': 'bears'}).slug == 'bears'
+
+    def test_explicit_chiefs(self):
+        from teams import get_active_nfl_team
+        pack = get_active_nfl_team({'nfl_team': 'chiefs'})
+        assert pack.slug == 'chiefs'
+        assert pack.abbrev == 'KC'
+
+    def test_unknown_slug_falls_back_to_bears(self):
+        from teams import get_active_nfl_team
+        assert get_active_nfl_team({'nfl_team': 'packers'}).slug == 'bears'
+
+    def test_none_config_uses_load_user_config(self, monkeypatch):
+        import teams
+        monkeypatch.setattr(
+            teams, 'load_user_config', lambda: {'nfl_team': 'chiefs'})
+        from teams import get_active_nfl_team
+        assert get_active_nfl_team().slug == 'chiefs'
+
+
+class TestNflPackValues:
+    def test_both_packs_present(self):
+        from teams import NFL_TEAMS, DEFAULT_NFL_TEAM_SLUG
+        assert set(NFL_TEAMS) == {'bears', 'chiefs'}
+        assert DEFAULT_NFL_TEAM_SLUG == 'bears'
+
+    def test_slug_matches_dict_key(self):
+        from teams import NFL_TEAMS
+        for slug, pack in NFL_TEAMS.items():
+            assert pack.slug == slug
+
+    def test_bears_pack_values(self):
+        from teams import NFL_TEAMS
+        b = NFL_TEAMS['bears']
+        assert b.espn_slug == 'chi'
+        assert b.abbrev == 'CHI'
+        assert b.header_name == 'CHICAGO BEARS'
+        assert b.primary_color == (11, 22, 42)
+        assert b.accent_color == (200, 56, 3)
+        assert b.logo_path == './logos/nfl/CHI.png'
+        assert b.news_rss_url == 'https://www.chicagobears.com/rss/news'
+
+    def test_chiefs_pack_values(self):
+        from teams import NFL_TEAMS
+        c = NFL_TEAMS['chiefs']
+        assert c.espn_slug == 'kc'
+        assert c.abbrev == 'KC'
+        assert c.header_name == 'KANSAS CITY CHIEFS'
+        assert c.primary_color == (227, 24, 55)
+        assert c.accent_color == (255, 184, 28)
+        assert c.logo_path == './logos/nfl/KC.png'
+        assert c.news_rss_url == 'https://www.chiefs.com/rss/news'
+
+    def test_chiefs_keywords_sanity(self):
+        from teams import NFL_TEAMS
+        kw = NFL_TEAMS['chiefs'].news_keywords
+        assert 'CHIEFS' in kw
+        assert 'ARROWHEAD' in kw
+        assert not any('BEARS' in k for k in kw)
+
+    def test_bears_keywords_sanity(self):
+        from teams import NFL_TEAMS
+        kw = NFL_TEAMS['bears'].news_keywords
+        assert 'BEARS' in kw
+        assert 'SOLDIER FIELD' in kw
+        assert not any('CHIEFS' in k for k in kw)
+
+
+class TestNonDefaultOffKeysShrink:
+    def test_only_clock_remains(self):
+        from teams import NON_DEFAULT_OFF_KEYS
+        assert NON_DEFAULT_OFF_KEYS == ('enable_clock',)
+
+    def test_cardinals_keeps_bears_content_on(self):
+        from teams import apply_team_defaults
+        defaults = {'enable_bears': True, 'enable_bears_news': True,
+                    'enable_clock': True}
+        adjusted = apply_team_defaults(defaults, {'team': 'cardinals'})
+        assert adjusted['enable_bears'] is True
+        assert adjusted['enable_bears_news'] is True
+        assert adjusted['enable_clock'] is False
+
+
 class TestOffSeasonTeamContent:
     def _handler(self, monkeypatch, team_slug):
         import teams
@@ -191,9 +281,10 @@ class TestOffSeasonTeamContent:
         assert not any('CUBS' in f and 'CARDINALS' not in f
                        for f in facts[:20])
 
-    def test_cardinals_defaults_disable_bears(self, monkeypatch):
+    def test_cardinals_defaults_disable_clock_only(self, monkeypatch):
         handler = self._handler(monkeypatch, 'cardinals')
-        assert handler.config['enable_bears'] is False
+        assert handler.config['enable_bears'] is True
+        assert handler.config['enable_bears_news'] is True
         assert handler.config['enable_clock'] is False
 
     def test_cubs_defaults_keep_bears(self, monkeypatch):

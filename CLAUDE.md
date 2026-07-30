@@ -26,7 +26,7 @@ sudo systemctl start cubs-scoreboard
 | `live_game_handler.py` | Live game display with scores, bases, innings, batter info |
 | `off_season_handler.py` | Off-season content rotation manager |
 | `scoreboard_config.py` | Configuration constants (colors, positions, fonts) |
-| `teams.py` | Team packs (Cubs, Cardinals): identity, colors, assets, content sources incl. news keywords |
+| `teams.py` | Team packs — MLB (Cubs, Cardinals) and NFL (Bears, Chiefs): identity, colors, assets, content sources incl. news keywords |
 
 ### Content Displays
 | File | Purpose |

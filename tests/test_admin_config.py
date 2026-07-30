@@ -34,12 +34,12 @@ def test_load_config_defaults_team_to_cubs(client, monkeypatch):
     assert wcs.load_config()['team'] == 'cubs'
 
 
-def test_load_config_cardinals_disables_bears_by_default(
+def test_load_config_cardinals_keeps_bears_by_default(
         client, tmp_path, monkeypatch):
     import wifi_config_server as wcs
     (tmp_path / 'config.json').write_text(json.dumps({'team': 'cardinals'}))
     cfg = wcs.load_config()
-    assert cfg['enable_bears'] is False
+    assert cfg['enable_bears'] is True
     assert cfg['enable_clock'] is False
 
 

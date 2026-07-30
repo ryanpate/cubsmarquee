@@ -15,8 +15,9 @@ DEFAULT_TEAM_SLUG = 'cubs'
 
 # Content that only makes sense for a Chicago board; defaults to off for
 # other teams unless the user explicitly re-enables it in the admin panel.
-NON_DEFAULT_OFF_KEYS: tuple[str, ...] = (
-    'enable_bears', 'enable_bears_news', 'enable_clock')
+# NFL content is first-class for any board (see NFL_TEAMS below), so only
+# the Wrigley clock remains here.
+NON_DEFAULT_OFF_KEYS: tuple[str, ...] = ('enable_clock',)
 
 
 @dataclass(frozen=True)
@@ -172,6 +173,104 @@ DEFAULT_CUSTOM_MESSAGES: dict[str, str] = {
     slug: f'GO {team.short_name.upper()} GO! SEE YOU NEXT SEASON!'
     for slug, team in TEAMS.items()
 }
+
+
+DEFAULT_NFL_TEAM_SLUG = 'bears'
+
+
+@dataclass(frozen=True)
+class NFLTeamPack:
+    """Everything the NFL screens need to brand themselves for one team"""
+    slug: str
+    espn_slug: str             # ESPN API path segment ('chi', 'kc')
+    abbrev: str                # ESPN competitor abbreviation ('CHI', 'KC')
+    name: str
+    short_name: str
+    header_name: str           # sweater-header text, e.g. 'CHICAGO BEARS'
+    primary_color: RGBColor    # sweater background
+    accent_color: RGBColor     # sweater stripes, highlights
+    logo_path: str             # 20x20 RGBA PNG in logos/nfl/
+    news_rss_url: str
+    news_keywords: tuple[str, ...]  # RSS headline filter for team news
+
+
+NFL_TEAMS: dict[str, NFLTeamPack] = {
+    'bears': NFLTeamPack(
+        slug='bears',
+        espn_slug='chi',
+        abbrev='CHI',
+        name='Chicago Bears',
+        short_name='Bears',
+        header_name='CHICAGO BEARS',
+        primary_color=(11, 22, 42),
+        accent_color=(200, 56, 3),
+        logo_path='./logos/nfl/CHI.png',
+        news_rss_url='https://www.chicagobears.com/rss/news',
+        news_keywords=(
+            'BEARS', 'CHICAGO BEARS', 'CHI BEARS', 'DA BEARS',
+            'CALEB WILLIAMS', 'DJ MOORE', 'D.J. MOORE',
+            'KEENAN ALLEN', 'ROME ODUNZE', 'COLE KMET',
+            'MONTEZ SWEAT', 'TREMAINE EDMUNDS', 'JAYLON JOHNSON',
+            "D'ANDRE SWIFT", 'KYLER GORDON', 'JAQUAN BRISKER',
+            'BEN JOHNSON', 'RYAN POLES',
+            'SOLDIER FIELD', 'HALAS HALL',
+        ),
+    ),
+    'chiefs': NFLTeamPack(
+        slug='chiefs',
+        espn_slug='kc',
+        abbrev='KC',
+        name='Kansas City Chiefs',
+        short_name='Chiefs',
+        header_name='KANSAS CITY CHIEFS',
+        primary_color=(227, 24, 55),
+        accent_color=(255, 184, 28),
+        logo_path='./logos/nfl/KC.png',
+        news_rss_url='https://www.chiefs.com/rss/news',
+        news_keywords=(
+            # Team names and variations
+            'CHIEFS', 'KANSAS CITY CHIEFS', 'KC CHIEFS', 'CHIEFS KINGDOM',
+
+            # Current players (verified on KC roster; ambiguous bare
+            # surnames like KELCE/RICE/WORTHY/JONES are full-name only)
+            'PATRICK MAHOMES', 'MAHOMES',
+            'TRAVIS KELCE',
+            'CHRIS JONES',
+            'ISIAH PACHECO', 'PACHECO',
+            'RASHEE RICE',
+            'XAVIER WORTHY',
+            'TRENT MCDUFFIE', 'MCDUFFIE',
+            'NICK BOLTON',
+            'CREED HUMPHREY',
+            'GEORGE KARLAFTIS', 'KARLAFTIS',
+            'HARRISON BUTKER', 'BUTKER',
+
+            # Coaches and front office
+            'ANDY REID',
+            'STEVE SPAGNUOLO', 'SPAGNUOLO',
+            'BRETT VEACH',
+
+            # Retired Chiefs legends
+            'LEN DAWSON',
+            'DERRICK THOMAS',
+            'JAMAAL CHARLES',
+            'PRIEST HOLMES',
+            'WILLIE LANIER',
+            'BOBBY BELL',
+
+            # Stadium
+            'ARROWHEAD', 'GEHA FIELD',
+        ),
+    ),
+}
+
+
+def get_active_nfl_team(config: dict | None = None) -> NFLTeamPack:
+    """Resolve the active NFL pack from config (or the user config file)"""
+    if config is None:
+        config = load_user_config()
+    slug = config.get('nfl_team', DEFAULT_NFL_TEAM_SLUG)
+    return NFL_TEAMS.get(slug, NFL_TEAMS[DEFAULT_NFL_TEAM_SLUG])
 
 
 def get_active_team(config: dict | None = None) -> TeamPack:
