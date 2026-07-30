@@ -31,6 +31,10 @@ teams.load_user_config = lambda: {**_real_load(), 'nfl_team': SLUG}
 
 from scoreboard_manager import ScoreboardManager  # noqa: E402
 from bears_display import BearsDisplay  # noqa: E402
+# Import BEFORE the matrix exists: rgbmatrix drops the process from root
+# to 'daemon' at init, and pi's 0700 site-packages (where feedparser
+# lives) is untraversable after the drop. main.py orders it the same way.
+from off_season_handler import OffSeasonHandler  # noqa: E402
 
 manager = ScoreboardManager()
 display = BearsDisplay(manager)
@@ -80,7 +84,6 @@ except Exception as e:
 
 print('--- Breaking news (real RSS)')
 try:
-    from off_season_handler import OffSeasonHandler
     handler = OffSeasonHandler(manager)
     handler.display_bears_news(duration=30)
 except Exception as e:
