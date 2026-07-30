@@ -9,10 +9,19 @@ schedule), breaking news (real RSS). Reboot afterward to restore the
 normal display.
 """
 
+import os
 import sys
 import time
 
 sys.path.insert(0, '.')
+
+# Under sudo, HOME points at root, hiding the invoking user's pip
+# --user packages (feedparser etc.) - add them back explicitly.
+sudo_user = os.environ.get('SUDO_USER')
+if sudo_user:
+    sys.path.append(
+        f'/home/{sudo_user}/.local/lib/'
+        f'python{sys.version_info.major}.{sys.version_info.minor}/site-packages')
 
 import teams
 from scoreboard_config import load_user_config as _real_load
