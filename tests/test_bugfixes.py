@@ -1025,3 +1025,71 @@ class TestPregameLoopExitsOnStatusChange:
         handler._display_pregame_base(
             'WARM UP', (0, 255, 0), '7:05 PM', 'LINEUP',
             self._game('Warmup'), 0, 824654)
+
+
+class TestRotationInterludeOnlyAfterContent:
+    """Skipped rotation segments must not fire the between-segment
+    interlude - chains of skipped segments were showing minutes of the
+    game-over FINAL screen back-to-back (2026-07-30)."""
+
+    def _make_handler(self, config):
+        from unittest.mock import MagicMock
+        import off_season_handler as osh
+        handler = osh.OffSeasonHandler.__new__(osh.OffSeasonHandler)
+        handler.config = config
+        handler.rotation_schedule = {k: 0 for k in (
+            'weather', 'bears', 'bears_news', 'pga', 'pga_news',
+            'pga_facts', 'cubs_news', 'message', 'bible', 'bible_facts',
+            'newsmax', 'stocks', 'spring_training', 'allstar', 'flights',
+            'clock', 'cubs_history', 'sky', 'iss', 'celebration')}
+        for attr in ('weather_display', 'bears_display', 'pga_display',
+                     'bible_display', 'newsmax_display', 'stock_display',
+                     'spring_training_display', 'allstar_display',
+                     'flight_display', 'clock_display',
+                     'cubs_history_display', 'sky_display', 'iss_display',
+                     'celebration_display'):
+            setattr(handler, attr, MagicMock())
+        handler.display_bears_news = MagicMock()
+        handler.display_cubs_news = MagicMock()
+        handler._display_custom_message = MagicMock()
+        return handler
+
+    def _all_off(self):
+        return {k: False for k in (
+            'enable_bears', 'enable_weather', 'enable_clock',
+            'enable_bears_news', 'enable_pga', 'enable_pga_news',
+            'enable_pga_facts', 'enable_cubs_facts', 'enable_celebrations',
+            'enable_spring_training', 'enable_allstar', 'enable_sky',
+            'enable_cubs_news', 'enable_cubs_history', 'enable_bible',
+            'enable_bible_facts', 'enable_newsmax', 'enable_stocks',
+            'enable_flights', 'enable_iss')}
+
+    def test_all_disabled_never_fires_interlude(self):
+        handler = self._make_handler(self._all_off())
+        calls = []
+        handler._display_rotation_cycle(
+            between_callback=lambda: calls.append(1) or False)
+        assert calls == []
+
+    def test_interlude_fires_once_per_displayed_segment(self):
+        config = self._all_off()
+        config['enable_weather'] = True   # weather appears twice per cycle
+        config['enable_bible'] = True
+        handler = self._make_handler(config)
+        calls = []
+        handler._display_rotation_cycle(
+            between_callback=lambda: calls.append(1) or False)
+        assert len(calls) == 3
+        assert handler.weather_display.display_weather_screen.call_count == 2
+        assert handler.bible_display.display_bible_verse.call_count == 1
+
+    def test_interlude_true_still_aborts_rotation(self):
+        config = self._all_off()
+        config['enable_weather'] = True
+        config['enable_bible'] = True
+        handler = self._make_handler(config)
+        calls = []
+        handler._display_rotation_cycle(
+            between_callback=lambda: calls.append(1) or True)
+        assert len(calls) == 1
+        assert handler.bible_display.display_bible_verse.call_count == 0

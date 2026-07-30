@@ -534,7 +534,9 @@ class OffSeasonHandler:
     def _display_rotation_cycle(self, between_callback=None):
         """Rotate between different content types.
 
-        If between_callback is provided, it's called after each segment.
+        If between_callback is provided, it's called after each segment
+        that actually displayed something (skipped/no-op segments don't
+        trigger the interlude, so the game-over screen can't chain).
         When it returns True, the rotation exits early.
         """
         print("=== Starting rotation cycle ===")
@@ -574,14 +576,13 @@ class OffSeasonHandler:
                 print(f"Error in Bears display: {e}")
                 import traceback
                 traceback.print_exc()
+            if _tick():
+                return
         else:
             if not self._is_football_season():
                 print("Skipping Bears display (not football season)")
             else:
                 print("Skipping Bears display (disabled in config)")
-
-        if _tick():
-            return
 
         # Display weather (between Bears schedule and Bears news)
         weather_enabled = self.config.get('enable_weather', True)
@@ -596,11 +597,10 @@ class OffSeasonHandler:
                 print(f"Error in weather display: {e}")
                 import traceback
                 traceback.print_exc()
+            if _tick():
+                return
         else:
             print("Skipping weather display (disabled in config)")
-
-        if _tick():
-            return
 
         # Display the Wrigley clock if enabled
         if self.config.get('enable_clock', True):
@@ -614,11 +614,10 @@ class OffSeasonHandler:
                 print(f"Error in clock display: {e}")
                 import traceback
                 traceback.print_exc()
+            if _tick():
+                return
         else:
             print("Skipping clock (disabled in config)")
-
-        if _tick():
-            return
 
         # Display Bears breaking news if enabled
         bears_news_enabled = self.config.get('enable_bears_news', True)
@@ -633,11 +632,10 @@ class OffSeasonHandler:
                 print(f"Error in Bears news display: {e}")
                 import traceback
                 traceback.print_exc()
+            if _tick():
+                return
         else:
             print("Skipping Bears news (disabled in config)")
-
-        if _tick():
-            return
 
         # Display PGA Tour info if it's golf season and enabled
         pga_enabled = self.config.get('enable_pga', True)
@@ -652,14 +650,13 @@ class OffSeasonHandler:
                 print(f"Error in PGA display: {e}")
                 import traceback
                 traceback.print_exc()
+            if _tick():
+                return
         else:
             if not self._is_golf_season():
                 print("Skipping PGA display (not golf season)")
             else:
                 print("Skipping PGA display (disabled in config)")
-
-        if _tick():
-            return
 
         # Display PGA Tour news if it's golf season and enabled
         pga_news_enabled = self.config.get('enable_pga_news', True)
@@ -674,14 +671,13 @@ class OffSeasonHandler:
                 print(f"Error in PGA news display: {e}")
                 import traceback
                 traceback.print_exc()
+            if _tick():
+                return
         else:
             if not self._is_golf_season():
                 print("Skipping PGA news (not golf season)")
             else:
                 print("Skipping PGA news (disabled in config)")
-
-        if _tick():
-            return
 
         # Display PGA Tour facts if it's golf season and enabled
         pga_facts_enabled = self.config.get('enable_pga_facts', True)
@@ -696,14 +692,13 @@ class OffSeasonHandler:
                 print(f"Error in PGA facts display: {e}")
                 import traceback
                 traceback.print_exc()
+            if _tick():
+                return
         else:
             if not self._is_golf_season():
                 print("Skipping PGA facts (not golf season)")
             else:
                 print("Skipping PGA facts (disabled in config)")
-
-        if _tick():
-            return
 
         # Display custom message with Cubs facts
         cubs_facts_enabled = self.config.get('enable_cubs_facts', True)
@@ -718,11 +713,10 @@ class OffSeasonHandler:
                 print(f"Error in custom message: {e}")
                 import traceback
                 traceback.print_exc()
+            if _tick():
+                return
         else:
             print("Skipping Cubs facts/custom message (disabled in config)")
-
-        if _tick():
-            return
 
         # Celebration days (birthdays etc. from config; skips quietly
         # when today isn't one)
@@ -752,15 +746,15 @@ class OffSeasonHandler:
                 print(f"Error in season countdown: {e}")
                 import traceback
                 traceback.print_exc()
+            if _tick():
+                return
         else:
             print("Skipping season countdown (disabled in config)")
 
-        if _tick():
-            return
-
         # All-Star break: Derby promo / ASG pregame countdown. display_promo
         # is a no-op outside the two-day window, so this segment costs
-        # nothing the rest of the year.
+        # nothing the rest of the year - and never triggers the
+        # between-segment interlude (it cannot report whether it drew).
         if self.config.get('enable_allstar', True):
             try:
                 self.allstar_display.display_promo(
@@ -769,9 +763,6 @@ class OffSeasonHandler:
                 print(f"Error in All-Star display: {e}")
                 import traceback
                 traceback.print_exc()
-
-        if _tick():
-            return
 
         # Display weather (between Cubs facts and Cubs news)
         if weather_enabled:
@@ -785,11 +776,10 @@ class OffSeasonHandler:
                 print(f"Error in weather display: {e}")
                 import traceback
                 traceback.print_exc()
+            if _tick():
+                return
         else:
             print("Skipping weather display (disabled in config)")
-
-        if _tick():
-            return
 
         # Display sun/moon sky screen if enabled
         if self.config.get('enable_sky', True):
@@ -803,11 +793,10 @@ class OffSeasonHandler:
                 print(f"Error in sky display: {e}")
                 import traceback
                 traceback.print_exc()
+            if _tick():
+                return
         else:
             print("Skipping sky display (disabled in config)")
-
-        if _tick():
-            return
 
         # Display Cubs breaking news if enabled
         cubs_news_enabled = self.config.get('enable_cubs_news', True)
@@ -822,11 +811,10 @@ class OffSeasonHandler:
                 print(f"Error in Cubs news display: {e}")
                 import traceback
                 traceback.print_exc()
+            if _tick():
+                return
         else:
             print("Skipping Cubs news (disabled in config)")
-
-        if _tick():
-            return
 
         # Display today in Cubs history if enabled (skips quietly on
         # dates with no entry)
@@ -857,11 +845,10 @@ class OffSeasonHandler:
                 print(f"Error in Bible verse display: {e}")
                 import traceback
                 traceback.print_exc()
+            if _tick():
+                return
         else:
             print("Skipping Bible verse (disabled in config)")
-
-        if _tick():
-            return
 
         # Display Bible Facts if enabled
         bible_facts_enabled = self.config.get('enable_bible_facts', True)
@@ -876,11 +863,10 @@ class OffSeasonHandler:
                 print(f"Error in Bible facts display: {e}")
                 import traceback
                 traceback.print_exc()
+            if _tick():
+                return
         else:
             print("Skipping Bible facts (disabled in config)")
-
-        if _tick():
-            return
 
         # Display Newsmax news if enabled
         newsmax_enabled = self.config.get('enable_newsmax', True)
@@ -895,11 +881,10 @@ class OffSeasonHandler:
                 print(f"Error in Newsmax news display: {e}")
                 import traceback
                 traceback.print_exc()
+            if _tick():
+                return
         else:
             print("Skipping Newsmax news (disabled in config)")
-
-        if _tick():
-            return
 
         # Display Stock Exchange ticker if enabled
         stocks_enabled = self.config.get('enable_stocks', True)
@@ -914,11 +899,10 @@ class OffSeasonHandler:
                 print(f"Error in Stock ticker display: {e}")
                 import traceback
                 traceback.print_exc()
+            if _tick():
+                return
         else:
             print("Skipping Stock ticker (disabled in config)")
-
-        if _tick():
-            return
 
         # Display Flight Tracking if enabled
         flights_enabled = self.config.get('enable_flights', True)
@@ -933,11 +917,10 @@ class OffSeasonHandler:
                 print(f"Error in Flight tracking display: {e}")
                 import traceback
                 traceback.print_exc()
+            if _tick():
+                return
         else:
             print("Skipping Flight tracking (disabled in config)")
-
-        if _tick():
-            return
 
         # Display the ISS tracker if enabled (skips when the API or a
         # home location is unavailable)
