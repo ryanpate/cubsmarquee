@@ -5,7 +5,7 @@ import os
 import pytest
 from PIL import Image
 
-from teams import TEAMS
+from teams import TEAMS, NFL_TEAMS
 
 
 @pytest.mark.parametrize('slug', sorted(TEAMS))
@@ -21,3 +21,29 @@ def test_celebration_gif_is_animated(slug):
     gif = Image.open(TEAMS[slug].celebration_path)
     assert getattr(gif, 'n_frames', 1) > 1
     assert gif.info.get('duration', 0) > 0
+
+
+# ESPN competitor abbreviations for all 32 NFL teams (uppercase of the
+# CDN slug used by dev/fetch_nfl_logos.py)
+NFL_ABBREVS = [
+    'ARI', 'ATL', 'BAL', 'BUF', 'CAR', 'CHI', 'CIN', 'CLE',
+    'DAL', 'DEN', 'DET', 'GB', 'HOU', 'IND', 'JAX', 'KC',
+    'LAC', 'LAR', 'LV', 'MIA', 'MIN', 'NE', 'NO', 'NYG',
+    'NYJ', 'PHI', 'PIT', 'SEA', 'SF', 'TB', 'TEN', 'WSH',
+]
+
+
+class TestNflLogos:
+    def test_all_32_logos_exist_and_open(self):
+        for abbrev in NFL_ABBREVS:
+            path = f'./logos/nfl/{abbrev}.png'
+            assert os.path.exists(path), f'missing {path}'
+            with Image.open(path) as img:
+                assert img.size == (20, 20), f'{path} is {img.size}'
+                assert img.mode == 'RGBA', f'{path} is {img.mode}'
+
+    def test_pack_logo_paths_exist(self):
+        for pack in NFL_TEAMS.values():
+            assert os.path.exists(pack.logo_path)
+            assert pack.abbrev in {
+                os.path.splitext(f)[0] for f in os.listdir('./logos/nfl')}
