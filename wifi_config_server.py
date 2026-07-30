@@ -1040,7 +1040,7 @@ HTML_TEMPLATE = """
                     </div>
 
                     <div class="form-group">
-                        <label for="weather_api_key">OpenWeather API Key:</label>
+                        <label for="weather_api_key">OpenWeather API Key (optional - weather now uses Open-Meteo; only the flight address lookup below uses this):</label>
                         <input type="text" id="weather_api_key" placeholder="Get free API key from openweathermap.org" value="{{ config.weather_api_key }}">
                         <div class="help-text">Free tier API key from <a href="https://openweathermap.org/api" target="_blank">openweathermap.org</a></div>
                     </div>

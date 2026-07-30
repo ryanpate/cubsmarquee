@@ -31,7 +31,7 @@ sudo systemctl start cubs-scoreboard
 ### Content Displays
 | File | Purpose |
 |------|---------|
-| `weather_display.py` | Weather data with animated effects (rain, snow, clouds) |
+| `weather_display.py` | Open-Meteo weather with animated effects (rain, snow, clouds) |
 | `bears_display.py` | Chicago Bears NFL scores and game info |
 | `pga_display.py` | PGA Tour leaderboard and golf facts |
 
@@ -149,14 +149,14 @@ All display constants are in `scoreboard_config.py`:
 ## APIs Used
 
 - **MLB Stats API** - Game schedules, scores, lineups, play-by-play
-- **OpenWeatherMap API** - Weather data and forecasts
+- **Open-Meteo API** - Weather data, forecasts, and ZIP geocoding (no API key)
 - **ESPN API** - Bears NFL scores and PGA Tour leaderboards
 - **RSS Feeds** - Cubs and Bears breaking news
 
 ## Configuration
 
 User configuration stored at `/home/pi/config.json`:
-- OpenWeatherMap API key
+- OpenWeather API key (optional - only the admin flight-address lookup uses it)
 - Custom display message
 - Feature toggles (Bears, PGA, news feeds)
 - Weather location

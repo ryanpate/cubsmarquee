@@ -34,7 +34,7 @@ class ConfigValidator:
     # Optional but recommended fields
     OPTIONAL_FIELDS: list[tuple[str, str]] = [
         ("zip_code", "ZIP code for weather display"),
-        ("weather_api_key", "OpenWeatherMap API key for weather display"),
+        ("weather_api_key", "OpenWeather API key (optional - only the admin flight-address lookup uses it)"),
         ("team", "Active team pack slug (cubs, cardinals)"),
     ]
 
@@ -121,13 +121,12 @@ class ConfigValidator:
     def validate_weather_config(self) -> ValidationResult:
         """Validate weather-specific configuration"""
         zip_code = self.config.get("zip_code")
-        api_key = self.config.get("weather_api_key")
 
-        if not zip_code or not api_key:
+        if not zip_code:
             return ValidationResult(
                 is_valid=False,
                 field="weather",
-                message="Weather display disabled: missing zip_code or weather_api_key",
+                message="Weather display disabled: missing zip_code",
                 is_required=False
             )
 
@@ -137,15 +136,6 @@ class ConfigValidator:
                 is_valid=False,
                 field="zip_code",
                 message=f"Invalid ZIP code format: '{zip_code}' (expected 5 digits)",
-                is_required=False
-            )
-
-        # Validate API key format (basic check)
-        if not isinstance(api_key, str) or len(api_key) < 20:
-            return ValidationResult(
-                is_valid=False,
-                field="weather_api_key",
-                message="Invalid weather API key format",
                 is_required=False
             )
 

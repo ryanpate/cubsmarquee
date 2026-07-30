@@ -430,10 +430,7 @@ class OffSeasonHandler:
         print("Entering off-season display mode...")
 
         # Check if weather is configured
-        weather_enabled = (
-            self.config.get('zip_code') and
-            self.config.get('weather_api_key')
-        )
+        weather_enabled = bool(self.config.get('zip_code'))
 
         if not weather_enabled:
             print("Weather not configured - showing default message only")
@@ -453,10 +450,7 @@ class OffSeasonHandler:
             try:
                 # Reload config periodically (every loop)
                 self.config = self._load_config()
-                weather_enabled = (
-                    self.config.get('zip_code') and
-                    self.config.get('weather_api_key')
-                )
+                weather_enabled = bool(self.config.get('zip_code'))
 
                 # Display mode handling
                 display_mode = self.config.get('display_mode', 'auto')
@@ -1206,7 +1200,7 @@ class OffSeasonHandler:
             # Pick up weather config added via the admin panel without
             # requiring a process restart
             config = self._load_config()
-            if config.get('zip_code') and config.get('weather_api_key'):
+            if config.get('zip_code'):
                 print("Weather configuration detected - switching to full rotation")
                 return True
 

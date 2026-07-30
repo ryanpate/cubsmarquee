@@ -1,4 +1,8 @@
-"""Weather display handler using OpenWeatherMap API"""
+"""Weather display handler using the Open-Meteo API (no key required).
+
+Open-Meteo responses are adapted into the OpenWeatherMap shapes the
+drawing code was written against, so animations and layout are untouched.
+"""
 
 from __future__ import annotations
 
@@ -15,6 +19,49 @@ from retry import retry_http_request
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
+
+GEOCODE_URL = 'https://geocoding-api.open-meteo.com/v1/search'
+FORECAST_URL = 'https://api.open-meteo.com/v1/forecast'
+
+# WMO weather code -> (OpenWeatherMap-style condition, description).
+# The condition strings drive the animation/background/icon pickers,
+# so they must stay the names the drawing code already handles.
+WMO_CODES: dict[int, tuple[str, str]] = {
+    0: ('Clear', 'clear sky'),
+    1: ('Clear', 'mainly clear'),
+    2: ('Clouds', 'partly cloudy'),
+    3: ('Clouds', 'overcast clouds'),
+    45: ('Mist', 'fog'),
+    48: ('Mist', 'depositing rime fog'),
+    51: ('Drizzle', 'light drizzle'),
+    53: ('Drizzle', 'moderate drizzle'),
+    55: ('Drizzle', 'dense drizzle'),
+    56: ('Drizzle', 'freezing drizzle'),
+    57: ('Drizzle', 'dense freezing drizzle'),
+    61: ('Rain', 'slight rain'),
+    63: ('Rain', 'moderate rain'),
+    65: ('Rain', 'heavy rain'),
+    66: ('Rain', 'freezing rain'),
+    67: ('Rain', 'heavy freezing rain'),
+    71: ('Snow', 'slight snow'),
+    73: ('Snow', 'moderate snow'),
+    75: ('Snow', 'heavy snow'),
+    77: ('Snow', 'snow grains'),
+    80: ('Rain', 'slight rain showers'),
+    81: ('Rain', 'moderate rain showers'),
+    82: ('Rain', 'violent rain showers'),
+    85: ('Snow', 'slight snow showers'),
+    86: ('Snow', 'heavy snow showers'),
+    95: ('Thunderstorm', 'thunderstorm'),
+    96: ('Thunderstorm', 'thunderstorm with slight hail'),
+    99: ('Thunderstorm', 'thunderstorm with heavy hail'),
+}
+
+
+def wmo_to_condition(code: int) -> tuple[str, str]:
+    """Map a WMO weather code to (condition, description); unknown codes
+    degrade to a cloudy sky rather than an unknown animation state."""
+    return WMO_CODES.get(code, ('Clouds', f'weather code {code}'))
 
 
 class WeatherDisplay:
@@ -46,6 +93,10 @@ class WeatherDisplay:
         # Cache the current background for efficient redraws
         self._background_cache: list[list[tuple[int, int, int]]] | None = None
 
+        # Geocoded home location: (zip_code, lat, lon, city). Cached per
+        # process so the geocoder is hit once per boot, not per refresh.
+        self._geo: tuple[str, float, float, str] | None = None
+
     def _load_config(self):
         """Load configuration"""
         config_path = '/home/pi/config.json'
@@ -55,32 +106,83 @@ class WeatherDisplay:
         except:
             return {}
 
+    def _geocode_zip(self, zip_code):
+        """Resolve a US ZIP to (lat, lon, city) via Open-Meteo geocoding"""
+        if self._geo and self._geo[0] == zip_code:
+            return self._geo[1], self._geo[2], self._geo[3]
+        url = f'{GEOCODE_URL}?name={zip_code}&count=1&language=en&format=json'
+        response = retry_http_request(url, timeout=10)
+        results = response.json().get('results')
+        if not results:
+            print(f"Geocoding found no match for ZIP {zip_code}")
+            return None
+        place = results[0]
+        self._geo = (zip_code, place['latitude'], place['longitude'],
+                     place.get('name', zip_code))
+        print(f"Geocoded {zip_code} -> {self._geo[3]} "
+              f"({self._geo[1]:.4f}, {self._geo[2]:.4f})")
+        return self._geo[1], self._geo[2], self._geo[3]
+
     def _fetch_weather(self):
-        """Fetch weather data from OpenWeatherMap API"""
+        """Fetch weather from Open-Meteo and adapt it to the OWM shapes
+        the drawing code consumes. No API key needed."""
         config = self._load_config()
         zip_code = config.get('zip_code')
-        api_key = config.get('weather_api_key')
 
-        if not zip_code or not api_key:
+        if not zip_code:
             print("Weather not configured")
             return False
 
         try:
-            # Current weather
-            current_url = f"https://api.openweathermap.org/data/2.5/weather?zip={zip_code},US&appid={api_key}&units=imperial"
-            current_response = retry_http_request(current_url, timeout=10)
-            self.weather_data = current_response.json()
+            geo = self._geocode_zip(zip_code)
+            if geo is None:
+                return False
+            lat, lon, city = geo
 
-            # 5-day forecast (3-hour intervals)
-            forecast_url = f"https://api.openweathermap.org/data/2.5/forecast?zip={zip_code},US&appid={api_key}&units=imperial"
-            forecast_response = retry_http_request(forecast_url, timeout=10)
-            self.forecast_data = forecast_response.json()
+            url = (
+                f'{FORECAST_URL}?latitude={lat}&longitude={lon}'
+                '&current=temperature_2m,apparent_temperature,'
+                'relative_humidity_2m,weather_code'
+                '&hourly=temperature_2m,weather_code'
+                '&daily=sunrise,sunset'
+                '&temperature_unit=fahrenheit'
+                '&timezone=auto&timeformat=unixtime&forecast_days=5')
+            response = retry_http_request(url, timeout=10)
+            data = response.json()
+
+            current = data['current']
+            condition, description = wmo_to_condition(current['weather_code'])
+            self.weather_data = {
+                'name': city,
+                'weather': [{'main': condition, 'description': description}],
+                'main': {
+                    'temp': current['temperature_2m'],
+                    'feels_like': current['apparent_temperature'],
+                    'humidity': current['relative_humidity_2m'],
+                },
+                # daily[0] is today in the location's timezone
+                'sys': {
+                    'sunrise': data['daily']['sunrise'][0],
+                    'sunset': data['daily']['sunset'][0],
+                },
+            }
+
+            hourly = data['hourly']
+            self.forecast_data = {'list': [
+                {
+                    'dt_txt': pendulum.from_timestamp(t, tz='UTC').format(
+                        'YYYY-MM-DD HH:mm:ss'),
+                    'main': {'temp': temp},
+                    'weather': [{'main': wmo_to_condition(code)[0]}],
+                }
+                for t, temp, code in zip(
+                    hourly['time'], hourly['temperature_2m'],
+                    hourly['weather_code'])
+            ]}
 
             self.last_update = time.time()
-            condition = self.weather_data['weather'][0]['main']
-            description = self.weather_data['weather'][0]['description']
             print(
-                f"Weather updated: {self.weather_data['name']}, {self.weather_data['main']['temp']}°F, Condition: {condition} ({description})")
+                f"Weather updated: {city}, {self.weather_data['main']['temp']}°F, Condition: {condition} ({description})")
             return True
 
         except Exception as e:
@@ -413,7 +515,7 @@ class WeatherDisplay:
             return None
 
     def _build_daily_forecasts(self):
-        """Bucket 3-hourly forecast readings into the next 3 local-time days"""
+        """Bucket hourly forecast readings into the next 3 local-time days"""
         local_tz = pendulum.now().timezone
 
         # Get current date to exclude today
