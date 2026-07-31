@@ -7,7 +7,7 @@ import requests
 import json
 import os
 import math
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 from typing import TYPE_CHECKING, Any
 
 from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, get_scroll_delay, load_user_config
@@ -52,6 +52,26 @@ class FlightDisplay:
         'ANA': 'ANA', 'JAL': 'JAPAN AIR', 'KAL': 'KOREAN', 'SIA': 'SINGAPORE',
     }
 
+    # Airline logo assets (20x20 PNGs named by lowercase ICAO prefix)
+    AIRLINE_LOGO_DIR: str = './logos/airlines'
+
+    # Deterministic monogram-badge palette for airlines without a logo
+    MONOGRAM_COLORS: list[RGBColor] = [
+        (0, 90, 200), (190, 40, 40), (220, 110, 0),
+        (0, 140, 85), (130, 60, 190), (0, 145, 165),
+    ]
+
+    # ICAO callsign prefix -> IATA airline code
+    ICAO_TO_IATA: dict[str, str] = {
+        'UAL': 'UA', 'AAL': 'AA', 'DAL': 'DL', 'SWA': 'WN',
+        'JBU': 'B6', 'ASA': 'AS', 'NKS': 'NK', 'FFT': 'F9',
+        'SKW': 'OO', 'RPA': 'YX', 'ENY': 'MQ', 'PDT': 'PT',
+        'EJA': 'EJ', 'FDX': 'FX', 'UPS': '5X', 'BAW': 'BA',
+        'AFR': 'AF', 'DLH': 'LH', 'ACA': 'AC', 'ETD': 'EY',
+        'UAE': 'EK', 'QTR': 'QR', 'CPA': 'CX', 'ANA': 'NH',
+        'JAL': 'JL', 'KAL': 'KE', 'SIA': 'SQ',
+    }
+
     def __init__(self, scoreboard_manager: ScoreboardManager) -> None:
         """Initialize flight display"""
         self.manager = scoreboard_manager
@@ -93,6 +113,9 @@ class FlightDisplay:
         self.ALTITUDE_HIGH: RGBColor = Colors.FLIGHT_ALTITUDE_HIGH
         self.ALTITUDE_MED: RGBColor = Colors.FLIGHT_ALTITUDE_MED
         self.ALTITUDE_LOW: RGBColor = Colors.FLIGHT_ALTITUDE_LOW
+
+        # Airline logos for the FlightWall-style detail card
+        self.airline_logos: dict[str, Image.Image] = self._load_airline_logos()
 
         # Pre-generate cached background image for performance
         self._flight_header_bg: Image.Image = self._create_flight_header_background()
@@ -428,21 +451,11 @@ class FlightDisplay:
 
     def _icao_to_iata_callsign(self, icao_callsign: str) -> str | None:
         """Convert ICAO callsign to IATA format."""
-        icao_to_iata = {
-            'UAL': 'UA', 'AAL': 'AA', 'DAL': 'DL', 'SWA': 'WN',
-            'JBU': 'B6', 'ASA': 'AS', 'NKS': 'NK', 'FFT': 'F9',
-            'SKW': 'OO', 'RPA': 'YX', 'ENY': 'MQ', 'PDT': 'PT',
-            'EJA': 'EJ', 'FDX': 'FX', 'UPS': '5X', 'BAW': 'BA',
-            'AFR': 'AF', 'DLH': 'LH', 'ACA': 'AC', 'ETD': 'EY',
-            'UAE': 'EK', 'QTR': 'QR', 'CPA': 'CX', 'ANA': 'NH',
-            'JAL': 'JL', 'KAL': 'KE', 'SIA': 'SQ',
-        }
-
         if len(icao_callsign) >= 4:
             icao_code = icao_callsign[:3].upper()
             flight_num = icao_callsign[3:]
-            if icao_code in icao_to_iata:
-                return f"{icao_to_iata[icao_code]}{flight_num}"
+            if icao_code in self.ICAO_TO_IATA:
+                return f"{self.ICAO_TO_IATA[icao_code]}{flight_num}"
         return None
 
     def _calculate_distance(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -468,6 +481,50 @@ class FlightDisplay:
         if not callsign or len(callsign) < 4:
             return None
         return self.AIRLINE_NAMES.get(callsign[:3].upper())
+
+    def _load_airline_logos(self) -> dict[str, Image.Image]:
+        """Load 20x20 airline logo PNGs, keyed by uppercase ICAO prefix"""
+        logos: dict[str, Image.Image] = {}
+        try:
+            for fname in os.listdir(self.AIRLINE_LOGO_DIR):
+                if not fname.endswith('.png'):
+                    continue
+                try:
+                    img = Image.open(
+                        os.path.join(self.AIRLINE_LOGO_DIR, fname))
+                    logos[os.path.splitext(fname)[0].upper()] = (
+                        img.convert('RGB'))
+                except Exception as e:
+                    print(f"Skipping airline logo {fname}: {e}")
+        except FileNotFoundError:
+            print(f"Airline logo dir missing: {self.AIRLINE_LOGO_DIR}")
+        print(f"Loaded {len(logos)} airline logos")
+        return logos
+
+    def _monogram_badge(self, callsign: str) -> Image.Image:
+        """20x20 fallback badge: brand-ish colored square + 2-letter code"""
+        prefix = ((callsign or '').strip().upper() + 'ZZZ')[:3]
+        code = self.ICAO_TO_IATA.get(prefix, prefix[:2])
+        color = self.MONOGRAM_COLORS[
+            sum(ord(c) for c in prefix) % len(self.MONOGRAM_COLORS)]
+        img = Image.new('RGB', (20, 20))
+        draw = ImageDraw.Draw(img)
+        try:
+            draw.rounded_rectangle((0, 0, 19, 19), radius=5, fill=color)
+        except AttributeError:  # Pillow < 8.2
+            draw.rectangle((0, 0, 19, 19), fill=color)
+        draw.text((4, 4), code[:2], font=ImageFont.load_default(),
+                  fill=(255, 255, 255))
+        return img
+
+    def _airline_logo(self, callsign: str) -> Image.Image:
+        """Logo for a callsign's airline; monogram badge when unknown"""
+        prefix = ((callsign or '').strip().upper() + 'ZZZ')[:3]
+        logo = self.airline_logos.get(prefix)
+        if logo is None:
+            logo = self._monogram_badge(callsign)
+            self.airline_logos[prefix] = logo  # build once, reuse
+        return logo
 
     @staticmethod
     def _aircraft_category(type_code: str | None) -> str:
