@@ -56,7 +56,7 @@ to `draw_text_aa(...)`:
 
 Because the TTF is proportional, character-count truncation (`text[:11]`)
 becomes width-based truncation: trim trailing characters until
-`measure_text_aa` fits the available width (70px for the detail card lines).
+`measure_text_aa` fits the available width (68px for the detail card lines).
 
 The `micro` and `tiny` rows (metrics, radar labels, counters, scroll
 messages) stay bitmap. AA font size lives as a constant in

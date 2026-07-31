@@ -15,6 +15,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 # Supersampling factor: render at 4x, downsample to 1x
 SCALE: int = 4
+# Pi runs for months between reboots; cap cache to prevent unbounded growth
+CACHE_MAX: int = 1024
 
 
 def find_ttf(candidates: Sequence[str]) -> str | None:
@@ -46,6 +48,8 @@ class AATextRenderer:
             img = big.resize(
                 (max(1, round(width_4x / SCALE)), self._height),
                 Image.LANCZOS)
+            if len(self._cache) >= CACHE_MAX:
+                self._cache.clear()
             self._cache[text] = img
         return img
 

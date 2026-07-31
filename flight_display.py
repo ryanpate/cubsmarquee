@@ -1187,7 +1187,7 @@ class FlightDisplay:
         """One frame of the FlightWall-style detail card.
         Layout (96x48), black background:
           (2,2)-(21,21):        20x20 airline logo (PNG or monogram)
-          x=26, y=9/18/27:      airline, route, aircraft type ('small')
+          x=26, y=9/18/27:      airline, route, aircraft type (AA text)
           y=38/46 alternating:  page A metrics / page B destination (4s)
         """
         callsign = flight['callsign']

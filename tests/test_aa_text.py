@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from unittest.mock import Mock
 
 
 class TestConfig:
@@ -72,8 +73,14 @@ class TestAATextRenderer:
     def test_fit_zero_width_returns_empty(self) -> None:
         assert self._renderer().fit('United', 0) == ''
 
+    def test_cache_is_bounded(self) -> None:
+        from aa_text import CACHE_MAX
 
-from unittest.mock import Mock
+        r = self._renderer()
+        for i in range(CACHE_MAX + 10):
+            r.render(str(i))
+
+        assert len(r._cache) <= CACHE_MAX
 
 
 def _manager(ttf: str | None):
