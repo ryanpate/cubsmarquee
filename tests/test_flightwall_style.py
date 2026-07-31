@@ -86,13 +86,18 @@ def _card_display():
     d.airline_logos = {}  # forces the monogram path: no filesystem needed
     d.FLIGHT_WHITE = Colors.WHITE
     d.FLIGHT_CYAN = Colors.FLIGHT_CYAN
+    d.manager.fit_text_aa.side_effect = lambda text, max_width: text
+    d.manager.measure_text_aa.side_effect = lambda text: len(text) * 6
     return d
 
 
 def _texts(manager):
-    """(color, text) for every draw_text call"""
-    return [(c.args[3], c.args[4])
-            for c in manager.draw_text.call_args_list]
+    """(color, text) for every draw_text and draw_text_aa call"""
+    calls = [(c.args[3], c.args[4])
+             for c in manager.draw_text.call_args_list]
+    calls += [(c.args[2], c.args[3])
+              for c in manager.draw_text_aa.call_args_list]
+    return calls
 
 
 class TestDetailCardFormatting:
@@ -200,8 +205,7 @@ class TestSummaryRestyle:
 
         d = self._render_one_frame()
 
-        texts = dict((c.args[4], c.args[3])
-                     for c in d.manager.draw_text.call_args_list)
+        texts = dict((t, c) for c, t in _texts(d.manager))
         assert '2 aircraft' in texts
         assert texts['Closest:'] == Colors.WHITE
         assert texts['2.3mi'] == Colors.FLIGHT_CYAN
@@ -223,12 +227,13 @@ class TestEmptyStateRestyle:
         d.manager = Mock()
         d.FLIGHT_WHITE = Colors.WHITE
         d.manager.swap_canvas.side_effect = KeyboardInterrupt
+        d.manager.measure_text_aa.side_effect = lambda text: len(text) * 6
         try:
             d._display_no_flights(5)
         except KeyboardInterrupt:
             pass
 
-        texts = [c.args[4] for c in d.manager.draw_text.call_args_list]
+        texts = [t for _, t in _texts(d.manager)]
         assert 'No flights' in texts
         assert 'overhead' in texts
         d.manager.set_image.assert_not_called()  # no gradient header image
@@ -238,3 +243,36 @@ class TestEmptyStateRestyle:
 
         assert not hasattr(FlightDisplay, '_draw_flight_header')
         assert not hasattr(FlightDisplay, '_create_flight_header_background')
+
+
+class TestAATextOnFlightScreens:
+    def test_detail_card_id_lines_use_aa(self) -> None:
+        d = _card_display()
+        d._draw_detail_frame(dict(UAL_FLIGHT), '1/3', 0.0)
+
+        aa_texts = [c.args[3]
+                    for c in d.manager.draw_text_aa.call_args_list]
+        assert 'United' in aa_texts
+        assert 'ORD-LAX' in aa_texts
+        assert 'A321neo' in aa_texts
+        # Metric rows stay bitmap micro
+        bitmap_fonts = set(
+            c.args[0] for c in d.manager.draw_text.call_args_list)
+        assert bitmap_fonts == {'micro'}
+
+    def test_id_lines_are_width_truncated(self) -> None:
+        d = _card_display()
+        d._draw_detail_frame(dict(UAL_FLIGHT), '1/3', 0.0)
+
+        fitted_widths = [c.args[1]
+                         for c in d.manager.fit_text_aa.call_args_list]
+        assert 68 in fitted_widths  # 96 - 26 - 2 beside the logo
+
+    def test_page_b_city_uses_aa_and_fits_beside_counter(self) -> None:
+        d = _card_display()
+        d._draw_detail_frame(dict(UAL_FLIGHT), '1/3', 4.0)
+
+        aa_texts = [c.args[3]
+                    for c in d.manager.draw_text_aa.call_args_list]
+        assert 'Flying to' in aa_texts
+        assert 'Los Angeles' in aa_texts

@@ -931,8 +931,9 @@ class FlightDisplay:
             for baseline, color, text in (
                     (30, self.FLIGHT_WHITE, 'No flights'),
                     (41, (150, 150, 150), 'overhead')):
-                x = (DisplayConfig.MATRIX_COLS - len(text) * 6) // 2
-                self.manager.draw_text('small', x, baseline, color, text)
+                x = (DisplayConfig.MATRIX_COLS
+                     - self.manager.measure_text_aa(text)) // 2
+                self.manager.draw_text_aa(x, baseline, color, text)
 
             self.manager.swap_canvas()
             time.sleep(0.25)
@@ -965,8 +966,7 @@ class FlightDisplay:
             self.manager.clear_canvas()
 
             self._draw_plane_motif(11, 8, time.time())
-            self.manager.draw_text(
-                'small', 24, 11, self.FLIGHT_WHITE, count_str)
+            self.manager.draw_text_aa(24, 11, self.FLIGHT_WHITE, count_str)
 
             for baseline, (label, value) in zip((25, 34, 43), stats):
                 self.manager.draw_text(
@@ -1194,11 +1194,12 @@ class FlightDisplay:
             line2 = ''
         line3 = self._friendly_type(flight.get('aircraft_type'))
 
-        max_chars = (DisplayConfig.MATRIX_COLS - 26) // 6  # 11 chars
+        max_w = DisplayConfig.MATRIX_COLS - 26 - 2  # 68px beside the logo
         for baseline, text in zip((9, 18, 27), (line1, line2, line3)):
             if text:
-                self.manager.draw_text(
-                    'small', 26, baseline, white, text[:max_chars])
+                self.manager.draw_text_aa(
+                    26, baseline, white,
+                    self.manager.fit_text_aa(text, max_w))
 
         if int(tick / 4) % 2 == 0:
             # Page A: FlightWall metric lines, labels white, values cyan
@@ -1210,16 +1211,18 @@ class FlightDisplay:
             dest_code = (flight.get('dest_iata')
                          or flight.get('destination', 'UNKNOWN'))
             city = self._get_airport_city(dest_code)
-            if city and city != 'UNKNOWN':
-                self.manager.draw_text('small', 2, 37, white, 'Flying to')
-                self.manager.draw_text(
-                    'small', 2, 46, cyan, self._display_case(city)[:11])
-            elif flight.get('registration'):
-                self.manager.draw_text('small', 2, 37, white, 'Registration')
-                self.manager.draw_text(
-                    'small', 2, 46, cyan, flight['registration'])
             counter_x = (DisplayConfig.MATRIX_COLS
                          - len(counter_text) * 4 - 2)
+            if city and city != 'UNKNOWN':
+                self.manager.draw_text_aa(2, 37, white, 'Flying to')
+                self.manager.draw_text_aa(
+                    2, 46, cyan,
+                    self.manager.fit_text_aa(
+                        self._display_case(city), counter_x - 6))
+            elif flight.get('registration'):
+                self.manager.draw_text_aa(2, 37, white, 'Registration')
+                self.manager.draw_text_aa(
+                    2, 46, cyan, flight['registration'])
             self.manager.draw_text(
                 'micro', counter_x, 46, Colors.FLIGHT_DIM, counter_text)
 
