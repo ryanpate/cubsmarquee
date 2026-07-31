@@ -59,3 +59,118 @@ class TestAirlineLogos:
         d = FlightDisplay.__new__(FlightDisplay)
         assert d._icao_to_iata_callsign('UAL1837') == 'UA1837'
         assert d._icao_to_iata_callsign('XXX123') is None
+
+
+UAL_FLIGHT = {
+    'callsign': 'UAL1837', 'altitude_ft': 4100, 'velocity_mph': 250,
+    'distance': 2.3, 'latitude': 41.97, 'longitude': -87.72,
+    'aircraft_type': 'A21N', 'registration': 'N44501',
+    'vertical_rate': -1088, 'heading': 263, 'icao_hex': 'a55fa2',
+    'origin_iata': 'ORD', 'dest_iata': 'LAX', 'destination': 'LAX',
+}
+
+GA_FLIGHT = {
+    'callsign': 'N425PC', 'altitude_ft': 2400, 'velocity_mph': 140,
+    'distance': 4.1, 'latitude': 42.01, 'longitude': -87.60,
+    'aircraft_type': 'SR22', 'registration': 'N425PC',
+    'vertical_rate': None, 'heading': None, 'icao_hex': 'a4f2e1',
+    'destination': 'UNKNOWN',
+}
+
+
+def _card_display():
+    """FlightDisplay wired with a Mock manager and no logo files"""
+    from flight_display import FlightDisplay
+    from scoreboard_config import Colors
+
+    d = FlightDisplay.__new__(FlightDisplay)
+    d.manager = Mock()
+    d.airline_logos = {}  # forces the monogram path: no filesystem needed
+    d.FLIGHT_WHITE = Colors.WHITE
+    d.FLIGHT_CYAN = Colors.FLIGHT_CYAN
+    return d
+
+
+def _texts(manager):
+    """(color, text) for every draw_text call"""
+    return [(c.args[3], c.args[4])
+            for c in manager.draw_text.call_args_list]
+
+
+class TestDetailCardFormatting:
+    def _display(self):
+        from flight_display import FlightDisplay
+
+        return FlightDisplay.__new__(FlightDisplay)
+
+    def test_fmt_alt(self) -> None:
+        d = self._display()
+
+        assert d._fmt_alt(732) == '732ft'
+        assert d._fmt_alt(4100) == '4.1kft'
+        assert d._fmt_alt(34000) == '34kft'
+
+    def test_display_case_keeps_short_names_upper(self) -> None:
+        d = self._display()
+
+        assert d._display_case('UNITED') == 'United'
+        assert d._display_case('AIR FRANCE') == 'Air France'
+        assert d._display_case('UPS') == 'UPS'
+
+    def test_friendly_type(self) -> None:
+        d = self._display()
+
+        assert d._friendly_type('A21N') == 'A321neo'
+        assert d._friendly_type('B38M') == '737 MAX 8'
+        assert d._friendly_type('ZZZZ') == 'ZZZZ'   # unknown: raw code
+        assert d._friendly_type('') == ''
+        assert d._friendly_type(None) == ''
+
+
+class TestDetailCardFrame:
+    def test_page_a_ids_and_metrics(self) -> None:
+        from scoreboard_config import Colors
+
+        d = _card_display()
+        d._draw_detail_frame(dict(UAL_FLIGHT), '1/3', 0.0)
+
+        texts = [t for _, t in _texts(d.manager)]
+        assert 'United' in texts
+        assert 'ORD-LAX' in texts
+        assert 'A321neo' in texts
+        assert 'Alt:' in texts and '4.1kft' in texts
+        assert '250mph' in texts and '263deg' in texts and '-1088fpm' in texts
+        # Values cyan, labels white
+        colors = dict((t, c) for c, t in _texts(d.manager))
+        assert colors['4.1kft'] == Colors.FLIGHT_CYAN
+        assert colors['Alt:'] == Colors.WHITE
+        # Counter only on page B
+        assert '1/3' not in texts
+
+    def test_page_b_destination_and_counter(self) -> None:
+        d = _card_display()
+        d._draw_detail_frame(dict(UAL_FLIGHT), '1/3', 4.0)
+
+        texts = [t for _, t in _texts(d.manager)]
+        assert 'Flying to' in texts
+        assert 'Los Angeles' in texts
+        assert '1/3' in texts
+        assert 'Alt:' not in texts
+
+    def test_logo_pasted_top_left(self) -> None:
+        d = _card_display()
+        d._draw_detail_frame(dict(UAL_FLIGHT), '1/3', 0.0)
+
+        (img, x, y) = d.manager.set_image.call_args.args
+        assert (x, y) == (2, 2)
+        assert img.size == (20, 20)
+
+    def test_ga_flight_fallbacks(self) -> None:
+        d = _card_display()
+        d._draw_detail_frame(dict(GA_FLIGHT), '3/3', 4.0)
+
+        texts = [t for _, t in _texts(d.manager)]
+        assert 'N425PC' in texts          # callsign as line 1
+        assert texts.count('N425PC') == 1  # registration line suppressed
+        assert 'SR22' in texts
+        assert 'Registration' in texts     # page B fallback

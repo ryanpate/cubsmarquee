@@ -38,9 +38,6 @@ class FlightDisplay:
     # Cache expiry time (7 days in seconds) - flight routes don't change often
     CACHE_EXPIRY: int = 7 * 24 * 60 * 60
 
-    # Cardinal direction labels
-    CARDINAL_DIRECTIONS: list[str] = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
-
     # ICAO callsign prefix -> airline display name
     AIRLINE_NAMES: dict[str, str] = {
         'UAL': 'UNITED', 'AAL': 'AMERICAN', 'DAL': 'DELTA', 'SWA': 'SOUTHWEST',
@@ -70,6 +67,22 @@ class FlightDisplay:
         'AFR': 'AF', 'DLH': 'LH', 'ACA': 'AC', 'ETD': 'EY',
         'UAE': 'EK', 'QTR': 'QR', 'CPA': 'CX', 'ANA': 'NH',
         'JAL': 'JL', 'KAL': 'KE', 'SIA': 'SQ',
+    }
+
+    # ICAO type code -> friendly marketing name (FlightWall style)
+    TYPE_NAMES: dict[str, str] = {
+        'A19N': 'A319neo', 'A20N': 'A320neo', 'A21N': 'A321neo',
+        'A319': 'A319', 'A320': 'A320', 'A321': 'A321',
+        'A332': 'A330-200', 'A333': 'A330-300', 'A359': 'A350-900',
+        'B712': '717', 'B737': '737-700', 'B738': '737-800',
+        'B739': '737-900', 'B37M': '737 MAX 7', 'B38M': '737 MAX 8',
+        'B39M': '737 MAX 9', 'B744': '747-400', 'B748': '747-8',
+        'B752': '757-200', 'B763': '767-300', 'B772': '777-200',
+        'B77W': '777-300ER', 'B788': '787-8', 'B789': '787-9',
+        'B78X': '787-10', 'E170': 'E170', 'E190': 'E190',
+        'E75L': 'E175', 'E75S': 'E175', 'CRJ2': 'CRJ200',
+        'CRJ7': 'CRJ700', 'CRJ9': 'CRJ900', 'C172': 'Cessna 172',
+        'SR22': 'SR22', 'PC12': 'PC-12',
     }
 
     def __init__(self, scoreboard_manager: ScoreboardManager) -> None:
@@ -110,6 +123,7 @@ class FlightDisplay:
         self.FLIGHT_BLUE: RGBColor = Colors.FLIGHT_BLUE
         self.FLIGHT_DARK_BLUE: RGBColor = Colors.FLIGHT_DARK_BLUE
         self.FLIGHT_WHITE: RGBColor = Colors.WHITE
+        self.FLIGHT_CYAN: RGBColor = Colors.FLIGHT_CYAN
         self.ALTITUDE_HIGH: RGBColor = Colors.FLIGHT_ALTITUDE_HIGH
         self.ALTITUDE_MED: RGBColor = Colors.FLIGHT_ALTITUDE_MED
         self.ALTITUDE_LOW: RGBColor = Colors.FLIGHT_ALTITUDE_LOW
@@ -471,16 +485,56 @@ class FlightDisplay:
         c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
         return R * c
 
-    def _degrees_to_cardinal(self, degrees: float) -> str:
-        """Convert heading degrees to cardinal direction."""
-        index = round(degrees / 45) % 8
-        return self.CARDINAL_DIRECTIONS[index]
-
     def _airline_name(self, callsign: str) -> str | None:
         """Airline display name from an ICAO callsign prefix, or None"""
         if not callsign or len(callsign) < 4:
             return None
         return self.AIRLINE_NAMES.get(callsign[:3].upper())
+
+    @staticmethod
+    def _fmt_alt(altitude_ft: int) -> str:
+        """732 -> '732ft', 4100 -> '4.1kft', 34000 -> '34kft'"""
+        if altitude_ft < 1000:
+            return f"{altitude_ft}ft"
+        if altitude_ft < 10000:
+            return f"{altitude_ft / 1000:.1f}kft"
+        return f"{round(altitude_ft / 1000)}kft"
+
+    @staticmethod
+    def _display_case(name: str) -> str:
+        """Mixed case for display; short codes (UPS, ANA, LAX) stay upper"""
+        return name.title() if len(name) > 3 else name
+
+    def _friendly_type(self, type_code: str | None) -> str:
+        """Marketing name for an ICAO type code ('A21N' -> 'A321neo')"""
+        if not type_code:
+            return ''
+        return self.TYPE_NAMES.get(type_code.upper(), type_code)
+
+    def _draw_segments(
+        self, font_name: str, x: int, y: int,
+        segments: list[tuple[str, RGBColor]],
+    ) -> int:
+        """Draw (text, color) runs left to right; returns the final x"""
+        char_w = {'small': 6, 'tiny': 5, 'tiny_bold': 5, 'micro': 4}[font_name]
+        for text, color in segments:
+            self.manager.draw_text(font_name, x, y, color, text)
+            x += len(text) * char_w
+        return x
+
+    def _metric_segments(
+        self, flight: dict[str, Any]
+    ) -> tuple[list[tuple[str, RGBColor]], list[tuple[str, RGBColor]]]:
+        """The two FlightWall metric lines as (text, color) segments"""
+        white, cyan = self.FLIGHT_WHITE, self.FLIGHT_CYAN
+        heading = flight.get('heading')
+        vertical_rate = flight.get('vertical_rate')
+        trk = f"{round(heading) % 360}deg" if heading is not None else '---'
+        vr = f"{int(vertical_rate)}fpm" if vertical_rate is not None else '---'
+        line1 = [('Alt:', white), (self._fmt_alt(flight['altitude_ft']), cyan),
+                 (' Spd:', white), (f"{flight['velocity_mph']}mph", cyan)]
+        line2 = [('Trk:', white), (trk, cyan), (' Vr:', white), (vr, cyan)]
+        return line1, line2
 
     def _load_airline_logos(self) -> dict[str, Image.Image]:
         """Load 20x20 airline logo PNGs, keyed by uppercase ICAO prefix"""
@@ -527,28 +581,6 @@ class FlightDisplay:
         return logo
 
     @staticmethod
-    def _aircraft_category(type_code: str | None) -> str:
-        """Bucket an ICAO type code into jet/regional/prop/heli for icons"""
-        if not type_code:
-            return ''
-        code = type_code.upper()
-        if code.startswith(('E1', 'E2', 'E7', 'CRJ', 'AT4', 'AT7', 'DH8')):
-            return 'regional'
-        if code.startswith(('R22', 'R44', 'R66', 'EC', 'H6', 'B06', 'AS3', 'S76')):
-            return 'heli'
-        if code.startswith(('C1', 'C2', 'P28', 'PA', 'SR2', 'BE', 'DA2', 'DA4', 'M20')):
-            return 'prop'
-        if code.startswith(('B', 'A', 'MD')):
-            return 'jet'
-        return ''
-
-    @staticmethod
-    def _heading_vector(heading: float, length: int) -> tuple[int, int]:
-        """Pixel offset (dx, dy) for a heading, screen-north up"""
-        rad = math.radians(heading)
-        return (round(length * math.sin(rad)), round(-length * math.cos(rad)))
-
-    @staticmethod
     def _sweep_angle(elapsed: float) -> int:
         """Radar sweep bearing in degrees; one revolution every 4 seconds"""
         return int((elapsed % 4.0) * 90) % 360
@@ -566,21 +598,6 @@ class FlightDisplay:
         if behind >= 45:
             return 0.0
         return 1.0 - behind / 45
-
-    def _get_vertical_rate_indicator(
-        self, vertical_rate: int | None
-    ) -> tuple[str, RGBColor, str]:
-        """Vertical rate as (text, color, direction) where direction is
-        'up', 'down', or 'level' - the caller draws the matching triangle."""
-        if vertical_rate is None:
-            return ('', (150, 150, 150), 'level')
-
-        if vertical_rate > 200:
-            return (str(abs(vertical_rate)), (100, 255, 100), 'up')
-        elif vertical_rate < -200:
-            return (str(abs(vertical_rate)), (255, 130, 50), 'down')
-        else:
-            return ('LVL', (150, 150, 150), 'level')
 
     def _fetch_from_adsb_lol(self) -> bool:
         """Fetch flight data from adsb.lol. Returns True on success."""
@@ -1196,160 +1213,63 @@ class FlightDisplay:
             self.manager.swap_canvas()
             time.sleep(0.08)
 
-    def _draw_aircraft_icon(
-        self, category: str, x: int, y: int, color: RGBColor
-    ) -> None:
-        """Small side-view aircraft silhouette; (x, y) is the top-left of a
-        roughly 11x7 box. Category comes from _aircraft_category()."""
-        draw = self.manager.draw_pixel
-        cy = y + 4
-        if category == 'heli':
-            for i in range(8):  # rotor
-                draw(x + 1 + i, y + 1, *color)
-            draw(x + 4, y + 2, *color)  # mast
-            for i in range(5):  # cabin
-                draw(x + 2 + i, y + 3, *color)
-                draw(x + 2 + i, y + 4, *color)
-            for i in range(3):  # tail boom
-                draw(x + 7 + i, y + 3, *color)
-            draw(x + 9, y + 2, *color)  # tail rotor
-            return
-
-        # Fixed wing: fuselage with nose to the right
-        body = 9 if category == 'jet' else 7
-        for i in range(body):
-            draw(x + i, cy, *color)
-        draw(x + body, cy, *color)
-        if category in ('jet', 'regional'):
-            sweep = 3 if category == 'jet' else 2
-            mid = x + body // 2 + 1
-            for d in range(1, sweep + 1):  # swept wings
-                draw(mid - d, cy - d, *color)
-                draw(mid - d, cy + d, *color)
-            draw(x, cy - 1, *color)  # tail fin
-            draw(x - 1 + 1, cy - 2, *color)
-        else:  # prop: straight wings + propeller disc
-            mid = x + 4
-            for d in (1, 2):
-                draw(mid, cy - d, *color)
-                draw(mid, cy + d, *color)
-            draw(x, cy - 1, *color)
-            draw(x + body + 1, cy, 160, 160, 160)  # prop
-
-    def _draw_rate_triangle(
-        self, x: int, y: int, direction: str, color: RGBColor
-    ) -> None:
-        """5x3 climb/descend triangle; (x, y) is the top-left"""
-        draw = self.manager.draw_pixel
-        rows = ((2, 2), (1, 3), (0, 4)) if direction == 'up' else \
-               ((0, 4), (1, 3), (2, 2))
-        for row, (start, end) in enumerate(rows):
-            for dx in range(start, end + 1):
-                draw(x + dx, y + row, *color)
-
-    def _draw_compass_arrow(
-        self, cx: int, cy: int, heading: float, color: RGBColor
-    ) -> None:
-        """7x7 arrow rotated to the nearest of 8 headings, centered on (cx, cy)"""
-        draw = self.manager.draw_pixel
-        vx, vy = self._heading_vector(heading, 3)
-        for t in range(-3, 4):  # full shaft, tail through tip
-            draw(cx + round(vx * t / 3), cy + round(vy * t / 3), *color)
-        # Arrowhead: perpendicular pixels one step back from the tip
-        bx, by = cx + round(vx * 2 / 3), cy + round(vy * 2 / 3)
-        px, py = (round(vy / 3), -round(vx / 3))
-        draw(bx + px, by + py, *color)
-        draw(bx - px, by - py, *color)
-
-    def _draw_route_arrow(self, x: int, y: int, color: RGBColor) -> None:
-        """Small 5px right-arrow between origin and destination codes"""
-        draw = self.manager.draw_pixel
-        for i in range(5):
-            draw(x + i, y, *color)
-        draw(x + 3, y - 1, *color)
-        draw(x + 3, y + 1, *color)
-
-    def _detail_footer(
-        self, flight: dict[str, Any], dest_display: str, tick: float
-    ) -> str:
-        """Bottom line of the detail screen; alternates destination and
-        airline name every 4 seconds when both are known."""
-        airline = self._airline_name(flight.get('callsign', ''))
-        if airline and dest_display and int(tick / 4) % 2:
-            return airline
-        return dest_display
-
     def _draw_detail_frame(
-        self, flight: dict[str, Any], header_text: str, tick: float
+        self, flight: dict[str, Any], counter_text: str, tick: float
     ) -> None:
-        """One frame of the single-flight detail screen.
-        Layout (96x48):
-          Row 0-13:  Header with airplane silhouette + "N OF M"
-          Row 22:    Aircraft icon + callsign (left), route or type (right)
-          Row 30:    Altitude (left) + climb/descend triangle + rate (right)
-          Row 38:    Speed (left) + compass arrow + cardinal (right)
-          Row 46:    Destination city / airline name / registration
+        """One frame of the FlightWall-style detail card.
+        Layout (96x48), black background:
+          (2,2)-(21,21):        20x20 airline logo (PNG or monogram)
+          x=26, y=9/18/27:      airline, route, aircraft type ('small')
+          y=38/46 alternating:  page A metrics / page B destination (4s)
         """
         callsign = flight['callsign']
-        altitude_ft = flight['altitude_ft']
-        alt_color = self._get_altitude_color(altitude_ft)
-        heading = flight.get('heading')
-        vertical_rate = flight.get('vertical_rate')
+        white, cyan = self.FLIGHT_WHITE, self.FLIGHT_CYAN
 
         self.manager.clear_canvas()
-        self._draw_flight_header(header_text, tick)
+        self.manager.set_image(self._airline_logo(callsign), 2, 2)
 
-        # Row 1 (y=22): category icon + callsign left, route or type right
-        category = self._aircraft_category(flight.get('aircraft_type'))
-        if category:
-            self._draw_aircraft_icon(category, 2, 15, (170, 200, 230))
-        self.manager.draw_text('tiny_bold', 15, 22, (140, 210, 255), callsign)
+        airline = self._airline_name(callsign)
+        line1 = self._display_case(airline) if airline else callsign
         origin, dest = flight.get('origin_iata'), flight.get('dest_iata')
         if origin and dest:
-            route_x = DisplayConfig.MATRIX_COLS - (len(origin) + len(dest)) * 5 - 8
-            self.manager.draw_text('tiny', route_x, 22, (150, 150, 150), origin)
-            self._draw_route_arrow(route_x + len(origin) * 5 + 1, 19, (150, 150, 150))
-            self.manager.draw_text(
-                'tiny', route_x + len(origin) * 5 + 7, 22, (150, 150, 150), dest)
+            line2 = f"{origin}-{dest}"
+        elif airline:
+            line2 = callsign
         else:
-            aircraft_type = flight.get('aircraft_type', '') or ''
-            if aircraft_type:
-                type_x = DisplayConfig.MATRIX_COLS - len(aircraft_type) * 5 - 2
+            line2 = flight.get('registration', '')
+        if line2 == line1:
+            line2 = ''
+        line3 = self._friendly_type(flight.get('aircraft_type'))
+
+        max_chars = (DisplayConfig.MATRIX_COLS - 26) // 6  # 11 chars
+        for baseline, text in zip((9, 18, 27), (line1, line2, line3)):
+            if text:
                 self.manager.draw_text(
-                    'tiny_bold', type_x, 22, (150, 150, 150), aircraft_type)
+                    'small', 26, baseline, white, text[:max_chars])
 
-        # Row 2 (y=30): altitude left, vertical rate with triangle right
-        self.manager.draw_text('tiny', 2, 30, alt_color, f"{altitude_ft:,} FT")
-        vr_str, vr_color, vr_dir = self._get_vertical_rate_indicator(
-            int(vertical_rate) if vertical_rate is not None else None)
-        if vr_str:
-            vr_x = DisplayConfig.MATRIX_COLS - len(vr_str) * 5 - 2
-            self.manager.draw_text('tiny', vr_x, 30, vr_color, vr_str)
-            if vr_dir in ('up', 'down'):
-                self._draw_rate_triangle(vr_x - 7, 25, vr_dir, vr_color)
-
-        # Row 3 (y=38): speed left, compass arrow + cardinal right
-        self.manager.draw_text(
-            'tiny', 2, 38, self.FLIGHT_WHITE, f"{flight['velocity_mph']} MPH")
-        if heading is not None:
-            cardinal = self._degrees_to_cardinal(heading)
-            hdg_x = DisplayConfig.MATRIX_COLS - len(cardinal) * 5 - 2
-            self.manager.draw_text('tiny', hdg_x, 38, (150, 150, 150), cardinal)
-            self._draw_compass_arrow(hdg_x - 7, 35, heading, (150, 150, 150))
-
-        # Row 4 (y=46): destination, airline, or registration
-        dest_code = flight.get('dest_iata') or flight.get('destination', 'UNKNOWN')
-        destination = self._get_airport_city(dest_code)
-        registration = flight.get('registration', '')
-        if destination and destination != 'UNKNOWN':
-            dest_display = f"TO: {destination}"[:18]
-        elif registration:
-            dest_display = f"REG: {registration}"
+        if int(tick / 4) % 2 == 0:
+            # Page A: FlightWall metric lines, labels white, values cyan
+            line_a, line_b = self._metric_segments(flight)
+            self._draw_segments('micro', 2, 38, line_a)
+            self._draw_segments('micro', 2, 46, line_b)
         else:
-            dest_display = ''
-        footer = self._detail_footer(flight, dest_display, tick)
-        if footer:
-            self.manager.draw_text('tiny', 2, 46, self.FLIGHT_WHITE, footer)
+            # Page B: destination city (or registration) + flight counter
+            dest_code = (flight.get('dest_iata')
+                         or flight.get('destination', 'UNKNOWN'))
+            city = self._get_airport_city(dest_code)
+            if city and city != 'UNKNOWN':
+                self.manager.draw_text('small', 2, 37, white, 'Flying to')
+                self.manager.draw_text(
+                    'small', 2, 46, cyan, self._display_case(city)[:13])
+            elif flight.get('registration'):
+                self.manager.draw_text('small', 2, 37, white, 'Registration')
+                if flight['registration'] != line1:
+                    self.manager.draw_text(
+                        'small', 2, 46, cyan, flight['registration'])
+            counter_x = (DisplayConfig.MATRIX_COLS
+                         - len(counter_text) * 4 - 2)
+            self.manager.draw_text(
+                'micro', counter_x, 46, Colors.FLIGHT_DIM, counter_text)
 
         self.manager.swap_canvas()
 
@@ -1357,7 +1277,7 @@ class FlightDisplay:
                                 total_flights: int, display_time: int) -> None:
         """Display a single flight's information for the specified duration"""
         start_time = time.time()
-        header_text = f"{flight_num} OF {total_flights}"
+        header_text = f"{flight_num}/{total_flights}"
 
         while time.time() - start_time < display_time:
             self._draw_detail_frame(flight, header_text, time.time())
