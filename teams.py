@@ -302,6 +302,16 @@ def apply_team_defaults(defaults: dict, user_config: dict) -> dict:
     return adjusted
 
 
+def contrast_background(pack: TeamPack) -> RGBColor:
+    """Card background for pack-branded screens: the primary color,
+    except red-dominant primaries (Cardinals) fall back to the secondary
+    so red logos and red text don't sink into a same-red background."""
+    r, g, b = pack.primary_color
+    if r > max(g, b) + 60:
+        return pack.secondary_color
+    return pack.primary_color
+
+
 def data_path_candidates(basename: str) -> list[str]:
     """Lookup locations for team data files, repo dir first then Pi home"""
     return [f'./{basename}', f'/home/pi/{basename}']

@@ -412,3 +412,36 @@ class TestGameOverBackground:
     def test_cardinals_final_screen_uses_secondary_navy(self, monkeypatch):
         handler = self._make_handler(monkeypatch, 'cardinals')
         assert handler._game_over_bg_color() == (12, 35, 64)
+
+
+class TestContrastBackground:
+    def test_cubs_keeps_primary_blue(self):
+        from teams import TEAMS, contrast_background
+        assert contrast_background(TEAMS['cubs']) == (0, 51, 102)
+
+    def test_cardinals_falls_back_to_secondary_navy(self):
+        from teams import TEAMS, contrast_background
+        assert contrast_background(TEAMS['cardinals']) == (12, 35, 64)
+
+
+class TestPlayoffRaceBackground:
+    def test_cardinals_race_frame_uses_navy_background(self, monkeypatch):
+        from unittest.mock import MagicMock
+        import teams
+        import playoff_race_display as prd
+
+        monkeypatch.setattr(
+            teams, 'load_user_config', lambda: {'team': 'cardinals'})
+        display = prd.PlayoffRaceDisplay.__new__(prd.PlayoffRaceDisplay)
+        display.team = teams.get_active_team({'team': 'cardinals'})
+        display.manager = MagicMock()
+        display._load_logo = MagicMock(return_value=None)
+        display._format_race_rows = MagicMock(return_value=[
+            ('NL CENT', '1ST', ''), ('MAGIC #', '5', ''),
+            ('REC', '58-49', '')])
+        display._in_playoff_position = MagicMock(return_value=True)
+
+        display._draw_race_frame({'div_rank': 1}, tick=0)
+
+        background = display.manager.set_image.call_args_list[0].args[0]
+        assert background.getpixel((0, 20)) == (12, 35, 64)

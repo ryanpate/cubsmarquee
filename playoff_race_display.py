@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 from scoreboard_config import Colors, DisplayConfig, GameConfig, TeamConfig
 from retry import retry_api_call
 from logger import get_logger
-from teams import get_active_team
+from teams import get_active_team, contrast_background
 
 logger = get_logger("playoff_race")
 
@@ -182,7 +182,7 @@ class PlayoffRaceDisplay:
         self.manager.clear_canvas()
         background = Image.new(
             'RGB', (DisplayConfig.MATRIX_COLS, DisplayConfig.MATRIX_ROWS),
-            self.team.primary_color)
+            contrast_background(self.team))
         self.manager.set_image(background, 0, 0)
 
         # Wrigley marquee-style header: white letters on a red band
@@ -259,6 +259,6 @@ class PlayoffRaceDisplay:
 
     def _paste_logo(self, logo: Image.Image, x: int, y: int) -> None:
         """Paste a transparent logo over the current frame background"""
-        base = Image.new('RGB', logo.size, self.team.primary_color)
+        base = Image.new('RGB', logo.size, contrast_background(self.team))
         base.paste(logo, (0, 0), logo)
         self.manager.set_image(base, x, y)

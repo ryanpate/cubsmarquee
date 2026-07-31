@@ -14,7 +14,7 @@ from scoreboard_config import (
 from retry import retry_api_call
 from logger import get_logger
 from flight_display import FlightDisplay
-from teams import get_active_team
+from teams import get_active_team, contrast_background
 
 logger = get_logger("live_game")
 
@@ -581,13 +581,8 @@ class LiveGameHandler:
             print(f"Error getting pitch count: {e}")
 
     def _game_over_bg_color(self):
-        """Final-screen background: the team primary, except red-dominant
-        teams (Cardinals) use their secondary so the red logo and the red
-        LOSS text don't sink into a same-red background."""
-        r, g, b = self.team.primary_color
-        if r > max(g, b) + 60:
-            return self.team.secondary_color
-        return self.team.primary_color
+        """Final-screen background (see teams.contrast_background)"""
+        return contrast_background(self.team)
 
     def _check_score_changes(self, game_data, game_index):
         """Check for score changes and trigger animations"""
