@@ -24,29 +24,6 @@ PIL_FONT_DIR = '/var/tmp/pil_fonts'
 # --- Hand-drawn pixel maps (20 rows x 20 chars, '.' = black) -------------
 
 PIXEL_LOGOS = {
-    # United: blue field, white globe meridians
-    'ual': ({'b': (0, 82, 180), 'w': (235, 240, 255)}, [
-        "bbbbbbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbbbbbb",
-        "bbbbbbbwwwwwwbbbbbbb",
-        "bbbbbwwbbbbbbwwbbbbb",
-        "bbbbwbbwwwwwwbbwbbbb",
-        "bbbwbwwbbbbbbwwbwbbb",
-        "bbbwbwbbwwwwbbwbwbbb",
-        "bbwbwbwwbbbbwwbwbwbb",
-        "bbwbwbwbbbbbbwbwbwbb",
-        "bbwbwbwbbbbbbwbwbwbb",
-        "bbwbwbwbbbbbbwbwbwbb",
-        "bbwbwbwwbbbbwwbwbwbb",
-        "bbbwbwbbwwwwbbwbwbbb",
-        "bbbwbwwbbbbbbwwbwbbb",
-        "bbbbwbbwwwwwwbbwbbbb",
-        "bbbbbwwbbbbbbwwbbbbb",
-        "bbbbbbbwwwwwwbbbbbbb",
-        "bbbbbbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbbbbbb",
-    ]),
     # Delta: two-tone red widget
     'dal': ({'r': (224, 30, 55), 'd': (150, 12, 35)}, [
         "....................",
@@ -121,12 +98,15 @@ PIXEL_LOGOS = {
 
 # --- Letter badges: (text, bg, per-char fg colors) -----------------------
 
+# Curated assets not regenerated here (edit the PNG directly):
+#   aal.png — AA flight-symbol mark, downscaled from a 48px icon
+#   ual.png — United globe mark, downscaled from a 48px icon
+#   asa.png — Alaska Eskimo mark, from a pre-sized 20px vector export
+
 LETTER_BADGES = {
-    'aal': ('AA', (16, 24, 48), [(224, 36, 48), (54, 116, 222)]),
     'jbu': ('jB', (0, 32, 91), [(255, 255, 255), (255, 255, 255)]),
     'nks': ('NK', (255, 236, 0), [(20, 20, 20), (20, 20, 20)]),
     'fft': ('F9', (0, 105, 62), [(255, 255, 255), (255, 255, 255)]),
-    'asa': ('AS', (1, 57, 92), [(255, 255, 255), (68, 190, 190)]),
     'skw': ('OO', (0, 59, 113), [(255, 255, 255), (255, 255, 255)]),
     'rpa': ('YX', (65, 75, 90), [(255, 255, 255), (255, 255, 255)]),
     'eny': ('MQ', (16, 24, 48), [(224, 36, 48), (54, 116, 222)]),
