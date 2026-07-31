@@ -131,26 +131,6 @@ class FlightDisplay:
         # Airline logos for the FlightWall-style detail card
         self.airline_logos: dict[str, Image.Image] = self._load_airline_logos()
 
-        # Pre-generate cached background image for performance
-        self._flight_header_bg: Image.Image = self._create_flight_header_background()
-
-    def _create_flight_header_background(self) -> Image.Image:
-        """Pre-generate flight header background image for performance"""
-        img = Image.new("RGB", (DisplayConfig.MATRIX_COLS, DisplayConfig.MATRIX_ROWS))
-        pixels = img.load()
-        # Header area - sky gradient fading down into the night
-        for y in range(14):
-            t = y / 13.0
-            color = (int(55 - 43 * t), int(110 - 82 * t), int(180 - 124 * t))
-            for x in range(DisplayConfig.MATRIX_COLS):
-                pixels[x, y] = color
-        # Content area - deep navy for text contrast
-        for y in range(14, DisplayConfig.MATRIX_ROWS):
-            for x in range(DisplayConfig.MATRIX_COLS):
-                pixels[x, y] = (10, 24, 48)
-        print("Flight header background cached")
-        return img
-
     def _load_config(self) -> None:
         """Load configuration from config file"""
         config_path = '/home/pi/config.json'
@@ -918,53 +898,21 @@ class FlightDisplay:
         if int(tick * 2) % 2:  # blinking red beacon on the tail
             self.manager.draw_pixel(cx - 5, cy, 255, 60, 60)
 
-    def _draw_flight_header(
-        self, header_text: str = 'OVERHEAD FLIGHT', tick: float | None = None
-    ) -> None:
-        """Draw sky gradient header for flight display using cached background"""
-        if tick is None:
-            tick = time.time()
-        self.manager.set_image(self._flight_header_bg, 0, 0)
-
-        # Thin separator line below header
-        for x in range(DisplayConfig.MATRIX_COLS):
-            self.manager.draw_pixel(x, 13, 70, 95, 130)
-
-        # Top-view airplane silhouette flying right
-        cx, cy = 9, 7
-        for i in range(-4, 6):  # fuselage
-            self.manager.draw_pixel(cx + i, cy, *self.FLIGHT_WHITE)
-        self.manager.draw_pixel(cx + 6, cy, 200, 220, 255)  # nose
-        for d in (1, 2, 3):  # swept wings
-            self.manager.draw_pixel(cx + 1 - d, cy - d, *self.FLIGHT_WHITE)
-            self.manager.draw_pixel(cx + 1 - d, cy + d, *self.FLIGHT_WHITE)
-        for d in (1, 2):  # tail
-            self.manager.draw_pixel(cx - 4 - d + 1, cy - d, *self.FLIGHT_WHITE)
-            self.manager.draw_pixel(cx - 4 - d + 1, cy + d, *self.FLIGHT_WHITE)
-        # Blinking red beacon on the tail
-        if int(tick * 2) % 2:
-            self.manager.draw_pixel(cx - 5, cy, 255, 60, 60)
-
-        # Header text, centered between the top edge and the separator
-        self.manager.draw_text('tiny_bold', 19, 9, self.FLIGHT_WHITE, header_text)
-
     def _display_no_location(self, duration: int) -> None:
         """Display message when location is not configured"""
         start_time = time.time()
         scroll_position = DisplayConfig.MATRIX_COLS
-        message = "CONFIGURE LOCATION IN ADMIN PANEL"
+        message = "Configure location in admin panel"
 
         while time.time() - start_time < duration:
             self.manager.clear_canvas()
-            self._draw_flight_header()
 
+            self._draw_plane_motif(48, 12, time.time())
             scroll_position -= 1
             text_length = len(message) * 5
-
             if scroll_position + text_length < 0:
                 scroll_position = DisplayConfig.MATRIX_COLS
-
-            self.manager.draw_text('tiny_bold', int(scroll_position), 32,
+            self.manager.draw_text('tiny', int(scroll_position), 34,
                                    self.FLIGHT_WHITE, message)
 
             self.manager.swap_canvas()
@@ -978,18 +926,16 @@ class FlightDisplay:
 
         while time.time() - start_time < duration:
             self.manager.clear_canvas()
-            self._draw_flight_header()
 
-            message = "NO FLIGHTS"
-            msg_x = (DisplayConfig.MATRIX_COLS - len(message) * 5) // 2
-            self.manager.draw_text('tiny_bold', msg_x, 28, self.FLIGHT_WHITE, message)
-
-            message2 = "OVERHEAD"
-            msg2_x = (DisplayConfig.MATRIX_COLS - len(message2) * 5) // 2
-            self.manager.draw_text('tiny_bold', msg2_x, 38, self.FLIGHT_WHITE, message2)
+            self._draw_plane_motif(48, 12, time.time())
+            for baseline, color, text in (
+                    (30, self.FLIGHT_WHITE, 'No flights'),
+                    (41, (150, 150, 150), 'overhead')):
+                x = (DisplayConfig.MATRIX_COLS - len(text) * 6) // 2
+                self.manager.draw_text('small', x, baseline, color, text)
 
             self.manager.swap_canvas()
-            time.sleep(0.5)
+            time.sleep(0.25)
 
     def _display_summary_view(self, duration: int) -> None:
         """Display summary of all flights overhead.

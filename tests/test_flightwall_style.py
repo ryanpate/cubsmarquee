@@ -211,3 +211,29 @@ class TestSummaryRestyle:
         d = self._render_one_frame()
 
         assert d.manager.draw_pixel.called  # silhouette pixels on black
+
+
+class TestEmptyStateRestyle:
+    def test_no_flights_screen_is_headerless(self) -> None:
+        from flight_display import FlightDisplay
+        from scoreboard_config import Colors
+
+        d = FlightDisplay.__new__(FlightDisplay)
+        d.manager = Mock()
+        d.FLIGHT_WHITE = Colors.WHITE
+        d.manager.swap_canvas.side_effect = KeyboardInterrupt
+        try:
+            d._display_no_flights(5)
+        except KeyboardInterrupt:
+            pass
+
+        texts = [c.args[4] for c in d.manager.draw_text.call_args_list]
+        assert 'No flights' in texts
+        assert 'overhead' in texts
+        d.manager.set_image.assert_not_called()  # no gradient header image
+
+    def test_header_machinery_removed(self) -> None:
+        from flight_display import FlightDisplay
+
+        assert not hasattr(FlightDisplay, '_draw_flight_header')
+        assert not hasattr(FlightDisplay, '_create_flight_header_background')
