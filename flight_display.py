@@ -1076,12 +1076,8 @@ class FlightDisplay:
         while time.time() - start_time < display_time:
             self.manager.clear_canvas()
 
-            # Dark background
-            bg = Image.new("RGB", (radar_w, DisplayConfig.MATRIX_ROWS), (5, 15, 30))
-            self.manager.set_image(bg, 0, 0)
-
             # Draw range ring (circle at usable_radius)
-            ring_color = (45, 85, 125)
+            ring_color = (0, 80, 100)
             for angle_deg in range(360):
                 rad = math.radians(angle_deg)
                 rx = int(cx + usable_radius * math.cos(rad))
@@ -1120,12 +1116,12 @@ class FlightDisplay:
                     self.manager.draw_pixel(cx, cy + i, *crosshair_color)
 
             # Cardinal direction labels + range readout
-            self.manager.draw_text('micro', cx - 2, 5, (70, 105, 140), 'N')
-            self.manager.draw_text('micro', cx - 2, radar_h - 1, (70, 105, 140), 'S')
-            self.manager.draw_text('micro', 1, cy + 3, (70, 105, 140), 'W')
-            self.manager.draw_text('micro', radar_w - 5, cy + 3, (70, 105, 140), 'E')
+            self.manager.draw_text('micro', cx - 2, 5, (0, 110, 130), 'N')
+            self.manager.draw_text('micro', cx - 2, radar_h - 1, (0, 110, 130), 'S')
+            self.manager.draw_text('micro', 1, cy + 3, (0, 110, 130), 'W')
+            self.manager.draw_text('micro', radar_w - 5, cy + 3, (0, 110, 130), 'E')
             self.manager.draw_text(
-                'micro', 1, 5, (70, 105, 140), f"{int(round(plot_range))}MI")
+                'micro', 1, 5, (0, 110, 130), f"{int(round(plot_range))}MI")
 
             # Blink toggle every 0.4s
             now = time.time()
@@ -1182,7 +1178,7 @@ class FlightDisplay:
                     if label_y < 1:
                         label_y = py + 3
                     self.manager.draw_text('micro', label_x, label_y,
-                                           (200, 200, 200), cs)
+                                           (255, 255, 255), cs)
                 else:
                     # Dim 1-pixel dot that blips bright as the sweep
                     # passes over it, then fades back down
@@ -1196,7 +1192,7 @@ class FlightDisplay:
             # Info bar at bottom - highlighted flight details
             # Separator line
             for x in range(radar_w):
-                self.manager.draw_pixel(x, radar_h + 1, 40, 60, 80)
+                self.manager.draw_pixel(x, radar_h + 1, 0, 60, 75)
 
             cs = highlighted['callsign']
             alt = highlighted['altitude_ft']
@@ -1210,16 +1206,16 @@ class FlightDisplay:
                 dest_str = f"{dist:.1f}MI"
 
             info_left = f"{cs} {alt // 1000}K"
-            self.manager.draw_text('micro', 1, info_y, self.ALTITUDE_HIGH, info_left)
+            self.manager.draw_text('micro', 1, info_y, Colors.WHITE, info_left)
             # Right-align destination/distance
             info_right = dest_str
             rx = radar_w - len(info_right) * 4 - 1
-            self.manager.draw_text('micro', rx, info_y, (150, 150, 150), info_right)
+            self.manager.draw_text('micro', rx, info_y, Colors.FLIGHT_CYAN, info_right)
 
             # Flight count in bottom-right corner
             count_str = f"{highlighted_index + 1}/{len(self.flight_data)}"
             cx2 = radar_w - len(count_str) * 4 - 1
-            self.manager.draw_text('micro', cx2, 47, (80, 80, 80), count_str)
+            self.manager.draw_text('micro', cx2, 47, Colors.FLIGHT_DIM, count_str)
 
             self.manager.swap_canvas()
             time.sleep(0.08)
