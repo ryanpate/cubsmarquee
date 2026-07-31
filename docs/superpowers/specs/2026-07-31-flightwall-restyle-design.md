@@ -58,7 +58,9 @@ background and text styling so no screen keeps the old gradient header.
 - **Line 1:** airline display name (title-cased), fallback to callsign.
 - **Line 2:** route `ORD-LAX` when `origin_iata`/`dest_iata` known; fallback
   to callsign (if line 1 shows airline) or registration.
-- **Line 3:** aircraft type code; blank if unknown.
+- **Line 3:** aircraft type, shown as a friendly marketing name via a small
+  ICAO-code mapping (`A21N` -> `A321neo`, `B38M` -> `737 MAX 8`, ...);
+  falls back to the raw type code, blank if unknown.
 - **Bottom section alternates every 4 seconds:**
   - **Page A (metrics):** `Alt:4.1kft Spd:250mph` / `Trk:263deg Vr:-1088fpm`.
     Labels (`Alt:` etc.) white, values cyan.
@@ -68,15 +70,20 @@ background and text styling so no screen keeps the old gradient header.
   above, e.g. `34kft`), speed mph, track degrees, vertical rate fpm (native
   ADS-B units).
 - **Counter:** dim gray `2/5` (flight N of M) bottom-right in micro font,
-  replacing the old "N OF M" header text.
+  replacing the old "N OF M" header text. Shown on page B only: the page A
+  metric line is 22 chars (88px), leaving no room beside it.
 - Removed from this screen: aircraft category icon, climb/descend triangle,
   compass arrow, cardinal direction, altitude-based text coloring
   (`_get_altitude_color` remains for the radar dots).
 
 ## Airline Logos
 
-- New asset directory `logos/airlines/` with hand-crafted 20x20 pixel-art
-  PNGs, named by lowercase ICAO prefix (`ual.png`, `aal.png`, ...).
+- New asset directory `logos/airlines/` with 20x20 PNGs, named by lowercase
+  ICAO prefix (`ual.png`, `aal.png`, ...), produced by a committed generator
+  script (`tools/gen_airline_logos.py`). Marquee carriers get hand-drawn
+  pixel maps; the rest start as brand-color letter badges (rounded square +
+  IATA code) and are upgraded to pixel art iteratively via a rendered
+  contact sheet.
 - Initial set (Chicagoland traffic): United, American, Delta, Southwest,
   SkyWest, Republic, Envoy, Spirit, Frontier, JetBlue, Alaska, FedEx, UPS.
 - Loaded once at `FlightDisplay.__init__` into `dict[str, Image.Image]`
