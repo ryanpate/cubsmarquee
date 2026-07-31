@@ -10,10 +10,11 @@ import math
 from PIL import Image, ImageDraw, ImageFont
 from typing import TYPE_CHECKING, Any
 
-from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, get_scroll_delay, load_user_config
+from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, Fonts, get_scroll_delay, load_user_config
 from adsb_lol_source import fetch_aircraft as adsb_lol_fetch_aircraft
 from adsb_lol_source import enrich_routes as adsb_lol_enrich_routes
 from route_cache import RouteCache
+from aa_text import find_ttf
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
@@ -538,16 +539,30 @@ class FlightDisplay:
     def _monogram_badge(self, callsign: str) -> Image.Image:
         """20x20 fallback badge: brand-ish colored square + 2-letter code"""
         prefix = ((callsign or '').strip().upper() + 'ZZZ')[:3]
-        code = self.ICAO_TO_IATA.get(prefix, prefix[:2])
+        code = self.ICAO_TO_IATA.get(prefix, prefix[:2])[:2]
         color = self.MONOGRAM_COLORS[
             sum(ord(c) for c in prefix) % len(self.MONOGRAM_COLORS)]
+        ttf_path = find_ttf(Fonts.AA_TTF_CANDIDATES)
+        if ttf_path:
+            # Draw at 4x and downsample: smooth letters and corners
+            big = Image.new('RGB', (80, 80))
+            draw = ImageDraw.Draw(big)
+            try:
+                draw.rounded_rectangle((0, 0, 79, 79), radius=20, fill=color)
+            except AttributeError:  # Pillow < 8.2
+                draw.rectangle((0, 0, 79, 79), fill=color)
+            font = ImageFont.truetype(ttf_path, 44)
+            draw.text((40, 38), code, font=font, anchor='mm',
+                      fill=(255, 255, 255))
+            return big.resize((20, 20), Image.LANCZOS)
+        # No TTF anywhere: the old crunchy-but-working badge
         img = Image.new('RGB', (20, 20))
         draw = ImageDraw.Draw(img)
         try:
             draw.rounded_rectangle((0, 0, 19, 19), radius=5, fill=color)
         except AttributeError:  # Pillow < 8.2
             draw.rectangle((0, 0, 19, 19), fill=color)
-        draw.text((4, 4), code[:2], font=ImageFont.load_default(),
+        draw.text((4, 4), code, font=ImageFont.load_default(),
                   fill=(255, 255, 255))
         return img
 

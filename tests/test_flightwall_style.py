@@ -58,6 +58,21 @@ class TestAirlineLogos:
         assert d._icao_to_iata_callsign('UAL1837') == 'UA1837'
         assert d._icao_to_iata_callsign('XXX123') is None
 
+    def test_monogram_is_antialiased(self) -> None:
+        d = self._display()
+        badge = d._monogram_badge('XYZ999')
+
+        assert badge.size == (20, 20)
+        # Supersampled render blends many colors; the old hard render
+        # produced only a handful
+        assert len(set(badge.getdata())) > 20
+
+    def test_monogram_corners_rounded(self) -> None:
+        badge = self._display()._monogram_badge('XYZ999')
+        r, g, b = badge.getpixel((0, 0))
+
+        assert r + g + b < 90  # corner outside the rounded rect: near-black
+
 
 UAL_FLIGHT = {
     'callsign': 'UAL1837', 'altitude_ft': 4100, 'velocity_mph': 250,
