@@ -74,32 +74,109 @@ def make_marquee():
 
 
 def make_celebration():
-    """96x48 animated 'CARDS WIN!' with chasing border bulbs"""
+    """96x48 fireworks over the Gateway Arch (12 frames, seamless loop)"""
+    import math
+    import random
+
+    NIGHT_TOP = (4, 6, 20)
+    NIGHT_BOTTOM = (16, 20, 44)
+    GROUND = (24, 26, 34)
+    ARCH_STEEL = (192, 198, 210)
+    ARCH_SHADOW = (128, 134, 148)
+    BURSTS = [
+        {'cx': 26, 'cy': 12, 'start': 0, 'color': (235, 60, 85)},   # red
+        {'cx': 70, 'cy': 9, 'start': 4, 'color': (255, 205, 90)},   # gold
+        {'cx': 48, 'cy': 6, 'start': 8, 'color': (255, 255, 255)},  # white
+    ]
+    FRAME_COUNT = 12
+    LIFE = 12  # phases wrap the full loop so the animation cycles seamlessly
+
+    def sky():
+        img = Image.new('RGB', (96, 48))
+        px = img.load()
+        for y in range(48):
+            t = y / 47
+            px_row = tuple(
+                int(a + (b - a) * t) for a, b in zip(NIGHT_TOP, NIGHT_BOTTOM))
+            for x in range(96):
+                px[x, y] = px_row
+        for y in range(45, 48):
+            for x in range(96):
+                px[x, y] = GROUND
+        star_rng = random.Random(64)  # static stars, same every frame
+        for _ in range(18):
+            px[star_rng.randrange(96), star_rng.randrange(3, 26)] = (
+                140, 145, 165)
+        return img
+
+    def scale(color, f):
+        return tuple(int(c * f) for c in color)
+
+    def put(px, x, y, color):
+        if 0 <= x < 96 and 0 <= y < 45:
+            px[x, y] = color
+
+    def draw_burst(px, burst, phase, rng):
+        cx, cy, color = burst['cx'], burst['cy'], burst['color']
+        if phase <= 2:  # rocket rising from the ground with a dim trail
+            ry = 44 - int((44 - cy) * (phase + 1) / 3)
+            put(px, cx, ry, (255, 240, 200))
+            put(px, cx, ry + 2, scale((255, 240, 200), 0.4))
+        elif phase <= 6:  # expanding shell of radial particles
+            r = 2 + 2.5 * (phase - 3)
+            for j in range(14):
+                angle = j * math.tau / 14 + rng.uniform(-0.1, 0.1)
+                x = cx + int(round(r * math.cos(angle)))
+                y = cy + int(round(r * 0.85 * math.sin(angle)))
+                put(px, x, y, color)
+                if phase >= 5:  # trailing inner ring as the shell expands
+                    x2 = cx + int(round((r - 2.5) * math.cos(angle)))
+                    y2 = cy + int(round((r - 2.5) * 0.85 * math.sin(angle)))
+                    put(px, x2, y2, scale(color, 0.45))
+        elif phase <= 9:  # sparkles drifting down and fading out
+            r = 2 + 2.5 * 3
+            fade = {7: 0.6, 8: 0.35, 9: 0.18}[phase]
+            for j in range(14):
+                if rng.random() < 0.65:
+                    angle = j * math.tau / 14
+                    x = cx + int(round(r * math.cos(angle)))
+                    y = cy + int(round(r * 0.85 * math.sin(angle)))
+                    put(px, x + rng.choice((-1, 0, 1)),
+                        y + (phase - 6), scale(color, fade))
+        # phases 10-11: dark, ready to relaunch
+
+    def draw_arch(img):
+        """Weighted catenary in front of the fireworks, legs thicker
+        than the crown like the real Arch"""
+        px = img.load()
+        k = 1.7
+        half_width = 29
+        apex_y, base_y = 14, 45
+        cosh_k = math.cosh(k)
+        for i in range(-800, 801):
+            t = i / 800
+            x = int(round(48 + half_width * t))
+            y = base_y - (base_y - apex_y) * (
+                cosh_k - math.cosh(k * t)) / (cosh_k - 1)
+            y = int(round(y))
+            thickness = 3 if abs(t) > 0.72 else 2
+            for dy in range(thickness):
+                if 0 <= y + dy < 45:
+                    px[x, y + dy] = ARCH_STEEL if dy == 0 else ARCH_SHADOW
+        return img
+
     frames = []
-    for phase in range(4):
-        img = Image.new('RGB', (96, 48), CARDINAL_RED)
-        d = ImageDraw.Draw(img)
-        d.rectangle([0, 0, 95, 47], outline=CARDINAL_NAVY)
-        # Chasing bulbs: lit position rotates with the frame phase
-        idx = 0
-        for x in range(2, 94, 4):
-            for y in (2, 45):
-                d.point((x, y),
-                        fill=YELLOW if idx % 4 == phase else CARDINAL_NAVY)
-                idx += 1
-        for y in range(6, 42, 4):
-            for x in (2, 93):
-                d.point((x, y),
-                        fill=YELLOW if idx % 4 == phase else CARDINAL_NAVY)
-                idx += 1
-        cards = 'CARDS'
-        win = 'WIN!'
-        draw_word(d, cards, (96 - word_width(cards, 3)) // 2, 6, WHITE, 3)
-        color = YELLOW if phase % 2 else WHITE
-        draw_word(d, win, (96 - word_width(win, 3)) // 2, 26, color, 3)
+    for frame in range(FRAME_COUNT):
+        img = sky()
+        px = img.load()
+        for index, burst in enumerate(BURSTS):
+            phase = (frame - burst['start']) % LIFE
+            rng = random.Random((index + 1) * 100 + phase)
+            draw_burst(px, burst, phase, rng)
+        draw_arch(img)
         frames.append(img)
     frames[0].save('cards_win.gif', save_all=True,
-                   append_images=frames[1:], duration=200, loop=0)
+                   append_images=frames[1:], duration=120, loop=0)
 
 
 if __name__ == '__main__':
