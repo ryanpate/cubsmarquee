@@ -395,3 +395,20 @@ class TestRedZoneAlertColor:
         from scoreboard_config import Colors
         d = self._make_display(monkeypatch, {'nfl_team': 'chiefs'})
         assert d._red_zone_alert_color() == Colors.BRIGHT_YELLOW
+
+
+class TestGameOverBackground:
+    def _make_handler(self, monkeypatch, slug):
+        from unittest.mock import MagicMock
+        import teams
+        import live_game_handler
+        monkeypatch.setattr(teams, 'load_user_config', lambda: {'team': slug})
+        return live_game_handler.LiveGameHandler(MagicMock())
+
+    def test_cubs_final_screen_keeps_primary_blue(self, monkeypatch):
+        handler = self._make_handler(monkeypatch, 'cubs')
+        assert handler._game_over_bg_color() == (0, 51, 102)
+
+    def test_cardinals_final_screen_uses_secondary_navy(self, monkeypatch):
+        handler = self._make_handler(monkeypatch, 'cardinals')
+        assert handler._game_over_bg_color() == (12, 35, 64)

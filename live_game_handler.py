@@ -580,6 +580,15 @@ class LiveGameHandler:
         except (KeyError, IndexError, TypeError) as e:
             print(f"Error getting pitch count: {e}")
 
+    def _game_over_bg_color(self):
+        """Final-screen background: the team primary, except red-dominant
+        teams (Cardinals) use their secondary so the red logo and the red
+        LOSS text don't sink into a same-red background."""
+        r, g, b = self.team.primary_color
+        if r > max(g, b) + 60:
+            return self.team.secondary_color
+        return self.team.primary_color
+
     def _check_score_changes(self, game_data, game_index):
         """Check for score changes and trigger animations"""
         if self.is_cubs_home:
@@ -738,7 +747,8 @@ class LiveGameHandler:
             self.manager.clear_canvas()
 
             # Create team-color background image
-            output_image = Image.new("RGB", (96, 48), self.team.primary_color)
+            output_image = Image.new("RGB", (96, 48),
+                                     self._game_over_bg_color())
 
             # Resize and paste team logos onto blue background (use alpha mask for transparency)
             cubs_resized = self.manager.game_images['team'].resize((26, 26)).convert('RGBA')
