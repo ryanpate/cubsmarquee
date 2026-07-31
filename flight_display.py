@@ -904,6 +904,20 @@ class FlightDisplay:
         else:
             return self.ALTITUDE_LOW   # Green for low altitude
 
+    def _draw_plane_motif(self, cx: int, cy: int, tick: float) -> None:
+        """Top-view airplane silhouette flying right, blinking tail beacon"""
+        for i in range(-4, 6):  # fuselage
+            self.manager.draw_pixel(cx + i, cy, *self.FLIGHT_WHITE)
+        self.manager.draw_pixel(cx + 6, cy, 200, 220, 255)  # nose
+        for d in (1, 2, 3):  # swept wings
+            self.manager.draw_pixel(cx + 1 - d, cy - d, *self.FLIGHT_WHITE)
+            self.manager.draw_pixel(cx + 1 - d, cy + d, *self.FLIGHT_WHITE)
+        for d in (1, 2):  # tail
+            self.manager.draw_pixel(cx - 4 - d + 1, cy - d, *self.FLIGHT_WHITE)
+            self.manager.draw_pixel(cx - 4 - d + 1, cy + d, *self.FLIGHT_WHITE)
+        if int(tick * 2) % 2:  # blinking red beacon on the tail
+            self.manager.draw_pixel(cx - 5, cy, 255, 60, 60)
+
     def _draw_flight_header(
         self, header_text: str = 'OVERHEAD FLIGHT', tick: float | None = None
     ) -> None:
@@ -980,11 +994,9 @@ class FlightDisplay:
     def _display_summary_view(self, duration: int) -> None:
         """Display summary of all flights overhead.
         Layout (96x48):
-          Row 0-13:  Header with airplane icon + "FLIGHTS NEARBY"
-          Row 22:    Aircraft count (e.g., "12 AIRCRAFT")
-          Row 30:    Closest distance
-          Row 38:    Highest altitude
-          Row 46:    Lowest altitude
+          Black background with plane motif top-left
+          Headline: "N aircraft"
+          Three stat rows with white labels and cyan values
         """
         start_time = time.time()
 
@@ -996,30 +1008,29 @@ class FlightDisplay:
         highest = max(self.flight_data, key=lambda f: f['altitude_ft'])
         lowest = min(self.flight_data, key=lambda f: f['altitude_ft'])
 
-        count_str = f"{total} AIRCRAFT"
-        close_str = f"CLOSEST: {closest['distance']:.1f} MI"
-        high_str = f"HIGH: {highest['altitude_ft']:,} FT"
-        low_str = f"LOW:  {lowest['altitude_ft']:,} FT"
+        count_str = f"{total} aircraft"
+        stats = [
+            ('Closest:', f"{closest['distance']:.1f}mi"),
+            ('Highest:', self._fmt_alt(highest['altitude_ft'])),
+            ('Lowest:', self._fmt_alt(lowest['altitude_ft'])),
+        ]
 
         while time.time() - start_time < duration:
             self.manager.clear_canvas()
-            self._draw_flight_header('FLIGHTS NEARBY')
 
-            # Aircraft count - centered, yellow
-            count_x = (DisplayConfig.MATRIX_COLS - len(count_str) * 5) // 2
-            self.manager.draw_text('tiny_bold', count_x, 22, self.ALTITUDE_HIGH, count_str)
+            self._draw_plane_motif(11, 8, time.time())
+            self.manager.draw_text(
+                'small', 24, 11, self.FLIGHT_WHITE, count_str)
 
-            # Closest distance
-            self.manager.draw_text('tiny', 4, 30, (150, 150, 150), close_str)
-
-            # Highest altitude
-            self.manager.draw_text('tiny', 4, 38, self.ALTITUDE_HIGH, high_str)
-
-            # Lowest altitude
-            self.manager.draw_text('tiny', 4, 46, self.ALTITUDE_LOW, low_str)
+            for baseline, (label, value) in zip((25, 34, 43), stats):
+                self.manager.draw_text(
+                    'micro', 4, baseline, self.FLIGHT_WHITE, label)
+                value_x = DisplayConfig.MATRIX_COLS - len(value) * 4 - 4
+                self.manager.draw_text(
+                    'micro', value_x, baseline, self.FLIGHT_CYAN, value)
 
             self.manager.swap_canvas()
-            time.sleep(0.1)
+            time.sleep(0.25)
 
     def _display_radar_view(self, highlighted_index: int, display_time: int) -> None:
         """Full-screen radar scope view (96x48). All aircraft plotted as dots,

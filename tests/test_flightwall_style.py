@@ -174,3 +174,40 @@ class TestDetailCardFrame:
         assert texts.count('N425PC') == 1  # registration line suppressed
         assert 'SR22' in texts
         assert 'Registration' in texts     # page B fallback
+
+
+class TestSummaryRestyle:
+    def _render_one_frame(self):
+        from flight_display import FlightDisplay
+        from scoreboard_config import Colors
+
+        d = FlightDisplay.__new__(FlightDisplay)
+        d.manager = Mock()
+        d.FLIGHT_WHITE = Colors.WHITE
+        d.FLIGHT_CYAN = Colors.FLIGHT_CYAN
+        d.flight_data = [dict(UAL_FLIGHT), dict(GA_FLIGHT)]
+        # Make swap_canvas trigger KeyboardInterrupt to exit after one frame
+        d.manager.swap_canvas.side_effect = KeyboardInterrupt
+        try:
+            d._display_summary_view(5)
+        except KeyboardInterrupt:
+            pass
+        return d
+
+    def test_headline_and_cyan_values(self) -> None:
+        from scoreboard_config import Colors
+
+        d = self._render_one_frame()
+
+        texts = dict((c.args[4], c.args[3])
+                     for c in d.manager.draw_text.call_args_list)
+        assert '2 aircraft' in texts
+        assert texts['Closest:'] == Colors.WHITE
+        assert texts['2.3mi'] == Colors.FLIGHT_CYAN
+        assert texts['4.1kft'] == Colors.FLIGHT_CYAN   # highest
+        assert texts['2.4kft'] == Colors.FLIGHT_CYAN   # lowest
+
+    def test_plane_motif_drawn(self) -> None:
+        d = self._render_one_frame()
+
+        assert d.manager.draw_pixel.called  # silhouette pixels on black
