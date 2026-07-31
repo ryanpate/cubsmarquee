@@ -126,8 +126,8 @@ class TestDetailCardFormatting:
         d = self._display()
 
         assert d._fmt_alt(732) == '732ft'
-        assert d._fmt_alt(4100) == '4.1kft'
-        assert d._fmt_alt(34000) == '34kft'
+        assert d._fmt_alt(4100) == '4,100ft'
+        assert d._fmt_alt(34000) == '34,000ft'
 
     def test_display_case_keeps_short_names_upper(self) -> None:
         d = self._display()
@@ -157,11 +157,11 @@ class TestDetailCardFrame:
         assert 'United' in texts
         assert 'ORD-LAX' in texts
         assert 'A321neo' in texts
-        assert 'Alt:' in texts and '4.1kft' in texts
+        assert 'Alt:' in texts and '4,100ft' in texts
         assert '250mph' in texts and '263deg' in texts and '-1088fpm' in texts
         # Values cyan, labels white
         colors = dict((t, c) for c, t in _texts(d.manager))
-        assert colors['4.1kft'] == Colors.FLIGHT_CYAN
+        assert colors['4,100ft'] == Colors.FLIGHT_CYAN
         assert colors['Alt:'] == Colors.WHITE
         # Counter only on page B
         assert '1/3' not in texts
@@ -225,8 +225,8 @@ class TestSummaryRestyle:
         assert '2 aircraft' in texts
         assert texts['Closest:'] == Colors.WHITE
         assert texts['2.3mi'] == Colors.FLIGHT_CYAN
-        assert texts['4.1kft'] == Colors.FLIGHT_CYAN   # highest
-        assert texts['2.4kft'] == Colors.FLIGHT_CYAN   # lowest
+        assert texts['4,100ft'] == Colors.FLIGHT_CYAN   # highest
+        assert texts['2,400ft'] == Colors.FLIGHT_CYAN   # lowest
 
     def test_plane_motif_drawn(self) -> None:
         d = self._render_one_frame()

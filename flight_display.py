@@ -478,12 +478,8 @@ class FlightDisplay:
 
     @staticmethod
     def _fmt_alt(altitude_ft: int) -> str:
-        """732 -> '732ft', 4100 -> '4.1kft', 34000 -> '34kft'"""
-        if altitude_ft < 1000:
-            return f"{altitude_ft}ft"
-        if altitude_ft < 10000:
-            return f"{altitude_ft / 1000:.1f}kft"
-        return f"{round(altitude_ft / 1000)}kft"
+        """732 -> '732ft', 4100 -> '4,100ft', 34000 -> '34,000ft'"""
+        return f"{altitude_ft:,}ft"
 
     @staticmethod
     def _display_case(name: str) -> str:
