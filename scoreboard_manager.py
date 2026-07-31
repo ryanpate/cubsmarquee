@@ -15,6 +15,7 @@ from scoreboard_config import (
 from typing import Any
 from retry import retry_api_call
 import json
+from aa_text import AATextRenderer, find_ttf
 from logger import get_logger
 from status_heartbeat import write_status_heartbeat
 from teams import get_active_team
@@ -37,6 +38,10 @@ class ScoreboardManager:
         self.matrix: RGBMatrix = self._setup_matrix()
         self.canvas = self.matrix.CreateFrameCanvas()
         self.fonts: dict[str, graphics.Font] = self._load_fonts()
+        # Anti-aliased TTF text (flight screens); None means bitmap fallback
+        self._aa_ttf: str | None = find_ttf(Fonts.AA_TTF_CANDIDATES)
+        self._aa_renderers: dict[int, AATextRenderer] = {}
+        self._aa_warned: bool = False
         self.images: dict[str, Image.Image] = {}
         self.current_game: dict[str, Any] | None = None
         self.current_game_id: int | None = None
@@ -504,6 +509,72 @@ class ScoreboardManager:
             self._frame_draw.text(
                 (int(x), int(y) - ascent), text,
                 font=pil_font, fill=color_tuple)
+
+    def _aa_renderer(self, size: int) -> AATextRenderer | None:
+        """Renderer for a font size, or None when no TTF is available"""
+        if self._aa_ttf is None:
+            if not self._aa_warned:
+                _logger.warning(
+                    "No TTF found for AA text; using bitmap fonts")
+                self._aa_warned = True
+            return None
+        renderer = self._aa_renderers.get(size)
+        if renderer is None:
+            renderer = AATextRenderer(self._aa_ttf, size)
+            self._aa_renderers[size] = renderer
+        return renderer
+
+    def draw_text_aa(
+        self, x: int, baseline: int, color_tuple: RGBColor, text: str,
+        size: int = Fonts.AA_TEXT_SIZE
+    ) -> None:
+        """Draw anti-aliased TTF text; edge pixels get partial brightness.
+
+        Assumes a black background: each pixel is color scaled by the
+        anti-aliasing alpha. Falls back to bitmap 'small' without a TTF.
+        """
+        renderer = self._aa_renderer(size)
+        if renderer is None:
+            self.draw_text('small', x, baseline, color_tuple, text)
+            return
+        img = renderer.render(text)
+        top = baseline - renderer.ascent
+        red, green, blue = color_tuple
+        pixels = img.load()
+        for yy in range(img.height):
+            cy = top + yy
+            if not 0 <= cy < DisplayConfig.MATRIX_ROWS:
+                continue
+            for xx in range(img.width):
+                alpha = pixels[xx, yy]
+                if alpha < 8:
+                    continue
+                cx = x + xx
+                if not 0 <= cx < DisplayConfig.MATRIX_COLS:
+                    continue
+                self.draw_pixel(
+                    cx, cy,
+                    red * alpha // 255,
+                    green * alpha // 255,
+                    blue * alpha // 255)
+
+    def measure_text_aa(
+        self, text: str, size: int = Fonts.AA_TEXT_SIZE
+    ) -> int:
+        """Width in pixels of text drawn by draw_text_aa"""
+        renderer = self._aa_renderer(size)
+        if renderer is None:
+            return len(text) * Fonts.CHAR_WIDTH_SMALL
+        return renderer.measure(text)
+
+    def fit_text_aa(
+        self, text: str, max_width: int, size: int = Fonts.AA_TEXT_SIZE
+    ) -> str:
+        """Trim text so draw_text_aa fits within max_width pixels"""
+        renderer = self._aa_renderer(size)
+        if renderer is None:
+            return text[:max(0, max_width // Fonts.CHAR_WIDTH_SMALL)]
+        return renderer.fit(text, max_width)
 
     def draw_pixel(self, x: int, y: int, r: int, g: int, b: int) -> None:
         """Draw a single pixel"""
