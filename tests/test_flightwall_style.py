@@ -63,9 +63,10 @@ class TestAirlineLogos:
         badge = d._monogram_badge('XYZ999')
 
         assert badge.size == (20, 20)
-        # Supersampled render blends many colors; the old hard render
-        # produced only a handful
-        assert len(set(badge.getdata())) > 20
+        # Supersampled render blends many colors; the old hard-edged badge
+        # under Pillow 10 produces ~47 distinct colors, while 4x supersampling
+        # + LANCZOS downsampling produces ~124, so threshold > 80 discriminates.
+        assert len(set(badge.getdata())) > 80
 
     def test_monogram_corners_rounded(self) -> None:
         badge = self._display()._monogram_badge('XYZ999')
