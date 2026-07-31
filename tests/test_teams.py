@@ -445,3 +445,33 @@ class TestPlayoffRaceBackground:
 
         background = display.manager.set_image.call_args_list[0].args[0]
         assert background.getpixel((0, 20)) == (12, 35, 64)
+
+
+class TestHistoryScreenBackground:
+    def test_cardinals_history_card_uses_navy_background(self):
+        from unittest.mock import MagicMock
+        import cubs_history_display as chd
+        from teams import get_active_team
+
+        display = chd.TeamHistoryDisplay.__new__(chd.TeamHistoryDisplay)
+        display.team = get_active_team({'team': 'cardinals'})
+        display.manager = MagicMock()
+
+        display._draw_entry_frame({'year': 1964, 'text': 'World Series title'})
+
+        background = display.manager.set_image.call_args_list[0].args[0]
+        assert background.getpixel((0, 20)) == (12, 35, 64)
+
+    def test_cubs_history_card_keeps_primary_blue(self):
+        from unittest.mock import MagicMock
+        import cubs_history_display as chd
+        from teams import get_active_team
+
+        display = chd.TeamHistoryDisplay.__new__(chd.TeamHistoryDisplay)
+        display.team = get_active_team({})
+        display.manager = MagicMock()
+
+        display._draw_entry_frame({'year': 1908, 'text': 'World Series title'})
+
+        background = display.manager.set_image.call_args_list[0].args[0]
+        assert background.getpixel((0, 20)) == (0, 51, 102)

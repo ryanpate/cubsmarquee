@@ -9,7 +9,7 @@ from PIL import Image
 from typing import TYPE_CHECKING, Any
 
 from scoreboard_config import Colors, DisplayConfig
-from teams import get_active_team, data_path_candidates
+from teams import get_active_team, contrast_background, data_path_candidates
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
@@ -61,7 +61,7 @@ class TeamHistoryDisplay:
         self.manager.clear_canvas()
         background = Image.new(
             'RGB', (DisplayConfig.MATRIX_COLS, DisplayConfig.MATRIX_ROWS),
-            self.team.primary_color)
+            contrast_background(self.team))
         self.manager.set_image(background, 0, 0)
 
         # Marquee red band with the screen title
