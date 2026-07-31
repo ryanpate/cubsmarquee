@@ -24,29 +24,6 @@ PIL_FONT_DIR = '/var/tmp/pil_fonts'
 # --- Hand-drawn pixel maps (20 rows x 20 chars, '.' = black) -------------
 
 PIXEL_LOGOS = {
-    # Delta: two-tone red widget
-    'dal': ({'r': (224, 30, 55), 'd': (150, 12, 35)}, [
-        "....................",
-        "....................",
-        ".........rd.........",
-        ".........rd.........",
-        "........rrdd........",
-        "........rrdd........",
-        ".......rrrddd.......",
-        ".......rrrddd.......",
-        "......rrrrdddd......",
-        "......rrrrdddd......",
-        ".....rrrrrddddd.....",
-        ".....rrrrrddddd.....",
-        "....rrrrrrdddddd....",
-        "....rrrrrrdddddd....",
-        "...rrrrrrrddddddd...",
-        "...rrrrrrrddddddd...",
-        "..rrrrrrrrdddddddd..",
-        "..rrrrrrrrdddddddd..",
-        "....................",
-        "....................",
-    ]),
     # Southwest: tricolor striped heart on navy
     'swa': ({'n': (23, 26, 74), 'r': (224, 36, 48),
              'o': (255, 140, 40), 'y': (255, 191, 32)}, [
@@ -102,6 +79,7 @@ PIXEL_LOGOS = {
 #   aal.png — AA flight-symbol mark, downscaled from a 48px icon
 #   ual.png — United globe mark, downscaled from a 48px icon
 #   asa.png — Alaska Eskimo mark, from a pre-sized 20px vector export
+#   dal.png — Delta widget, downscaled from the official symbol PNG
 
 LETTER_BADGES = {
     'jbu': ('jB', (0, 32, 91), [(255, 255, 255), (255, 255, 255)]),
