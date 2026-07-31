@@ -39,12 +39,12 @@ PIXEL_LOGOS = {
 #   fft.png — Frontier green F wing, downscaled from vector export
 #   baw.png — British Airways tail (speedmarque), from a 48px icon
 #   eny.png — Envoy/American Eagle vintage eagle, widened to 14px + quantized
+#   rpa.png — Republic goose-in-circle, quantized + brightened for LED
 
 LETTER_BADGES = {
     'jbu': ('jB', (0, 32, 91), [(255, 255, 255), (255, 255, 255)]),
     'nks': ('NK', (255, 236, 0), [(20, 20, 20), (20, 20, 20)]),
     'skw': ('OO', (0, 59, 113), [(255, 255, 255), (255, 255, 255)]),
-    'rpa': ('YX', (65, 75, 90), [(255, 255, 255), (255, 255, 255)]),
 }
 
 
