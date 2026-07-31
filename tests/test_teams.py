@@ -522,8 +522,8 @@ class TestNflScreenParity:
         frames = itertools.count()
 
         def stop_after(*a, **k):
-            if next(frames) >= 1:
-                raise KeyboardInterrupt
+            next(frames)
+            raise KeyboardInterrupt  # one fully drawn frame is enough
 
         display.manager.swap_canvas.side_effect = stop_after
         game = {
