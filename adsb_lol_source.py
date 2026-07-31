@@ -12,6 +12,44 @@ logger = get_logger("adsb_lol_source")
 
 FETCH_TIMEOUT_SEC = 5
 ROUTESET_TIMEOUT_SEC = 10
+
+# Same routeset API served by the adsb.im project; used when the primary
+# host fails (api.adsb.lol started answering routeset with an empty 201
+# body in July 2026)
+ROUTESET_FALLBACK_URL = "https://adsb.im"
+
+
+def _post_routeset(host: str, payload: dict) -> list | None:
+    """POST the routeset payload to one host; None on any failure"""
+    try:
+        response = requests.post(
+            f"{host}/api/0/routeset",
+            json=payload,
+            timeout=ROUTESET_TIMEOUT_SEC,
+        )
+        # adsb.lol answers this POST with 201, so accept any 2xx
+        if not 200 <= response.status_code < 300:
+            logger.warning(
+                "routeset %s returned HTTP %s", host, response.status_code)
+            return None
+        results = response.json()
+    except requests.Timeout:
+        logger.warning("routeset request to %s timed out", host)
+        return None
+    except requests.RequestException as e:
+        logger.warning("routeset request to %s failed: %s", host, e)
+        return None
+    except ValueError as e:
+        logger.warning("routeset from %s returned invalid JSON: %s", host, e)
+        return None
+
+    if not isinstance(results, list):
+        logger.warning(
+            "routeset from %s returned unexpected payload type: %s",
+            host, type(results).__name__,
+        )
+        return None
+    return results
 KNOTS_TO_MPH = 1.15078
 
 
@@ -180,32 +218,15 @@ def enrich_routes(
         ]
     }
 
-    try:
-        response = requests.post(
-            f"{base_url}/api/0/routeset",
-            json=payload,
-            timeout=ROUTESET_TIMEOUT_SEC,
-        )
-        # adsb.lol answers this POST with 201, so accept any 2xx
-        if not 200 <= response.status_code < 300:
-            logger.warning("routeset returned HTTP %s", response.status_code)
-            return
-        results = response.json()
-    except requests.Timeout:
-        logger.warning("routeset request timed out")
-        return
-    except requests.RequestException as e:
-        logger.warning("routeset request failed: %s", e)
-        return
-    except ValueError as e:
-        logger.warning("routeset returned invalid JSON: %s", e)
-        return
-
-    if not isinstance(results, list):
-        logger.warning(
-            "routeset returned unexpected payload type: %s",
-            type(results).__name__,
-        )
+    results = None
+    hosts = [base_url]
+    if ROUTESET_FALLBACK_URL != base_url:
+        hosts.append(ROUTESET_FALLBACK_URL)
+    for host in hosts:
+        results = _post_routeset(host, payload)
+        if results is not None:
+            break
+    if results is None:
         return
 
     now = int(_time.time())

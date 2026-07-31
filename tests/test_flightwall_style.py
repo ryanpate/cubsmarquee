@@ -29,7 +29,7 @@ class TestAirlineLogos:
 
         for prefix in self.PREFIXES:
             assert prefix in d.airline_logos, f'missing logo for {prefix}'
-            assert d.airline_logos[prefix].size == (20, 20)
+            assert d.airline_logos[prefix].size == (28, 28)
 
     def test_known_airline_returns_png(self) -> None:
         d = self._display()
@@ -41,7 +41,7 @@ class TestAirlineLogos:
         d = self._display()
 
         badge = d._airline_logo('XYZ999')
-        assert badge.size == (20, 20)
+        assert badge.size == (28, 28)
         assert d._airline_logo('XYZ999') is badge  # built once, cached
 
     def test_monogram_is_deterministic(self) -> None:
@@ -62,7 +62,7 @@ class TestAirlineLogos:
         d = self._display()
         badge = d._monogram_badge('XYZ999')
 
-        assert badge.size == (20, 20)
+        assert badge.size == (28, 28)
         # Supersampled render blends many colors; the old hard-edged badge
         # under Pillow 10 produces ~47 distinct colors, while 4x supersampling
         # + LANCZOS downsampling produces ~124, so threshold > 80 discriminates.
@@ -182,7 +182,7 @@ class TestDetailCardFrame:
 
         (img, x, y) = d.manager.set_image.call_args.args
         assert (x, y) == (2, 2)
-        assert img.size == (20, 20)
+        assert img.size == (28, 28)
 
     def test_ga_flight_fallbacks(self) -> None:
         d = _card_display()
@@ -282,7 +282,7 @@ class TestAATextOnFlightScreens:
 
         fitted_widths = [c.args[1]
                          for c in d.manager.fit_text_aa.call_args_list]
-        assert 68 in fitted_widths  # 96 - 26 - 2 beside the logo
+        assert 62 in fitted_widths  # 96 - 32 - 2 beside the logo
 
     def test_page_b_city_uses_aa_and_fits_beside_counter(self) -> None:
         d = _card_display()

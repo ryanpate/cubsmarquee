@@ -200,6 +200,32 @@ class TestEnrichRoutes:
         assert rows[0].origin_iata is None
         assert rows[0].plausible is False
 
+    def test_enrich_falls_back_to_second_routeset_host(self):
+        from adsb_lol_source import enrich_routes
+
+        mock_cache = MagicMock()
+        mock_cache.get.return_value = None
+        flights = [self._make_flight("UAL5")]
+
+        # api.adsb.lol's current failure mode: 2xx with an empty body
+        bad = MagicMock(status_code=201)
+        bad.json.side_effect = ValueError("empty body")
+        good = MagicMock(status_code=200)
+        good.json.return_value = [{
+            "callsign": "UAL5", "plausible": True,
+            "_airport_codes_iata": "ORD-LAX", "airline_code": "UAL",
+        }]
+
+        with patch("adsb_lol_source.requests.post",
+                   side_effect=[bad, good]) as mock_post:
+            enrich_routes("https://api.adsb.lol", flights, mock_cache)
+
+        urls = [c.args[0] for c in mock_post.call_args_list]
+        assert urls == ["https://api.adsb.lol/api/0/routeset",
+                        "https://adsb.im/api/0/routeset"]
+        assert flights[0]["origin_iata"] == "ORD"
+        assert flights[0]["dest_iata"] == "LAX"
+
     def test_enrich_on_network_error_leaves_fields_none(self):
         from adsb_lol_source import enrich_routes
 

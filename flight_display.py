@@ -53,6 +53,10 @@ class FlightDisplay:
     # Airline logo assets (20x20 PNGs named by lowercase ICAO prefix)
     AIRLINE_LOGO_DIR: str = './logos/airlines'
 
+    # Detail-card layout: displayed logo edge and title-text left edge
+    LOGO_SIZE: int = 28
+    DETAIL_TEXT_X: int = 32
+
     # Deterministic monogram-badge palette for airlines without a logo
     MONOGRAM_COLORS: list[RGBColor] = [
         (0, 90, 200), (190, 40, 40), (220, 110, 0),
@@ -518,7 +522,7 @@ class FlightDisplay:
         return line1, line2
 
     def _load_airline_logos(self) -> dict[str, Image.Image]:
-        """Load 20x20 airline logo PNGs, keyed by uppercase ICAO prefix"""
+        """Load airline logo PNGs at LOGO_SIZE, keyed by uppercase ICAO prefix"""
         logos: dict[str, Image.Image] = {}
         try:
             for fname in os.listdir(self.AIRLINE_LOGO_DIR):
@@ -528,7 +532,8 @@ class FlightDisplay:
                     img = Image.open(
                         os.path.join(self.AIRLINE_LOGO_DIR, fname))
                     logos[os.path.splitext(fname)[0].upper()] = (
-                        img.convert('RGB'))
+                        img.convert('RGB').resize(
+                            (self.LOGO_SIZE, self.LOGO_SIZE), Image.LANCZOS))
                 except Exception as e:
                     print(f"Skipping airline logo {fname}: {e}")
         except FileNotFoundError:
@@ -537,7 +542,7 @@ class FlightDisplay:
         return logos
 
     def _monogram_badge(self, callsign: str) -> Image.Image:
-        """20x20 fallback badge: brand-ish colored square + 2-letter code"""
+        """LOGO_SIZE fallback badge: brand-ish colored square + 2-letter code"""
         prefix = ((callsign or '').strip().upper() + 'ZZZ')[:3]
         code = self.ICAO_TO_IATA.get(prefix, prefix[:2])[:2]
         color = self.MONOGRAM_COLORS[
@@ -545,17 +550,19 @@ class FlightDisplay:
         ttf_path = find_ttf(Fonts.AA_TTF_CANDIDATES)
         if ttf_path:
             # Draw at 4x and downsample: smooth letters and corners
-            big = Image.new('RGB', (80, 80))
+            edge = self.LOGO_SIZE * 4
+            big = Image.new('RGB', (edge, edge))
             draw = ImageDraw.Draw(big)
             try:
-                draw.rounded_rectangle((0, 0, 79, 79), radius=20, fill=color)
+                draw.rounded_rectangle((0, 0, edge - 1, edge - 1),
+                                       radius=edge // 4, fill=color)
             except AttributeError:  # Pillow < 8.2
-                draw.rectangle((0, 0, 79, 79), fill=color)
-            font = ImageFont.truetype(ttf_path, 44)
-            draw.text((40, 38), code, font=font, anchor='mm',
-                      fill=(255, 255, 255))
-            return big.resize((20, 20), Image.LANCZOS)
-        # No TTF anywhere: the old crunchy-but-working badge
+                draw.rectangle((0, 0, edge - 1, edge - 1), fill=color)
+            font = ImageFont.truetype(ttf_path, int(edge * 0.55))
+            draw.text((edge // 2, int(edge * 0.475)), code, font=font,
+                      anchor='mm', fill=(255, 255, 255))
+            return big.resize((self.LOGO_SIZE, self.LOGO_SIZE), Image.LANCZOS)
+        # No TTF anywhere: the old crunchy-but-working badge, upscaled
         img = Image.new('RGB', (20, 20))
         draw = ImageDraw.Draw(img)
         try:
@@ -564,7 +571,7 @@ class FlightDisplay:
             draw.rectangle((0, 0, 19, 19), fill=color)
         draw.text((4, 4), code, font=ImageFont.load_default(),
                   fill=(255, 255, 255))
-        return img
+        return img.resize((self.LOGO_SIZE, self.LOGO_SIZE), Image.NEAREST)
 
     def _airline_logo(self, callsign: str) -> Image.Image:
         """Logo for a callsign's airline; monogram badge when unknown"""
@@ -1186,8 +1193,8 @@ class FlightDisplay:
     ) -> None:
         """One frame of the FlightWall-style detail card.
         Layout (96x48), black background:
-          (2,2)-(21,21):        20x20 airline logo (PNG or monogram)
-          x=26, y=9/18/27:      airline, route, aircraft type (AA text)
+          (2,2)-(29,29):        28x28 airline logo (PNG or monogram)
+          x=32, y=9/18/27:      airline, route, aircraft type (AA text)
           y=38/46 alternating:  page A metrics / page B destination (4s)
         """
         callsign = flight['callsign']
@@ -1209,11 +1216,12 @@ class FlightDisplay:
             line2 = ''
         line3 = self._friendly_type(flight.get('aircraft_type'))
 
-        max_w = DisplayConfig.MATRIX_COLS - 26 - 2  # 68px beside the logo
+        max_w = (DisplayConfig.MATRIX_COLS
+                 - self.DETAIL_TEXT_X - 2)  # 62px beside the logo
         for baseline, text in zip((9, 18, 27), (line1, line2, line3)):
             if text:
                 self.manager.draw_text_aa(
-                    26, baseline, white,
+                    self.DETAIL_TEXT_X, baseline, white,
                     self.manager.fit_text_aa(text, max_w))
 
         if int(tick / 4) % 2 == 0:
