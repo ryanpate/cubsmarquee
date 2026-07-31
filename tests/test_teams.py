@@ -475,3 +475,81 @@ class TestHistoryScreenBackground:
 
         background = display.manager.set_image.call_args_list[0].args[0]
         assert background.getpixel((0, 20)) == (0, 51, 102)
+
+
+class TestNflScreenParity:
+    """Bears and Chiefs render through the same code path - the draw-call
+    skeleton (fonts, positions, image placements) must be identical,
+    differing only in text and colors."""
+
+    def _make_display(self, monkeypatch, config):
+        from unittest.mock import MagicMock
+        import teams
+        import bears_display
+        monkeypatch.setattr(teams, 'load_user_config', lambda: config)
+        return bears_display.BearsDisplay(MagicMock())
+
+    @staticmethod
+    def _skeleton(manager):
+        calls = []
+        for name, args, kwargs in manager.mock_calls:
+            if name == 'draw_text':
+                # The sweater header is centered, so its x legitimately
+                # varies with the team name's length - normalize it.
+                x = 'centered' if args[2] == 9 else args[1]
+                calls.append(('text', args[0], x, args[2]))
+            elif name == 'set_image':
+                calls.append(('image', args[1], args[2], args[0].size))
+        return calls
+
+    def _live_skeleton(self, monkeypatch, config):
+        display = self._make_display(monkeypatch, config)
+        display._draw_sweater_header()
+        display._draw_live_content({
+            'bears_score': '21', 'opp_score': '17', 'opponent_abbr': 'GB',
+            'possession': 'team', 'down_distance': '3RD & 4',
+            'is_red_zone': False, 'game_time': 'Q3 8:42'}, frame_count=0)
+        return self._skeleton(display.manager)
+
+    def test_live_screen_same_skeleton(self, monkeypatch):
+        bears = self._live_skeleton(monkeypatch, {})
+        chiefs = self._live_skeleton(monkeypatch, {'nfl_team': 'chiefs'})
+        assert bears == chiefs
+
+    def _card_skeleton(self, monkeypatch, config):
+        import itertools
+        display = self._make_display(monkeypatch, config)
+        frames = itertools.count()
+
+        def stop_after(*a, **k):
+            if next(frames) >= 1:
+                raise KeyboardInterrupt
+
+        display.manager.swap_canvas.side_effect = stop_after
+        game = {
+            'date': '2026-09-14T00:15Z',
+            'week': {'number': 1},
+            'competitions': [{
+                'competitors': [
+                    {'team': {'abbreviation': display.nfl_team.abbrev,
+                              'shortDisplayName': display.nfl_team.short_name}},
+                    {'team': {'abbreviation': 'DEN',
+                              'shortDisplayName': 'Broncos'}},
+                ],
+                'broadcasts': [{'names': ['ESPN']}],
+            }],
+        }
+        try:
+            display._display_next_game(game, duration=60)
+        except KeyboardInterrupt:
+            pass
+        return self._skeleton(display.manager)
+
+    def test_next_game_card_same_skeleton(self, monkeypatch):
+        import live_game_handler  # noqa: F401  (ensures test env parity)
+        bears = self._card_skeleton(monkeypatch, {})
+        chiefs = self._card_skeleton(monkeypatch, {'nfl_team': 'chiefs'})
+        assert bears == chiefs
+        # both used the logo layout: two 16x16 logo placements
+        logo_calls = [c for c in bears if c[0] == 'image' and c[3] == (16, 16)]
+        assert len(logo_calls) == 2
