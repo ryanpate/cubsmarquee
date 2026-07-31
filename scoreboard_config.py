@@ -129,6 +129,15 @@ class Fonts:
     MICRO: str = "./fonts/4x6.bdf"
     ULTRA_MICRO: str = "./fonts/tom-thumb.bdf"
 
+    # Anti-aliased TTF text (flight screens). First hit wins; the bundled
+    # repo font makes rendering identical on the Pi and dev machines.
+    AA_TTF_CANDIDATES: tuple[str, ...] = (
+        "./fonts/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+    )
+    AA_TEXT_SIZE: int = 9
+
     # Character widths for text positioning calculations
     CHAR_WIDTH_LARGE: int = 10
     CHAR_WIDTH_MEDIUM: int = 9
