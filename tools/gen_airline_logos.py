@@ -12,7 +12,6 @@ visual review. Usage (from repo root): python3 tools/gen_airline_logos.py
 from __future__ import annotations
 
 import os
-import sys
 
 from PIL import BdfFontFile, Image, ImageDraw, ImageFont
 

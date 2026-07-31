@@ -1213,12 +1213,11 @@ class FlightDisplay:
             if city and city != 'UNKNOWN':
                 self.manager.draw_text('small', 2, 37, white, 'Flying to')
                 self.manager.draw_text(
-                    'small', 2, 46, cyan, self._display_case(city)[:13])
+                    'small', 2, 46, cyan, self._display_case(city)[:11])
             elif flight.get('registration'):
                 self.manager.draw_text('small', 2, 37, white, 'Registration')
-                if flight['registration'] != line1:
-                    self.manager.draw_text(
-                        'small', 2, 46, cyan, flight['registration'])
+                self.manager.draw_text(
+                    'small', 2, 46, cyan, flight['registration'])
             counter_x = (DisplayConfig.MATRIX_COLS
                          - len(counter_text) * 4 - 2)
             self.manager.draw_text(

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import Mock
 
-import pytest
-
 
 class TestFlightwallColors:
     def test_cyan_and_dim_constants_exist(self) -> None:
@@ -171,7 +169,10 @@ class TestDetailCardFrame:
 
         texts = [t for _, t in _texts(d.manager)]
         assert 'N425PC' in texts          # callsign as line 1
-        assert texts.count('N425PC') == 1  # registration line suppressed
+        # N425PC appears twice: once as ID line 1, once as the page-B
+        # registration value (registration always drawn, even when it
+        # repeats the callsign)
+        assert texts.count('N425PC') == 2
         assert 'SR22' in texts
         assert 'Registration' in texts     # page B fallback
 
