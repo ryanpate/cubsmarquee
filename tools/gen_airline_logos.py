@@ -38,13 +38,13 @@ PIXEL_LOGOS = {
 #   ups.png — UPS tail fin (brightened 1.9x for LED), from a 48px icon
 #   fft.png — Frontier green F wing, downscaled from vector export
 #   baw.png — British Airways tail (speedmarque), from a 48px icon
+#   eny.png — Envoy/American Eagle vintage eagle, widened to 14px + quantized
 
 LETTER_BADGES = {
     'jbu': ('jB', (0, 32, 91), [(255, 255, 255), (255, 255, 255)]),
     'nks': ('NK', (255, 236, 0), [(20, 20, 20), (20, 20, 20)]),
     'skw': ('OO', (0, 59, 113), [(255, 255, 255), (255, 255, 255)]),
     'rpa': ('YX', (65, 75, 90), [(255, 255, 255), (255, 255, 255)]),
-    'eny': ('MQ', (16, 24, 48), [(224, 36, 48), (54, 116, 222)]),
 }
 
 
