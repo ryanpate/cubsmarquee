@@ -76,6 +76,9 @@ final = dict(live, status='STATUS_FINAL', bears_score='27', opp_score='24',
              opponent_abbr='DEN')
 show('Final / WIN screen', 10, lambda f: display._draw_final_content(final, f))
 
+print('--- Win celebration GIF')
+display._play_win_celebration()
+
 print('--- Next-game card (real ESPN schedule)')
 try:
     display.display_bears_info(duration=20)

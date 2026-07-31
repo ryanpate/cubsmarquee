@@ -433,6 +433,7 @@ class BearsDisplay:
         frame_count = 0
         prev_bears_score = None
         last_scrolled_play = None
+        win_gif_played = False
 
         try:
             game_id = game.get('id')
@@ -477,6 +478,9 @@ class BearsDisplay:
                               f"Opponent: {score_data['opp_score']}")
 
                     last_score_update = current_time
+
+                win_gif_played = self._maybe_play_win_celebration(
+                    score_data, win_gif_played)
 
                 self.manager.clear_canvas()
                 self._draw_sweater_header()
@@ -539,6 +543,44 @@ class BearsDisplay:
         for px in range(x, x + 3):
             for py in range(18, 21):
                 self.manager.draw_pixel(px, py, *self.ACCENT)
+
+    def _maybe_play_win_celebration(self, score_data, already_played):
+        """Play the win GIF once when the final score shows a team win.
+        Returns the new played state (True after any final is handled,
+        win or not, so the check doesn't repeat every frame)."""
+        if already_played or score_data.get('status') != 'STATUS_FINAL':
+            return already_played
+        try:
+            team_score = int(float(score_data['bears_score']))
+            opp_score = int(float(score_data['opp_score']))
+        except (ValueError, TypeError):
+            return already_played
+        if team_score > opp_score:
+            self._play_win_celebration()
+        return True
+
+    def _play_win_celebration(self):
+        """Play the pack's win GIF for two loops; skip if the file is
+        missing so a pack without a GIF degrades to text-only"""
+        try:
+            gif = Image.open(self.nfl_team.celebration_path)
+        except OSError:
+            return
+        frames = []
+        durations = []
+        try:
+            while True:
+                frames.append(gif.copy().convert('RGB').resize((96, 48)))
+                durations.append(gif.info.get('duration', 200) / 1000)
+                gif.seek(gif.tell() + 1)
+        except EOFError:
+            pass
+        for _ in range(2):
+            for frame, delay in zip(frames, durations):
+                self.manager.clear_canvas()
+                self.manager.set_image(frame, 0, 0)
+                self.manager.swap_canvas()
+                time.sleep(delay)
 
     def _red_zone_alert_color(self) -> RGBColor:
         """Red alert text, except on a red-dominant sweater (Chiefs)

@@ -193,6 +193,7 @@ class NFLTeamPack:
     primary_color: RGBColor    # sweater background
     accent_color: RGBColor     # sweater stripes, highlights
     logo_path: str             # 20x20 RGBA PNG in logos/nfl/
+    celebration_path: str      # animated win GIF (dev/generate_nfl_win_gifs.py)
     news_rss_url: str
     news_keywords: tuple[str, ...]  # RSS headline filter for team news
 
@@ -208,6 +209,7 @@ NFL_TEAMS: dict[str, NFLTeamPack] = {
         primary_color=(11, 22, 42),
         accent_color=(200, 56, 3),
         logo_path='./logos/nfl/CHI.png',
+        celebration_path='./bears_win.gif',
         news_rss_url='https://www.chicagobears.com/rss/news',
         news_keywords=(
             'BEARS', 'CHICAGO BEARS', 'CHI BEARS', 'DA BEARS',
@@ -229,6 +231,7 @@ NFL_TEAMS: dict[str, NFLTeamPack] = {
         primary_color=(227, 24, 55),
         accent_color=(255, 184, 28),
         logo_path='./logos/nfl/KC.png',
+        celebration_path='./chiefs_win.gif',
         news_rss_url='https://www.chiefs.com/rss/news',
         news_keywords=(
             # Team names and variations

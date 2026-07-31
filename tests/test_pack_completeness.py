@@ -70,3 +70,21 @@ class TestRunScoredSprites:
             with Image.open(pack.run_scored_path) as img:
                 assert img.size == (21, 24), f'{pack.run_scored_path} is {img.size}'
                 assert img.mode == 'RGBA'
+
+
+class TestNflCelebrationGifs:
+    def test_both_pack_gifs_exist_and_animate(self):
+        from teams import NFL_TEAMS
+        for pack in NFL_TEAMS.values():
+            assert os.path.exists(pack.celebration_path), (
+                f'{pack.slug} missing win GIF at {pack.celebration_path}')
+            with Image.open(pack.celebration_path) as gif:
+                assert gif.size == (96, 48)
+                frames = 1
+                try:
+                    while True:
+                        gif.seek(gif.tell() + 1)
+                        frames += 1
+                except EOFError:
+                    pass
+                assert frames >= 2, f'{pack.celebration_path} is not animated'

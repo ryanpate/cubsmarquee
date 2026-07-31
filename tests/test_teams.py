@@ -553,3 +553,60 @@ class TestNflScreenParity:
         # both used the logo layout: two 16x16 logo placements
         logo_calls = [c for c in bears if c[0] == 'image' and c[3] == (16, 16)]
         assert len(logo_calls) == 2
+
+
+class TestNflWinCelebration:
+    def _make_display(self, monkeypatch, config):
+        from unittest.mock import MagicMock
+        import teams
+        import bears_display
+        monkeypatch.setattr(teams, 'load_user_config', lambda: config)
+        monkeypatch.setattr(bears_display.time, 'sleep', lambda s: None)
+        return bears_display.BearsDisplay(MagicMock())
+
+    def test_plays_gif_frames_on_win(self, monkeypatch):
+        d = self._make_display(monkeypatch, {'nfl_team': 'chiefs'})
+        played = d._maybe_play_win_celebration(
+            {'status': 'STATUS_FINAL', 'bears_score': '27',
+             'opp_score': '24'}, False)
+        assert played is True
+        # 4 frames x 2 loops
+        assert d.manager.set_image.call_count == 8
+
+    def test_no_gif_on_loss_but_marked_handled(self, monkeypatch):
+        d = self._make_display(monkeypatch, {})
+        played = d._maybe_play_win_celebration(
+            {'status': 'STATUS_FINAL', 'bears_score': '10',
+             'opp_score': '24'}, False)
+        assert played is True
+        assert d.manager.set_image.call_count == 0
+
+    def test_only_plays_once(self, monkeypatch):
+        d = self._make_display(monkeypatch, {})
+        played = d._maybe_play_win_celebration(
+            {'status': 'STATUS_FINAL', 'bears_score': '27',
+             'opp_score': '24'}, False)
+        d.manager.set_image.reset_mock()
+        played = d._maybe_play_win_celebration(
+            {'status': 'STATUS_FINAL', 'bears_score': '27',
+             'opp_score': '24'}, played)
+        assert played is True
+        assert d.manager.set_image.call_count == 0
+
+    def test_not_during_live_game(self, monkeypatch):
+        d = self._make_display(monkeypatch, {})
+        played = d._maybe_play_win_celebration(
+            {'status': 'STATUS_IN_PROGRESS', 'bears_score': '27',
+             'opp_score': '24'}, False)
+        assert played is False
+
+    def test_missing_gif_degrades_gracefully(self, monkeypatch):
+        d = self._make_display(monkeypatch, {})
+        import dataclasses
+        d.nfl_team = dataclasses.replace(
+            d.nfl_team, celebration_path='./does_not_exist.gif')
+        played = d._maybe_play_win_celebration(
+            {'status': 'STATUS_FINAL', 'bears_score': '27',
+             'opp_score': '24'}, False)
+        assert played is True
+        assert d.manager.set_image.call_count == 0
