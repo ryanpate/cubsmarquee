@@ -57,6 +57,7 @@ PIXEL_LOGOS = {
 #   asa.png — Alaska Eskimo mark, from a pre-sized 20px vector export
 #   dal.png — Delta widget, downscaled from the official symbol PNG
 #   swa.png — Southwest heart, downscaled from a 48px icon
+#   fdx.png — FedEx tail fin, downscaled from a 48px icon
 
 LETTER_BADGES = {
     'jbu': ('jB', (0, 32, 91), [(255, 255, 255), (255, 255, 255)]),
@@ -65,7 +66,6 @@ LETTER_BADGES = {
     'skw': ('OO', (0, 59, 113), [(255, 255, 255), (255, 255, 255)]),
     'rpa': ('YX', (65, 75, 90), [(255, 255, 255), (255, 255, 255)]),
     'eny': ('MQ', (16, 24, 48), [(224, 36, 48), (54, 116, 222)]),
-    'fdx': ('Fx', (77, 20, 140), [(255, 255, 255), (255, 102, 0)]),
 }
 
 
