@@ -24,29 +24,6 @@ PIL_FONT_DIR = '/var/tmp/pil_fonts'
 # --- Hand-drawn pixel maps (20 rows x 20 chars, '.' = black) -------------
 
 PIXEL_LOGOS = {
-    # UPS: brown shield with gold chevron
-    'ups': ({'b': (53, 28, 16), 'g': (255, 183, 27)}, [
-        "....................",
-        "..bbbbbbbbbbbbbbbb..",
-        ".bbggggggggggggggbb.",
-        ".bbggggggggggggggbb.",
-        ".bbbbbbbbbbbbbbbbbb.",
-        ".bbbbbbbbbbbbbbbbbb.",
-        ".bbbbbbbbbbbbbbbbbb.",
-        ".bbbbbbbbbbbbbbbbbb.",
-        "..bbbbbbbbbbbbbbbb..",
-        "..bbbbbbbbbbbbbbbb..",
-        "...bbbbbbbbbbbbbb...",
-        "...bbbbbbbbbbbbbb...",
-        "....bbbbbbbbbbbb....",
-        ".....bbbbbbbbbb.....",
-        "......bbbbbbbb......",
-        ".......bbbbbb.......",
-        "........bbbb........",
-        ".........bb.........",
-        "....................",
-        "....................",
-    ]),
 }
 
 # --- Letter badges: (text, bg, per-char fg colors) -----------------------
@@ -58,11 +35,13 @@ PIXEL_LOGOS = {
 #   dal.png — Delta widget, downscaled from the official symbol PNG
 #   swa.png — Southwest heart, downscaled from a 48px icon
 #   fdx.png — FedEx tail fin, downscaled from a 48px icon
+#   ups.png — UPS tail fin (brightened 1.9x for LED), from a 48px icon
+#   fft.png — Frontier green F wing, downscaled from vector export
+#   baw.png — British Airways tail (speedmarque), from a 48px icon
 
 LETTER_BADGES = {
     'jbu': ('jB', (0, 32, 91), [(255, 255, 255), (255, 255, 255)]),
     'nks': ('NK', (255, 236, 0), [(20, 20, 20), (20, 20, 20)]),
-    'fft': ('F9', (0, 105, 62), [(255, 255, 255), (255, 255, 255)]),
     'skw': ('OO', (0, 59, 113), [(255, 255, 255), (255, 255, 255)]),
     'rpa': ('YX', (65, 75, 90), [(255, 255, 255), (255, 255, 255)]),
     'eny': ('MQ', (16, 24, 48), [(224, 36, 48), (54, 116, 222)]),
