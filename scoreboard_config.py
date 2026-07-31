@@ -62,6 +62,8 @@ class Colors:
     FLIGHT_ALTITUDE_HIGH: RGBColor = (255, 215, 0)  # Gold for high altitude (>30k ft)
     FLIGHT_ALTITUDE_MED: RGBColor = (255, 140, 0)   # Orange for medium (15k-30k ft)
     FLIGHT_ALTITUDE_LOW: RGBColor = (50, 205, 50)   # Green for low (<15k ft)
+    FLIGHT_CYAN: RGBColor = (120, 220, 255)  # FlightWall-style value text
+    FLIGHT_DIM: RGBColor = (90, 90, 90)      # FlightWall-style dim counter
 
 
 class Positions:
