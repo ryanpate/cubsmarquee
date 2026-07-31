@@ -24,30 +24,6 @@ PIL_FONT_DIR = '/var/tmp/pil_fonts'
 # --- Hand-drawn pixel maps (20 rows x 20 chars, '.' = black) -------------
 
 PIXEL_LOGOS = {
-    # Southwest: tricolor striped heart on navy
-    'swa': ({'n': (23, 26, 74), 'r': (224, 36, 48),
-             'o': (255, 140, 40), 'y': (255, 191, 32)}, [
-        "nnnnnnnnnnnnnnnnnnnn",
-        "nnnnnnnnnnnnnnnnnnnn",
-        "nnnnrrrrnnnnrrrrnnnn",
-        "nnnrrrrrrnnrrrrrrnnn",
-        "nnrrrrrrrrrrrrrrrrnn",
-        "nnrrrrrrrrrrrrrrrrnn",
-        "nnrrrrrrrrrrrrrrrrnn",
-        "nnoooooooooooooooonn",
-        "nnnooooooooooooooonn",
-        "nnnoooooooooooooonnn",
-        "nnnnoooooooooooonnnn",
-        "nnnnyyyyyyyyyyyynnnn",
-        "nnnnnyyyyyyyyyynnnnn",
-        "nnnnnnyyyyyyyynnnnnn",
-        "nnnnnnnyyyyyynnnnnnn",
-        "nnnnnnnnyyyynnnnnnnn",
-        "nnnnnnnnnyynnnnnnnnn",
-        "nnnnnnnnnnnnnnnnnnnn",
-        "nnnnnnnnnnnnnnnnnnnn",
-        "nnnnnnnnnnnnnnnnnnnn",
-    ]),
     # UPS: brown shield with gold chevron
     'ups': ({'b': (53, 28, 16), 'g': (255, 183, 27)}, [
         "....................",
@@ -80,6 +56,7 @@ PIXEL_LOGOS = {
 #   ual.png — United globe mark, downscaled from a 48px icon
 #   asa.png — Alaska Eskimo mark, from a pre-sized 20px vector export
 #   dal.png — Delta widget, downscaled from the official symbol PNG
+#   swa.png — Southwest heart, downscaled from a 48px icon
 
 LETTER_BADGES = {
     'jbu': ('jB', (0, 32, 91), [(255, 255, 255), (255, 255, 255)]),
