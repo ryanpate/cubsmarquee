@@ -11,6 +11,7 @@ from PIL import Image, ImageDraw, ImageFont
 from typing import TYPE_CHECKING, Any
 
 from scoreboard_config import Colors, GameConfig, DisplayConfig, RGBColor, Fonts, get_scroll_delay, load_user_config
+import airport_cities
 from adsb_lol_source import fetch_aircraft as adsb_lol_fetch_aircraft
 from adsb_lol_source import enrich_routes as adsb_lol_enrich_routes
 from route_cache import RouteCache
@@ -108,6 +109,7 @@ class FlightDisplay:
             db_path=GameConfig.ROUTE_CACHE_DB_PATH,
             ttl_hours=GameConfig.ROUTE_CACHE_TTL_HOURS,
         )
+        self.learned_cities: dict[str, str] = airport_cities.load_learned()
         self._load_config()
         # Prefer the explicit `flight_source` admin setting; fall back to the
         # legacy behavior (empty adsb_receiver_url means use adsb.lol).
@@ -445,6 +447,12 @@ class FlightDisplay:
             iata = code[1:]
             if iata in self.AIRPORT_CITIES:
                 return self.AIRPORT_CITIES[iata]
+        # Map learned from routeset airport data
+        learned = getattr(self, 'learned_cities', {})
+        if code in learned:
+            return learned[code]
+        if len(code) == 4 and code[0] in ('K', 'C') and code[1:] in learned:
+            return learned[code[1:]]
         # Return the code itself as fallback
         return code
 
@@ -619,6 +627,7 @@ class FlightDisplay:
                 flights=flights,
                 cache=self.route_cache,
             )
+            self.learned_cities = airport_cities.load_learned()
         except Exception as e:
             # Route info is nice-to-have; never lose the flights over it
             print(f"Route enrichment failed: {e}")
@@ -882,6 +891,7 @@ class FlightDisplay:
                         flights=self.flight_data,
                         cache=self.route_cache,
                     )
+                    self.learned_cities = airport_cities.load_learned()
                 except Exception as e:
                     print(f"Route enrichment failed (non-fatal): {e}")
             return True

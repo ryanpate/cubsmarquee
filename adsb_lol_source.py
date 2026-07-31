@@ -6,6 +6,7 @@ from typing import Any, Optional
 
 import requests
 
+import airport_cities
 from logger import get_logger
 
 logger = get_logger("adsb_lol_source")
@@ -231,12 +232,21 @@ def enrich_routes(
 
     now = int(_time.time())
     by_callsign: dict[str, dict[str, Any]] = {}
+    learned_cities: dict[str, str] = {}
     for item in results:
         if not isinstance(item, dict):
             continue
         cs = (item.get("callsign") or "").strip()
         if cs:
             by_callsign[cs] = item
+        # The _airports entries carry each airport's city; remember them
+        for airport in item.get("_airports") or []:
+            if isinstance(airport, dict):
+                iata, city = airport.get("iata"), airport.get("location")
+                if iata and city:
+                    learned_cities[str(iata).upper()] = str(city)
+    if learned_cities:
+        airport_cities.learn(learned_cities)
 
     rows_to_cache: list[RouteInfo] = []
     for f in uncached:
