@@ -64,3 +64,42 @@ class AATextRenderer:
         while text and self.measure(text) > max_width:
             text = text[:-1].rstrip()
         return text
+
+
+class MonoAATextRenderer:
+    """Fixed-advance anti-aliased text: every character is centered in a
+    cell-wide column, so layouts computed from bitmap char widths
+    (len(text) * CHAR_WIDTH_*) keep working unchanged.
+
+    stroke thickens glyphs in supersampled units (1 = a quarter pixel at
+    SCALE 4) so light TTF weights can match the chunky BDF bold fonts.
+    """
+
+    def __init__(self, ttf_path: str, size: int, cell: int,
+                 stroke: int = 0) -> None:
+        self._font = ImageFont.truetype(ttf_path, size * SCALE)
+        self._cell = cell
+        self._stroke = stroke
+        ascent, descent = self._font.getmetrics()
+        self._height_4x = ascent + descent + 2 * stroke
+        self._height = max(1, round(self._height_4x / SCALE))
+        self.ascent: int = max(1, round((ascent + stroke) / SCALE))
+        self._cache: dict[str, Image.Image] = {}
+
+    def render(self, text: str) -> Image.Image:
+        """Grayscale ('L') image of text at 1x scale; cached per string"""
+        img = self._cache.get(text)
+        if img is None:
+            cell_4x = self._cell * SCALE
+            big = Image.new('L', (max(1, cell_4x * len(text)), self._height_4x), 0)
+            draw = ImageDraw.Draw(big)
+            for i, ch in enumerate(text):
+                x = i * cell_4x + (cell_4x - self._font.getlength(ch)) / 2
+                draw.text((x, self._stroke), ch, font=self._font, fill=255,
+                          stroke_width=self._stroke, stroke_fill=255)
+            img = big.resize(
+                (max(1, self._cell * len(text)), self._height), Image.LANCZOS)
+            if len(self._cache) >= CACHE_MAX:
+                self._cache.clear()
+            self._cache[text] = img
+        return img

@@ -85,14 +85,17 @@ class TestAATextRenderer:
 
 def _manager(ttf: str | None):
     """ScoreboardManager with only the AA-path attributes populated"""
+    from PIL import Image
     from scoreboard_manager import ScoreboardManager
 
     m = ScoreboardManager.__new__(ScoreboardManager)
     m._aa_ttf = ttf
     m._aa_renderers = {}
     m._aa_warned = False
+    m._frame = Image.new('RGB', (96, 48))
     m.draw_text = Mock()
     m.draw_pixel = Mock()
+    m.set_image = Mock()
     return m
 
 
@@ -125,11 +128,14 @@ class TestManagerAAText:
         m.draw_text_aa(80, 9, (200, 100, 50), 'United')  # spills past x=95
 
         m.draw_text.assert_not_called()
-        assert m.draw_pixel.called
-        for call in m.draw_pixel.call_args_list:
-            x, y, r, g, b = call.args
-            assert 0 <= x < 96 and 0 <= y < 48   # clipped to canvas
-            assert 0 < r <= 200 and g <= 100 and b <= 50  # alpha-scaled
+        assert m.set_image.called
+        region, x, y = m.set_image.call_args.args
+        assert 0 <= x and x + region.width <= 96    # clipped to canvas
+        assert 0 <= y and y + region.height <= 48
+        lit = [p for p in region.getdata() if p != (0, 0, 0)]
+        assert lit
+        for r, g, b in lit:  # alpha-scaled over the black frame
+            assert r <= 200 and g <= 100 and b <= 50
 
     def test_measure_uses_renderer_and_caches_it(self) -> None:
         from aa_text import AATextRenderer

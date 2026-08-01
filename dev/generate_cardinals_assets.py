@@ -5,48 +5,38 @@ Pixel art is expected to be iterated on against the real matrix; keep this
 script as the source of truth and regenerate rather than hand-editing.
 """
 
-from PIL import Image, ImageDraw
+import os
+
+from PIL import Image, ImageDraw, ImageFont
 
 CARDINAL_RED = (196, 30, 58)
 CARDINAL_NAVY = (12, 35, 64)
 WHITE = (255, 255, 255)
 YELLOW = (255, 223, 0)
 
-# 3x5 pixel font for the letters we need (1 = lit pixel)
-GLYPHS = {
-    'A': ['010', '101', '111', '101', '101'],
-    'C': ['011', '100', '100', '100', '011'],
-    'D': ['110', '101', '101', '101', '110'],
-    'I': ['111', '010', '010', '010', '111'],
-    'L': ['100', '100', '100', '100', '111'],
-    'N': ['101', '111', '111', '111', '101'],
-    'O': ['010', '101', '101', '101', '010'],
-    'R': ['110', '101', '110', '101', '101'],
-    'S': ['011', '100', '010', '001', '110'],
-    'T': ['111', '010', '010', '010', '010'],
-    'U': ['101', '101', '101', '101', '111'],
-    'W': ['101', '101', '111', '111', '101'],
-    '!': ['010', '010', '010', '000', '010'],
-    ' ': ['000', '000', '000', '000', '000'],
-}
+# Supersample factor for anti-aliased text (matches aa_text.py)
+SCALE = 4
+TTF_CANDIDATES = (
+    './fonts/DejaVuSans-Bold.ttf',
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+)
 
 
-def draw_word(draw, word, x, y, color, scale=1):
-    for ch in word:
-        glyph = GLYPHS[ch]
-        for row, bits in enumerate(glyph):
-            for col, bit in enumerate(bits):
-                if bit == '1':
-                    x0 = x + col * scale
-                    y0 = y + row * scale
-                    draw.rectangle(
-                        [x0, y0, x0 + scale - 1, y0 + scale - 1], fill=color)
-        x += (3 + 1) * scale
-    return x
-
-
-def word_width(word, scale=1):
-    return (len(word) * 4 - 1) * scale
+def draw_word_aa(img, word, center_x, top, color, size):
+    """Paste word rendered at SCALE-times size and LANCZOS-downsampled,
+    horizontally centered on center_x - soft edges instead of pixel art"""
+    ttf = next(p for p in TTF_CANDIDATES if os.path.exists(p))
+    font = ImageFont.truetype(ttf, size * SCALE)
+    ascent, descent = font.getmetrics()
+    width_4x = max(1, int(font.getlength(word)))
+    big = Image.new('L', (width_4x, ascent + descent), 0)
+    ImageDraw.Draw(big).text((0, 0), word, font=font, fill=255)
+    mask = big.resize(
+        (max(1, round(width_4x / SCALE)),
+         max(1, round((ascent + descent) / SCALE))),
+        Image.LANCZOS)
+    fg = Image.new('RGBA', mask.size, color + (255,))
+    img.paste(fg, (center_x - mask.width // 2, top), mask)
 
 
 def make_marquee():
@@ -64,12 +54,8 @@ def make_marquee():
         d.point((2, y), fill=YELLOW)
         d.point((93, y), fill=YELLOW)
     # "ST LOUIS" over "CARDINALS", centered on the sign face
-    top = 'ST LOUIS'
-    bottom = 'CARDINALS'
-    d_top_x = (96 - word_width(top)) // 2
-    d_bot_x = (96 - word_width(bottom, 2)) // 2
-    draw_word(d, top, d_top_x, 8, WHITE)
-    draw_word(d, bottom, d_bot_x, 16, WHITE, scale=2)
+    draw_word_aa(img, 'ST LOUIS', 48, 7, WHITE, 8)
+    draw_word_aa(img, 'CARDINALS', 48, 15, WHITE, 12)
     img.save('cardinals_marquee.png')
 
 

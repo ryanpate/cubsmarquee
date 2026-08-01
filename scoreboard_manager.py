@@ -15,7 +15,7 @@ from scoreboard_config import (
 from typing import Any
 from retry import retry_api_call
 import json
-from aa_text import AATextRenderer, find_ttf
+from aa_text import AATextRenderer, MonoAATextRenderer, find_ttf
 from logger import get_logger
 from status_heartbeat import write_status_heartbeat
 from teams import get_active_team
@@ -42,6 +42,11 @@ class ScoreboardManager:
         self._aa_ttf: str | None = find_ttf(Fonts.AA_TTF_CANDIDATES)
         self._aa_renderers: dict[int, AATextRenderer] = {}
         self._aa_warned: bool = False
+        # Fixed-advance AA replacements for the bitmap fonts in draw_text
+        self._mono_ttf_bold: str | None = find_ttf(Fonts.AA_MONO_BOLD_CANDIDATES)
+        self._mono_ttf_regular: str | None = find_ttf(
+            Fonts.AA_MONO_REGULAR_CANDIDATES)
+        self._mono_renderers: dict[str, MonoAATextRenderer] = {}
         self.images: dict[str, Image.Image] = {}
         self.current_game: dict[str, Any] | None = None
         self.current_game_id: int | None = None
@@ -112,6 +117,21 @@ class ScoreboardManager:
         'tiny': Fonts.TINY,
         'micro': Fonts.MICRO,
         'ultra_micro': Fonts.ULTRA_MICRO
+    }
+
+    # Bitmap fonts that draw_text renders as fixed-advance anti-aliased
+    # TTF text instead: name -> (cell width, TTF size, stroke, bold).
+    # Cell widths equal each bitmap font's advance, so caller layout math
+    # (len(text) * CHAR_WIDTH_*) is unaffected. Fonts 5px and narrower
+    # (tiny, micro) stay bitmap - at that advance anti-aliasing reads
+    # worse than crisp pixels (verified side by side on the history card).
+    AA_MONO_FONTS: dict[str, tuple[int, int, int, bool]] = {
+        'large_bold': (10, 16, 1, True),
+        'medium_bold': (9, 15, 1, True),
+        'standard_bold': (7, 12, 1, True),
+        'lineup': (7, 12, 1, True),
+        'small_bold': (6, 11, 1, True),
+        'small': (6, 10, 0, False),
     }
 
     def _load_fonts(self) -> dict[str, graphics.Font]:
@@ -489,10 +509,52 @@ class ScoreboardManager:
         self._refresh_heartbeat()
         self.canvas = self.matrix.SwapOnVSync(self.canvas)
 
+    def _mono_renderer(self, font_name: str) -> MonoAATextRenderer | None:
+        """Fixed-advance AA renderer for a bitmap font name, or None when
+        the font stays bitmap or no monospaced TTF is available"""
+        renderer = self._mono_renderers.get(font_name)
+        if renderer is not None:
+            return renderer
+        spec = self.AA_MONO_FONTS.get(font_name)
+        if spec is None:
+            return None
+        cell, size, stroke, bold = spec
+        ttf = self._mono_ttf_bold if bold else self._mono_ttf_regular
+        if ttf is None:
+            return None
+        renderer = MonoAATextRenderer(ttf, size, cell, stroke)
+        self._mono_renderers[font_name] = renderer
+        return renderer
+
+    def _blit_aa(
+        self, x: int, top: int, alpha_img: Image.Image,
+        color_tuple: RGBColor
+    ) -> None:
+        """Alpha-blend a grayscale text image over the current frame"""
+        left, upper = max(0, x), max(0, top)
+        right = min(DisplayConfig.MATRIX_COLS, x + alpha_img.width)
+        lower = min(DisplayConfig.MATRIX_ROWS, top + alpha_img.height)
+        if left >= right or upper >= lower:
+            return
+        mask = alpha_img.crop(
+            (left - x, upper - top, right - x, lower - top))
+        # Sub-8 alpha would light LEDs as a faint speckle halo; drop it
+        mask = mask.point(lambda a: 0 if a < 8 else a)
+        region = self._frame.crop((left, upper, right, lower))
+        region.paste(Image.new('RGB', region.size, color_tuple), (0, 0), mask)
+        self.set_image(region, left, upper)
+
     def draw_text(
         self, font_name: str, x: int, y: int, color_tuple: RGBColor, text: str
     ) -> None:
         """Draw text on the canvas"""
+        renderer = self._mono_renderer(font_name)
+        if renderer is not None:
+            self._blit_aa(
+                int(x), int(y) - renderer.ascent, renderer.render(text),
+                color_tuple)
+            return
+
         font = self.fonts.get(font_name)
         if not font:
             print(f"Font {font_name} not found")
@@ -528,35 +590,16 @@ class ScoreboardManager:
         self, x: int, baseline: int, color_tuple: RGBColor, text: str,
         size: int = Fonts.AA_TEXT_SIZE
     ) -> None:
-        """Draw anti-aliased TTF text; edge pixels get partial brightness.
-
-        Assumes a black background: each pixel is color scaled by the
-        anti-aliasing alpha. Falls back to bitmap 'small' without a TTF.
+        """Draw anti-aliased TTF text; edge pixels blend into whatever is
+        already on the frame. Falls back to bitmap 'small' without a TTF.
         """
         renderer = self._aa_renderer(size)
         if renderer is None:
             self.draw_text('small', x, baseline, color_tuple, text)
             return
-        img = renderer.render(text)
-        top = baseline - renderer.ascent
-        red, green, blue = color_tuple
-        pixels = img.load()
-        for yy in range(img.height):
-            cy = top + yy
-            if not 0 <= cy < DisplayConfig.MATRIX_ROWS:
-                continue
-            for xx in range(img.width):
-                alpha = pixels[xx, yy]
-                if alpha < 8:
-                    continue
-                cx = x + xx
-                if not 0 <= cx < DisplayConfig.MATRIX_COLS:
-                    continue
-                self.draw_pixel(
-                    cx, cy,
-                    red * alpha // 255,
-                    green * alpha // 255,
-                    blue * alpha // 255)
+        self._blit_aa(
+            int(x), int(baseline) - renderer.ascent, renderer.render(text),
+            color_tuple)
 
     def measure_text_aa(
         self, text: str, size: int = Fonts.AA_TEXT_SIZE

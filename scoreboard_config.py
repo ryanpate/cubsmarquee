@@ -138,6 +138,17 @@ class Fonts:
     )
     AA_TEXT_SIZE: int = 9
 
+    # Monospaced TTFs backing the fixed-advance AA rendering that
+    # replaces the bitmap fonts in draw_text (see AA_MONO_FONTS)
+    AA_MONO_BOLD_CANDIDATES: tuple[str, ...] = (
+        "./fonts/DejaVuSansMono-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
+    )
+    AA_MONO_REGULAR_CANDIDATES: tuple[str, ...] = (
+        "./fonts/DejaVuSansMono.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+    )
+
     # Character widths for text positioning calculations
     CHAR_WIDTH_LARGE: int = 10
     CHAR_WIDTH_MEDIUM: int = 9

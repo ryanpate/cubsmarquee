@@ -869,6 +869,9 @@ class TestPreviewMirror:
         manager._applied_brightness = None
         manager.update_brightness = Mock()
         manager._refresh_heartbeat = Mock()
+        manager._mono_ttf_bold = None
+        manager._mono_ttf_regular = None
+        manager._mono_renderers = {}
         manager._init_preview_mirror()
         return manager
 
