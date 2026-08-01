@@ -506,12 +506,12 @@ class LiveGameHandler:
         """
         if len(score_text) == 1:
             self.manager.draw_text('medium_bold', 20, y,
-                                   Colors.BLACK, score_text)
+                                   Colors.BLACK, score_text, smooth=False)
         else:
             self.manager.draw_text('medium_bold', 17, y,
-                                   Colors.BLACK, score_text[0])
+                                   Colors.BLACK, score_text[0], smooth=False)
             self.manager.draw_text('medium_bold', 23, y,
-                                   Colors.BLACK, score_text[1])
+                                   Colors.BLACK, score_text[1], smooth=False)
 
     def _draw_game_info_improved(self, game_info, play_data):
         """Draw game info with improved pitch count"""
