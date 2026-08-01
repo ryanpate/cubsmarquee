@@ -15,6 +15,9 @@ if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
 
 MARQUEE_RED = (196, 30, 58)
+MARQUEE_RED_LIGHT = (232, 74, 98)
+MARQUEE_RED_DARK = (140, 18, 40)
+TRIM_GOLD = (168, 138, 24)
 STORY_WHITE = (225, 232, 240)
 
 
@@ -56,7 +59,7 @@ class TeamHistoryDisplay:
             lines.append(current)
         return lines
 
-    def _draw_entry_frame(self, entry: dict[str, Any]) -> None:
+    def _draw_entry_frame(self, entry: dict[str, Any], date_label: str = '') -> None:
         """Marquee-style card for one historical moment"""
         self.manager.clear_canvas()
         background = Image.new(
@@ -64,22 +67,40 @@ class TeamHistoryDisplay:
             contrast_background(self.team))
         self.manager.set_image(background, 0, 0)
 
-        # Marquee red band with the screen title
+        # Marquee red band: beveled edges, gold trim, the screen title
         for y in range(0, 9):
+            row_color = (MARQUEE_RED_LIGHT if y == 0
+                         else MARQUEE_RED_DARK if y == 8 else MARQUEE_RED)
             for x in range(DisplayConfig.MATRIX_COLS):
-                self.manager.draw_pixel(x, y, *MARQUEE_RED)
+                self.manager.draw_pixel(x, y, *row_color)
+        for x in range(DisplayConfig.MATRIX_COLS):
+            self.manager.draw_pixel(x, 9, *TRIM_GOLD)
         title = f'{self.team.short_name.upper()} HISTORY'
         title_x = (DisplayConfig.MATRIX_COLS - len(title) * 4) // 2
         self.manager.draw_text('micro', title_x, 7, Colors.WHITE, title)
 
-        # The year, big, with the story wrapped beneath
+        # Date and year in yellow with flanking rules; 4-line stories get
+        # a smaller date so every line keeps 8px spacing (descender clear)
         year = str(entry.get('year', ''))
-        year_x = (DisplayConfig.MATRIX_COLS - len(year) * 6) // 2
-        self.manager.draw_text(
-            'small_bold', year_x, 18, Colors.YELLOW, year)
-
+        header = f'{date_label}, {year}' if date_label else year
         lines = self._wrap(entry.get('text', ''), 23)[:4]
-        for line, baseline in zip(lines, (26, 33, 40, 47)):
+        if len(lines) == 4:
+            font, char_width, header_baseline, rule_y = 'tiny_bold', 5, 17, 14
+            baselines: tuple[int, ...] = (23, 31, 39, 47)
+        else:
+            font, char_width, header_baseline, rule_y = 'small_bold', 6, 21, 17
+            first = 38 - 4 * (len(lines) - 1)  # center the block vertically
+            baselines = tuple(first + 8 * i for i in range(len(lines)))
+        header_w = len(header) * char_width
+        header_x = (DisplayConfig.MATRIX_COLS - header_w) // 2
+        self.manager.draw_text(
+            font, header_x, header_baseline, Colors.YELLOW, header)
+        for x in range(6, header_x - 3):
+            self.manager.draw_pixel(x, rule_y, *TRIM_GOLD)
+        for x in range(header_x + header_w + 2, DisplayConfig.MATRIX_COLS - 6):
+            self.manager.draw_pixel(x, rule_y, *TRIM_GOLD)
+
+        for line, baseline in zip(lines, baselines):
             line_x = (DisplayConfig.MATRIX_COLS - len(line) * 4) // 2
             self.manager.draw_text(
                 'micro', max(0, line_x), baseline, STORY_WHITE, line)
@@ -95,11 +116,12 @@ class TeamHistoryDisplay:
             return False
 
         print(f"Displaying {self.team.short_name} history for {now.format('MM-DD')}")
+        date_label = now.format('MMM D').upper()
         per_entry = max(20, duration // len(entries))
         start = time.time()
         for entry in entries:
             if time.time() - start >= duration:
                 break
-            self._draw_entry_frame(entry)
+            self._draw_entry_frame(entry, date_label)
             time.sleep(min(per_entry, max(1, duration - (time.time() - start))))
         return True
