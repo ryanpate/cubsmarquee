@@ -803,7 +803,9 @@ class FlightDisplay:
 
             if response.status_code == 200:
                 data = response.json()
-                states = data.get('states', [])
+                # OpenSky sends "states": null when the box is empty -
+                # treat that as a successful fetch of zero aircraft
+                states = data.get('states') or []
 
                 flights = []
                 for state in states:

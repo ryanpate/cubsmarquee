@@ -1042,6 +1042,25 @@ class TestFlightVisualHelpers:
 
         return FlightDisplay.__new__(FlightDisplay)
 
+    def test_opensky_null_states_is_zero_flights(self, monkeypatch) -> None:
+        """OpenSky sends "states": null for an empty box - that must
+        clear flight_data and succeed, not raise (broke mid-game 2026-08-01)"""
+        from unittest.mock import MagicMock
+        import flight_display as fd
+
+        display = self._display()
+        display.latitude, display.longitude = 39.75, -89.53
+        display.flight_data = [{'callsign': 'STALE1'}]
+        display._lookup_destinations = MagicMock()
+
+        response = MagicMock(status_code=200)
+        response.json.return_value = {'time': 1234, 'states': None}
+        monkeypatch.setattr(
+            fd.requests, 'get', lambda *a, **k: response)
+
+        assert display._fetch_from_opensky() is True
+        assert display.flight_data == []
+
     def test_airline_name_from_callsign(self) -> None:
         display = self._display()
 
