@@ -495,11 +495,13 @@ class TestNflScreenParity:
         for name, args, kwargs in manager.mock_calls:
             if name == 'draw_text':
                 # The sweater header is centered and auto-fits its font
-                # (small_bold when the name is short enough, else
-                # tiny_bold at a higher baseline), so font, x and y all
-                # legitimately vary with the team name - normalize it.
-                if args[2] in (9, 10):
-                    calls.append(('header-text', 'centered'))
+                # (standard_bold drawn twice for faux-bold when the name
+                # is short enough, else tiny_bold once at a lower
+                # baseline), so font, x, y and call count all
+                # legitimately vary with the team name - collapse it.
+                if args[2] in (10, 11):
+                    if calls[-1:] != [('header-text', 'centered')]:
+                        calls.append(('header-text', 'centered'))
                     continue
                 calls.append(('text', args[0], args[1], args[2]))
             elif name == 'set_image':

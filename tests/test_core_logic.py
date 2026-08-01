@@ -651,11 +651,11 @@ class TestBearsCompactHeader:
         img = display._create_bears_sweater_background()
 
         assert img.size == (96, 48)
-        # Orange stripes at y0-1 and y10-11
-        for y in (0, 1, 10, 11):
+        # Orange stripes at y0-1 and y11-12
+        for y in (0, 1, 11, 12):
             assert img.getpixel((48, y)) == Colors.BEARS_ORANGE
         # Navy band between stripes and navy content area below
-        for y in (2, 9, 12, 30, 47):
+        for y in (2, 10, 13, 30, 47):
             assert img.getpixel((48, y)) == Colors.BEARS_NAVY
 
 

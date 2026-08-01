@@ -142,7 +142,7 @@ class OffSeasonHandler:
         """Pre-generate compact Bears sweater header background for performance"""
         img = Image.new("RGB", (96, 48), self.NFL_PRIMARY)
         pixels = img.load()
-        for y in (0, 1, 10, 11):
+        for y in (0, 1, 11, 12):
             for x in range(96):
                 pixels[x, y] = self.NFL_ACCENT
         print("NFL sweater background cached")
@@ -951,7 +951,7 @@ class OffSeasonHandler:
         # Display loading message centered in the content area
         message_width = len(message) * 5
         x_pos = max(0, (96 - message_width) // 2)
-        self.manager.draw_text('small_bold', x_pos, 32,
+        self.manager.draw_text('small_bold', x_pos, 36,
                                Colors.WHITE, message)
 
         self.manager.swap_canvas()
@@ -981,13 +981,17 @@ class OffSeasonHandler:
         """Draw the compact sweater header using the cached image"""
         self.manager.set_image(self._bears_sweater_bg, 0, 0)
         header = self.nfl_team.header_name
-        # Larger title when it fits; long names (Chiefs) drop to tiny
-        if len(header) * 6 <= 96:
-            font, char_width, baseline = 'small_bold', 6, 10
+        # Big bold title when it fits; long names (Chiefs) drop to tiny.
+        # The big title is drawn twice 1px apart - faux-bold thickens the
+        # hinted stems (tiny's 5px cells have no room for that).
+        if len(header) * 7 <= 96:
+            font, char_width, baseline = 'standard_bold', 7, 11
         else:
-            font, char_width, baseline = 'tiny_bold', 5, 9
+            font, char_width, baseline = 'tiny_bold', 5, 10
         x = max(0, (96 - len(header) * char_width) // 2)
         self.manager.draw_text(font, x, baseline, Colors.WHITE, header)
+        if font == 'standard_bold':
+            self.manager.draw_text(font, x + 1, baseline, Colors.WHITE, header)
 
     def display_bears_news(self, duration=180):
         """Display scrolling Bears breaking news with sweater header"""
@@ -1029,9 +1033,9 @@ class OffSeasonHandler:
                         if fresh_news:
                             live_news = fresh_news
 
-                # Draw scrolling text
+                # Draw scrolling text, vertically centered below the band
                 self.manager.draw_text(
-                    'medium_bold', int(self.scroll_position), 32,
+                    'medium_bold', int(self.scroll_position), 36,
                     Colors.WHITE, current_headline
                 )
 

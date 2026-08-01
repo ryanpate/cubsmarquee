@@ -146,12 +146,12 @@ class BearsDisplay:
     def _create_bears_sweater_background(self) -> Image.Image:
         """Pre-generate compact Bears sweater header background for performance
 
-        Full 96x48 navy frame with orange stripes at y0-1 and y10-11; the
-        header band is y0-11 and content draws on navy from y12 down.
+        Full 96x48 navy frame with orange stripes at y0-1 and y11-12; the
+        header band is y0-12 and content draws on navy from y13 down.
         """
         img = Image.new("RGB", (96, 48), self.PRIMARY)
         pixels = img.load()
-        for y in (0, 1, 10, 11):
+        for y in (0, 1, 11, 12):
             for x in range(96):
                 pixels[x, y] = self.ACCENT
         print("Bears sweater background cached")
@@ -361,13 +361,19 @@ class BearsDisplay:
         """Draw the compact sweater header using the cached background"""
         self.manager.set_image(self._bears_sweater_bg, 0, 0)
         header = self.nfl_team.header_name
-        # Larger title when it fits; long names (Chiefs) drop to tiny
-        if len(header) * Fonts.CHAR_WIDTH_SMALL <= 96:
-            font, char_width, baseline = 'small_bold', Fonts.CHAR_WIDTH_SMALL, 10
+        # Big bold title when it fits; long names (Chiefs) drop to tiny.
+        # The big title is drawn twice 1px apart - faux-bold thickens the
+        # hinted stems (tiny's 5px cells have no room for that).
+        if len(header) * Fonts.CHAR_WIDTH_STANDARD <= 96:
+            font, char_width, baseline = (
+                'standard_bold', Fonts.CHAR_WIDTH_STANDARD, 11)
         else:
-            font, char_width, baseline = 'tiny_bold', Fonts.CHAR_WIDTH_TINY, 9
+            font, char_width, baseline = 'tiny_bold', Fonts.CHAR_WIDTH_TINY, 10
         x = max(0, (96 - len(header) * char_width) // 2)
         self.manager.draw_text(font, x, baseline, self.TEXT_WHITE, header)
+        if font == 'standard_bold':
+            self.manager.draw_text(
+                font, x + 1, baseline, self.TEXT_WHITE, header)
 
     def _get_team_logo(self, abbrev: str, size: int) -> Image.Image | None:
         """Team logo flattened onto the sweater color, or None if missing"""
