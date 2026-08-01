@@ -192,13 +192,16 @@ class GameStateHandler:
             for x in range(DisplayConfig.MATRIX_COLS):
                 self.manager.draw_pixel(x, 14, 255, 255, 255)
 
-            # Status label
+            # Status label (classic bitmap fonts on this screen)
             self.manager.draw_text(
-                'medium_bold', label_x, 12, Colors.BRIGHT_YELLOW, label)
+                'medium_bold', label_x, 12, Colors.BRIGHT_YELLOW, label,
+                smooth=False)
 
             # Start time info
-            self.manager.draw_text('small', 17, 24, Colors.WHITE, 'START TIME')
-            self.manager.draw_text('small', 36, 32, Colors.WHITE, start_time)
+            self.manager.draw_text('small', 17, 24, Colors.WHITE,
+                                   'START TIME', smooth=False)
+            self.manager.draw_text('small', 36, 32, Colors.WHITE,
+                                   start_time, smooth=False)
 
             # Scroll text at bottom (lineup or custom override)
             self.scroll_position -= 1
@@ -214,7 +217,8 @@ class GameStateHandler:
                     break
 
             self.manager.draw_text(
-                'lineup', self.scroll_position, 45, Colors.WHITE, scroll_text)
+                'lineup', self.scroll_position, 45, Colors.WHITE, scroll_text,
+                smooth=False)
 
             # Split-squad indicator
             if self.manager.split_squad_indicator:
