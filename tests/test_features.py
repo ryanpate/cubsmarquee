@@ -1441,6 +1441,45 @@ class TestISSDisplay:
         assert display._parse_position({'message': 'error'}) is None
         assert display._parse_position({}) is None
 
+    def _globe_display(self):
+        display = self._display()
+        display.latitude, display.longitude = 41.88, -87.63
+        display._arc_cache = None
+        return display
+
+    def test_projection_centers_home(self) -> None:
+        from iss_display import GLOBE_CX, GLOBE_CY
+
+        display = self._globe_display()
+        x, y, cos_c = display._project(41.88, -87.63)
+        assert (x, y) == (GLOBE_CX, GLOBE_CY)
+        assert cos_c > 0.999  # dead center, fully visible
+
+    def test_projection_flags_far_side(self) -> None:
+        display = self._globe_display()
+        # Antipode of Chicago (Indian Ocean) is on the far side
+        _, _, cos_c = display._project(-41.88, 92.37)
+        assert cos_c < -0.999
+
+    def test_arc_reaches_visible_station(self) -> None:
+        display = self._globe_display()
+        points = display._arc_points((10.0, -60.0))
+        assert points, 'expected arc pixels toward a visible station'
+        assert all(visible for _, _, visible in points)
+        ex, ey, _ = points[-1]
+        assert (ex, ey) == display._project(10.0, -60.0)[:2]
+
+    def test_arc_clips_at_horizon_for_far_side(self) -> None:
+        from iss_display import GLOBE_CX, GLOBE_CY, GLOBE_R
+
+        display = self._globe_display()
+        points = display._arc_points((-30.0, 120.0))
+        assert points
+        ex, ey, visible = points[-1]
+        assert not visible  # marked as ending short of the station
+        radius = ((ex - GLOBE_CX) ** 2 + (ey - GLOBE_CY) ** 2) ** 0.5
+        assert radius >= GLOBE_R - 2  # the line stops at the limb
+
 
 class TestCelebrations:
     def _display(self):
