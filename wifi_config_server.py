@@ -1365,6 +1365,12 @@ HTML_TEMPLATE = """
                     // Build DOM nodes with textContent so hostile SSIDs
                     // can never inject HTML or script
                     networkList.innerHTML = '';
+                    if (data.cached) {
+                        const note = document.createElement('div');
+                        note.style.cssText = 'padding: 6px 10px; font-size: 12px; color: #888;';
+                        note.textContent = 'Networks seen before the hotspot started';
+                        networkList.appendChild(note);
+                    }
                     data.networks.forEach(network => {
                         const item = document.createElement('div');
                         item.className = 'network-item';
@@ -1778,9 +1784,53 @@ def nfl_logo(slug):
     return send_file(pack.logo_path, mimetype='image/png')
 
 
+# Raw iwlist output written by wifi_manager.sh just before it starts the
+# hotspot - the radio can't scan while hostapd owns it
+SCAN_CACHE_PATH = '/var/tmp/wifi_scan_cache.txt'
+
+
+def _parse_iwlist(output):
+    """Parse `iwlist wlan0 scan` output into unique ssid/signal entries"""
+    networks = []
+    current_network = None
+
+    for line in output.split('\n'):
+        if 'ESSID:' in line:
+            ssid = line.split('ESSID:')[1].strip().strip('"')
+            if ssid and current_network:
+                current_network['ssid'] = ssid
+                networks.append(current_network)
+                current_network = None
+
+        if 'Cell' in line and 'Address' in line:
+            current_network = {'ssid': '', 'signal': ''}
+
+        if 'Quality=' in line and current_network:
+            try:
+                quality = line.split('Quality=')[1].split()[0]
+                num, den = quality.split('/')
+                signal_strength = int((int(num) / int(den)) * 100)
+                bars = '█' * (signal_strength // 20)
+                current_network['signal'] = f"{bars} {signal_strength}%"
+            except:
+                current_network['signal'] = 'Unknown'
+
+    # Remove duplicates
+    unique_networks = []
+    seen_ssids = set()
+    for network in networks:
+        if network['ssid'] and network['ssid'] not in seen_ssids:
+            unique_networks.append(network)
+            seen_ssids.add(network['ssid'])
+    return unique_networks
+
+
 @app.route('/scan_networks')
 def scan_networks():
-    """Scan for available WiFi networks"""
+    """Scan for available WiFi networks; in hotspot mode the live scan
+    fails (hostapd owns the radio), so fall back to the scan cached by
+    wifi_manager.sh right before the AP started"""
+    networks = []
     try:
         result = subprocess.run(
             ['sudo', 'iwlist', 'wlan0', 'scan'],
@@ -1788,43 +1838,20 @@ def scan_networks():
             text=True,
             timeout=15
         )
-
-        networks = []
-        current_network = None
-
-        for line in result.stdout.split('\n'):
-            if 'ESSID:' in line:
-                ssid = line.split('ESSID:')[1].strip().strip('"')
-                if ssid and current_network:
-                    current_network['ssid'] = ssid
-                    networks.append(current_network)
-                    current_network = None
-
-            if 'Cell' in line and 'Address' in line:
-                current_network = {'ssid': '', 'signal': ''}
-
-            if 'Quality=' in line and current_network:
-                try:
-                    quality = line.split('Quality=')[1].split()[0]
-                    num, den = quality.split('/')
-                    signal_strength = int((int(num) / int(den)) * 100)
-                    bars = '█' * (signal_strength // 20)
-                    current_network['signal'] = f"{bars} {signal_strength}%"
-                except:
-                    current_network['signal'] = 'Unknown'
-
-        # Remove duplicates
-        unique_networks = []
-        seen_ssids = set()
-        for network in networks:
-            if network['ssid'] and network['ssid'] not in seen_ssids:
-                unique_networks.append(network)
-                seen_ssids.add(network['ssid'])
-
-        return jsonify({'success': True, 'networks': unique_networks})
-
+        networks = _parse_iwlist(result.stdout)
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
+        print(f"Live WiFi scan failed: {e}")
+
+    cached = False
+    if not networks:
+        try:
+            with open(SCAN_CACHE_PATH) as f:
+                networks = _parse_iwlist(f.read())
+            cached = bool(networks)
+        except OSError:
+            pass
+
+    return jsonify({'success': True, 'networks': networks, 'cached': cached})
 
 
 @app.route('/connect_wifi', methods=['POST'])

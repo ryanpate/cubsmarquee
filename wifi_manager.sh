@@ -74,7 +74,20 @@ stop_access_point() {
 
 start_access_point() {
     log_message "Starting Access Point mode..."
-    
+
+    # Scan while the radio is still in client mode - once hostapd owns
+    # wlan0 scans fail, so the setup page serves this cached list
+    log_message "Caching WiFi scan results for the setup page..."
+    for i in 1 2 3; do
+        sudo iwlist wlan0 scan > /var/tmp/wifi_scan_cache.txt 2>/dev/null
+        if grep -q "ESSID:" /var/tmp/wifi_scan_cache.txt; then
+            log_message "Cached scan found $(grep -c 'ESSID:' /var/tmp/wifi_scan_cache.txt) networks"
+            break
+        fi
+        log_message "Scan attempt $i found nothing, retrying..."
+        sleep 2
+    done
+
     # Stop any existing services first
     sudo systemctl stop hostapd 2>/dev/null
     sudo systemctl stop dnsmasq 2>/dev/null

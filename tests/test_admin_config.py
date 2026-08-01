@@ -117,3 +117,65 @@ def test_admin_page_relabels_bears_controls(client):
     assert 'Enable NFL team game display' in html
     assert 'Enable NFL breaking news display' in html
     assert 'Enable Chicago Bears display' not in html
+
+
+SAMPLE_IWLIST = '''
+          Cell 01 - Address: AA:BB:CC:DD:EE:01
+                    Quality=60/70  Signal level=-50 dBm
+                    ESSID:"HomeNet"
+          Cell 02 - Address: AA:BB:CC:DD:EE:02
+                    Quality=35/70  Signal level=-75 dBm
+                    ESSID:"Neighbor5G"
+          Cell 03 - Address: AA:BB:CC:DD:EE:03
+                    Quality=60/70  Signal level=-50 dBm
+                    ESSID:"HomeNet"
+'''
+
+
+def test_parse_iwlist_extracts_unique_networks():
+    import wifi_config_server as wcs
+    networks = wcs._parse_iwlist(SAMPLE_IWLIST)
+    assert [n['ssid'] for n in networks] == ['HomeNet', 'Neighbor5G']
+    assert '85%' in networks[0]['signal']
+
+
+def test_scan_falls_back_to_cache_in_hotspot_mode(
+        client, tmp_path, monkeypatch):
+    """hostapd owns the radio in AP mode - live scans return nothing, so
+    the endpoint must serve the scan wifi_manager.sh cached beforehand"""
+    import subprocess
+    import wifi_config_server as wcs
+
+    cache = tmp_path / 'wifi_scan_cache.txt'
+    cache.write_text(SAMPLE_IWLIST)
+    monkeypatch.setattr(wcs, 'SCAN_CACHE_PATH', str(cache))
+
+    def busy_scan(*args, **kwargs):
+        return subprocess.CompletedProcess(
+            args, 240, stdout='', stderr='wlan0    Device or resource busy')
+
+    monkeypatch.setattr(wcs.subprocess, 'run', busy_scan)
+
+    data = client.get('/scan_networks').get_json()
+    assert data['success'] and data['cached']
+    assert [n['ssid'] for n in data['networks']] == ['HomeNet', 'Neighbor5G']
+
+
+def test_scan_prefers_live_results(client, tmp_path, monkeypatch):
+    import subprocess
+    import wifi_config_server as wcs
+
+    cache = tmp_path / 'wifi_scan_cache.txt'
+    cache.write_text(SAMPLE_IWLIST)
+    monkeypatch.setattr(wcs, 'SCAN_CACHE_PATH', str(cache))
+
+    live = SAMPLE_IWLIST.replace('HomeNet', 'LiveNet')
+
+    def live_scan(*args, **kwargs):
+        return subprocess.CompletedProcess(args, 0, stdout=live, stderr='')
+
+    monkeypatch.setattr(wcs.subprocess, 'run', live_scan)
+
+    data = client.get('/scan_networks').get_json()
+    assert data['success'] and not data['cached']
+    assert [n['ssid'] for n in data['networks']] == ['LiveNet', 'Neighbor5G']
