@@ -545,10 +545,12 @@ class ScoreboardManager:
         self.set_image(region, left, upper)
 
     def draw_text(
-        self, font_name: str, x: int, y: int, color_tuple: RGBColor, text: str
+        self, font_name: str, x: int, y: int, color_tuple: RGBColor,
+        text: str, smooth: bool = True
     ) -> None:
-        """Draw text on the canvas"""
-        renderer = self._mono_renderer(font_name)
+        """Draw text on the canvas; smooth=False forces the bitmap font
+        for screens that want the classic crisp pixel look"""
+        renderer = self._mono_renderer(font_name) if smooth else None
         if renderer is not None:
             self._blit_aa(
                 int(x), int(y) - renderer.ascent, renderer.render(text),

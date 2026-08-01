@@ -268,12 +268,14 @@ class GameStateHandler:
             for x in range(96):
                 self.manager.draw_pixel(x, 14, 255, 255, 255)
 
-            # Draw status text
+            # Draw status text (classic bitmap fonts on this screen)
             x_offset: int = 17 if status_text != "POSTPONED" else 8
             self.manager.draw_text('medium_bold', x_offset,
-                                   12, Colors.WHITE, status_text)
-            self.manager.draw_text('small', 17, 24, Colors.WHITE, 'START TIME')
-            self.manager.draw_text('small', 36, 32, Colors.WHITE, start_time)
+                                   12, Colors.WHITE, status_text, smooth=False)
+            self.manager.draw_text('small', 17, 24, Colors.WHITE,
+                                   'START TIME', smooth=False)
+            self.manager.draw_text('small', 36, 32, Colors.WHITE,
+                                   start_time, smooth=False)
 
             # Scroll lineup
             self.scroll_position -= 1
@@ -285,7 +287,8 @@ class GameStateHandler:
                 lineup = self.manager.get_lineup(gameid)
 
             self.manager.draw_text(
-                'lineup', self.scroll_position, 45, Colors.WHITE, lineup)
+                'lineup', self.scroll_position, 45, Colors.WHITE, lineup,
+                smooth=False)
 
             # Draw split-squad indicator if active
             if self.manager.split_squad_indicator:
