@@ -981,8 +981,13 @@ class OffSeasonHandler:
         """Draw the compact sweater header using the cached image"""
         self.manager.set_image(self._bears_sweater_bg, 0, 0)
         header = self.nfl_team.header_name
-        x = max(0, (96 - len(header) * 5) // 2)
-        self.manager.draw_text('tiny_bold', x, 9, Colors.WHITE, header)
+        # Larger title when it fits; long names (Chiefs) drop to tiny
+        if len(header) * 6 <= 96:
+            font, char_width, baseline = 'small_bold', 6, 10
+        else:
+            font, char_width, baseline = 'tiny_bold', 5, 9
+        x = max(0, (96 - len(header) * char_width) // 2)
+        self.manager.draw_text(font, x, baseline, Colors.WHITE, header)
 
     def display_bears_news(self, duration=180):
         """Display scrolling Bears breaking news with sweater header"""

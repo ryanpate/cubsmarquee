@@ -120,18 +120,18 @@ class ScoreboardManager:
     }
 
     # Bitmap fonts that draw_text renders as fixed-advance anti-aliased
-    # TTF text instead: name -> (cell width, TTF size, stroke, bold).
+    # TTF text instead: name -> (cell width, TTF size, bold).
     # Cell widths equal each bitmap font's advance, so caller layout math
     # (len(text) * CHAR_WIDTH_*) is unaffected. Fonts 5px and narrower
     # (tiny, micro) stay bitmap - at that advance anti-aliasing reads
     # worse than crisp pixels (verified side by side on the history card).
-    AA_MONO_FONTS: dict[str, tuple[int, int, int, bool]] = {
-        'large_bold': (10, 16, 1, True),
-        'medium_bold': (9, 15, 1, True),
-        'standard_bold': (7, 12, 1, True),
-        'lineup': (7, 12, 1, True),
-        'small_bold': (6, 11, 1, True),
-        'small': (6, 10, 0, False),
+    AA_MONO_FONTS: dict[str, tuple[int, int, bool]] = {
+        'large_bold': (10, 17, True),
+        'medium_bold': (9, 16, True),
+        'standard_bold': (7, 12, True),
+        'lineup': (7, 12, True),
+        'small_bold': (6, 11, True),
+        'small': (6, 10, False),
     }
 
     def _load_fonts(self) -> dict[str, graphics.Font]:
@@ -518,11 +518,11 @@ class ScoreboardManager:
         spec = self.AA_MONO_FONTS.get(font_name)
         if spec is None:
             return None
-        cell, size, stroke, bold = spec
+        cell, size, bold = spec
         ttf = self._mono_ttf_bold if bold else self._mono_ttf_regular
         if ttf is None:
             return None
-        renderer = MonoAATextRenderer(ttf, size, cell, stroke)
+        renderer = MonoAATextRenderer(ttf, size, cell)
         self._mono_renderers[font_name] = renderer
         return renderer
 

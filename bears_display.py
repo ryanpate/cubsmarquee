@@ -361,8 +361,13 @@ class BearsDisplay:
         """Draw the compact sweater header using the cached background"""
         self.manager.set_image(self._bears_sweater_bg, 0, 0)
         header = self.nfl_team.header_name
-        x = max(0, (96 - len(header) * Fonts.CHAR_WIDTH_TINY) // 2)
-        self.manager.draw_text('tiny_bold', x, 9, self.TEXT_WHITE, header)
+        # Larger title when it fits; long names (Chiefs) drop to tiny
+        if len(header) * Fonts.CHAR_WIDTH_SMALL <= 96:
+            font, char_width, baseline = 'small_bold', Fonts.CHAR_WIDTH_SMALL, 10
+        else:
+            font, char_width, baseline = 'tiny_bold', Fonts.CHAR_WIDTH_TINY, 9
+        x = max(0, (96 - len(header) * char_width) // 2)
+        self.manager.draw_text(font, x, baseline, self.TEXT_WHITE, header)
 
     def _get_team_logo(self, abbrev: str, size: int) -> Image.Image | None:
         """Team logo flattened onto the sweater color, or None if missing"""

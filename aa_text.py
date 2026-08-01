@@ -71,34 +71,31 @@ class MonoAATextRenderer:
     cell-wide column, so layouts computed from bitmap char widths
     (len(text) * CHAR_WIDTH_*) keep working unchanged.
 
-    stroke thickens glyphs in supersampled units (1 = a quarter pixel at
-    SCALE 4) so light TTF weights can match the chunky BDF bold fonts.
+    Rendered directly at target size - NOT supersampled - so FreeType
+    hinting snaps stems to the pixel grid. Supersampling left stems on
+    fractional pixels, and the asymmetric soft edges read as a fake
+    italic lean on the matrix.
     """
 
-    def __init__(self, ttf_path: str, size: int, cell: int,
-                 stroke: int = 0) -> None:
-        self._font = ImageFont.truetype(ttf_path, size * SCALE)
+    def __init__(self, ttf_path: str, size: int, cell: int) -> None:
+        self._font = ImageFont.truetype(ttf_path, size)
         self._cell = cell
-        self._stroke = stroke
         ascent, descent = self._font.getmetrics()
-        self._height_4x = ascent + descent + 2 * stroke
-        self._height = max(1, round(self._height_4x / SCALE))
-        self.ascent: int = max(1, round((ascent + stroke) / SCALE))
+        self._height = ascent + descent
+        self.ascent: int = ascent
         self._cache: dict[str, Image.Image] = {}
 
     def render(self, text: str) -> Image.Image:
-        """Grayscale ('L') image of text at 1x scale; cached per string"""
+        """Grayscale ('L') image of text; cached per string"""
         img = self._cache.get(text)
         if img is None:
-            cell_4x = self._cell * SCALE
-            big = Image.new('L', (max(1, cell_4x * len(text)), self._height_4x), 0)
-            draw = ImageDraw.Draw(big)
+            img = Image.new(
+                'L', (max(1, self._cell * len(text)), self._height), 0)
+            draw = ImageDraw.Draw(img)
             for i, ch in enumerate(text):
-                x = i * cell_4x + (cell_4x - self._font.getlength(ch)) / 2
-                draw.text((x, self._stroke), ch, font=self._font, fill=255,
-                          stroke_width=self._stroke, stroke_fill=255)
-            img = big.resize(
-                (max(1, self._cell * len(text)), self._height), Image.LANCZOS)
+                x = i * self._cell + round(
+                    (self._cell - self._font.getlength(ch)) / 2)
+                draw.text((x, 0), ch, font=self._font, fill=255)
             if len(self._cache) >= CACHE_MAX:
                 self._cache.clear()
             self._cache[text] = img
