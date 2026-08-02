@@ -17,6 +17,7 @@ from bears_display import BearsDisplay
 from pga_display import PGADisplay
 from bible_display import BibleDisplay
 from newsmax_display import NewsmaxDisplay
+from usatoday_display import UsaTodayDisplay
 from stock_display import StockDisplay
 from spring_training_display import SpringTrainingDisplay
 from allstar_display import AllStarDisplay
@@ -43,6 +44,7 @@ class OffSeasonHandler:
         self.pga_display: PGADisplay = PGADisplay(scoreboard_manager)
         self.bible_display: BibleDisplay = BibleDisplay(scoreboard_manager)
         self.newsmax_display: NewsmaxDisplay = NewsmaxDisplay(scoreboard_manager)
+        self.usatoday_display: UsaTodayDisplay = UsaTodayDisplay(scoreboard_manager)
         self.stock_display: StockDisplay = StockDisplay(scoreboard_manager)
         self.spring_training_display: SpringTrainingDisplay = SpringTrainingDisplay(scoreboard_manager)
         self.allstar_display: AllStarDisplay = AllStarDisplay(scoreboard_manager)
@@ -96,6 +98,7 @@ class OffSeasonHandler:
             'bible': GameConfig.BIBLE_DISPLAY_DURATION if hasattr(GameConfig, 'BIBLE_DISPLAY_DURATION') else 3,
             'bible_facts': GameConfig.BIBLE_FACTS_DURATION if hasattr(GameConfig, 'BIBLE_FACTS_DURATION') else 2,
             'newsmax': GameConfig.NEWSMAX_DISPLAY_DURATION if hasattr(GameConfig, 'NEWSMAX_DISPLAY_DURATION') else 2,
+            'usatoday': 2,
             'stocks': GameConfig.STOCKS_DISPLAY_DURATION if hasattr(GameConfig, 'STOCKS_DISPLAY_DURATION') else 2,
             'spring_training': GameConfig.SPRING_TRAINING_DISPLAY_DURATION if hasattr(GameConfig, 'SPRING_TRAINING_DISPLAY_DURATION') else 2,
             'allstar': 2,  # All-Star break: Derby promo / ASG countdown
@@ -166,6 +169,7 @@ class OffSeasonHandler:
             'enable_bible': True,  # Enable/disable Bible Verse of the Day
             'enable_bible_facts': True,  # Enable/disable Bible Facts
             'enable_newsmax': True,  # Enable/disable Newsmax news
+            'enable_usatoday': True,  # Enable/disable USA Today news
             'enable_stocks': True,  # Enable/disable Stock Exchange ticker
             'enable_spring_training': True,  # Enable/disable Spring Training countdown
             'enable_allstar': True,  # All-Star break screens (Derby promo, ASG countdown)
@@ -879,6 +883,24 @@ class OffSeasonHandler:
                 return
         else:
             print("Skipping Newsmax news (disabled in config)")
+
+        # Display USA Today news if enabled
+        usatoday_enabled = self.config.get('enable_usatoday', True)
+        if usatoday_enabled:
+            print("Displaying USA Today news...")
+            try:
+                self.usatoday_display.display_usatoday_news(
+                    duration=self.rotation_schedule['usatoday'] * 60
+                )
+                print("USA Today news display finished")
+            except Exception as e:
+                print(f"Error in USA Today news display: {e}")
+                import traceback
+                traceback.print_exc()
+            if _tick():
+                return
+        else:
+            print("Skipping USA Today news (disabled in config)")
 
         # Display Stock Exchange ticker if enabled
         stocks_enabled = self.config.get('enable_stocks', True)

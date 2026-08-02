@@ -127,3 +127,24 @@ def test_logo_asset_fits_header():
     assert img.mode == 'RGBA'
     assert img.height == 14
     assert img.width <= 88
+
+
+class TestRotationIntegration:
+    def test_off_season_handler_defaults_enable_usatoday(self):
+        import off_season_handler as osh
+        import inspect
+        src = inspect.getsource(osh.OffSeasonHandler._load_config)
+        assert "'enable_usatoday': True" in src
+
+    def test_rotation_schedule_has_usatoday_slot(self):
+        import off_season_handler as osh
+        import inspect
+        src = inspect.getsource(osh.OffSeasonHandler.__init__)
+        assert "'usatoday'" in src
+
+    def test_rotation_calls_usatoday_display(self):
+        import off_season_handler as osh
+        import inspect
+        src = inspect.getsource(osh.OffSeasonHandler)
+        assert 'display_usatoday_news' in src
+        assert "self.config.get('enable_usatoday', True)" in src

@@ -901,6 +901,7 @@ class TestCachedConfigLoader:
         import newsmax_display
         import pga_display
         import spring_training_display
+        import usatoday_display
 
         for module, cls_name in [
             (spring_training_display, 'SpringTrainingDisplay'),
@@ -909,6 +910,7 @@ class TestCachedConfigLoader:
             (newsmax_display, 'NewsmaxDisplay'),
             (bible_display, 'BibleDisplay'),
             (flight_display, 'FlightDisplay'),
+            (usatoday_display, 'UsaTodayDisplay'),
         ]:
             cls = getattr(module, cls_name)
             instance = cls.__new__(cls)
@@ -1040,10 +1042,11 @@ class TestRotationInterludeOnlyAfterContent:
         handler.rotation_schedule = {k: 0 for k in (
             'weather', 'bears', 'bears_news', 'pga', 'pga_news',
             'pga_facts', 'cubs_news', 'message', 'bible', 'bible_facts',
-            'newsmax', 'stocks', 'spring_training', 'allstar', 'flights',
-            'clock', 'cubs_history', 'sky', 'iss', 'celebration')}
+            'newsmax', 'usatoday', 'stocks', 'spring_training', 'allstar',
+            'flights', 'clock', 'cubs_history', 'sky', 'iss', 'celebration')}
         for attr in ('weather_display', 'bears_display', 'pga_display',
-                     'bible_display', 'newsmax_display', 'stock_display',
+                     'bible_display', 'newsmax_display', 'usatoday_display',
+                     'stock_display',
                      'spring_training_display', 'allstar_display',
                      'flight_display', 'clock_display',
                      'cubs_history_display', 'sky_display', 'iss_display',
@@ -1061,8 +1064,8 @@ class TestRotationInterludeOnlyAfterContent:
             'enable_pga_facts', 'enable_cubs_facts', 'enable_celebrations',
             'enable_spring_training', 'enable_allstar', 'enable_sky',
             'enable_cubs_news', 'enable_cubs_history', 'enable_bible',
-            'enable_bible_facts', 'enable_newsmax', 'enable_stocks',
-            'enable_flights', 'enable_iss')}
+            'enable_bible_facts', 'enable_newsmax', 'enable_usatoday',
+            'enable_stocks', 'enable_flights', 'enable_iss')}
 
     def test_all_disabled_never_fires_interlude(self):
         handler = self._make_handler(self._all_off())
