@@ -10,9 +10,16 @@ following the existing Newsmax display pattern.
 
 ## Decisions
 
-- **Content:** USA Today Top Stories RSS only —
-  `http://rssfeeds.usatoday.com/usatoday-NewsTopStories`. The feed mixes
-  breaking national news with top headlines; no section feeds.
+- **Content:** the first-party Gannett feed
+  (`http://rssfeeds.usatoday.com/usatoday-NewsTopStories`) was discontinued —
+  it now 301-redirects to the USA Today homepage network-wide (verified
+  2026-08-02; every Gannett RSS path tested behaves the same way, and Feedly's
+  feed index shows the old feed dormant since 2023). The source is now the
+  Google News RSS proxy scoped to `usatoday.com`:
+  `https://news.google.com/rss/search?q=site:usatoday.com+when:1d&hl=en-US&gl=US&ceid=US:en`.
+  Google News entry summaries are related-link HTML blobs, not article text,
+  so the ticker is title-only, with the feed's " - USA Today" source suffix
+  stripped before formatting.
 - **Look:** USA Today branding — white background, blue-circle logo with
   "USA TODAY" wordmark at top, blue separator rule, scrolling `large_bold`
   headlines in USA Today navy below. Same geometry as the Newsmax screen.
@@ -30,9 +37,9 @@ following the existing Newsmax display pattern.
   navy `(20, 40, 80)` for scrolling text (readable on white LEDs; tune on
   hardware).
 - `_fetch_usatoday_rss()` — via `rss_fetch.fetch_feed` (10s timeout), top 15
-  entries, title + first-sentence summary composition when the summary adds
-  information, HTML cleaned, `"USA TODAY: "` prefix, uppercase, prefix-dedupe,
-  max 12 items.
+  entries, title-only (Google News summaries are related-link HTML, not
+  article text), " - USA Today" source suffix stripped, `"USA TODAY: "`
+  prefix, uppercase, prefix-dedupe, max 12 items.
 - 30-minute cache via `GameConfig.NEWS_UPDATE_INTERVAL`.
 - Fallback when feed is empty/down: `"USA TODAY: CHECK BACK FOR THE LATEST
   NEWS UPDATES!"`.

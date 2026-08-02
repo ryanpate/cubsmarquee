@@ -38,21 +38,26 @@ class TestUsaTodayFetch:
         items = _display()._fetch_usatoday_rss()
         assert items == ['USA TODAY: STORM SLAMS FLORIDA COAST']
 
-    def test_fetches_top_stories_feed(self, monkeypatch):
+    def test_fetches_google_news_usatoday_feed(self, monkeypatch):
         calls = _patch_feed(monkeypatch, [_entry('A headline')])
         _display()._fetch_usatoday_rss()
         assert calls['url'] == (
-            'http://rssfeeds.usatoday.com/usatoday-NewsTopStories')
+            'https://news.google.com/rss/search?q=site:usatoday.com+when:1d'
+            '&hl=en-US&gl=US&ceid=US:en')
 
-    def test_summary_appended_when_it_adds_information(self, monkeypatch):
-        _patch_feed(monkeypatch, [_entry(
-            'Fed holds rates',
-            'Central bank officials voted to keep interest rates steady '
-            'citing cooling inflation data across sectors. More text here.')])
+    def test_google_news_source_suffix_stripped(self, monkeypatch):
+        _patch_feed(monkeypatch, [
+            _entry('Storm slams Florida coast - USA Today')])
         items = _display()._fetch_usatoday_rss()
-        assert len(items) == 1
-        assert items[0].startswith('USA TODAY: FED HOLDS RATES - ')
-        assert 'COOLING INFLATION' in items[0]
+        assert items == ['USA TODAY: STORM SLAMS FLORIDA COAST']
+
+    def test_summary_ignored(self, monkeypatch):
+        _patch_feed(monkeypatch, [_entry(
+            'Court rules - USA Today',
+            '<a href="https://example.com/a">Related story</a>'
+            '<a href="https://example.com/b">Another related link</a>')])
+        items = _display()._fetch_usatoday_rss()
+        assert items == ['USA TODAY: COURT RULES']
 
     def test_duplicate_headlines_dropped(self, monkeypatch):
         _patch_feed(monkeypatch, [
@@ -65,14 +70,6 @@ class TestUsaTodayFetch:
         _patch_feed(monkeypatch, [
             _entry(f'Unique headline number {i} with words') for i in range(20)])
         assert len(_display()._fetch_usatoday_rss()) == 12
-
-    def test_html_stripped_from_summaries(self, monkeypatch):
-        _patch_feed(monkeypatch, [_entry(
-            'Court rules',
-            '<p>The&nbsp;justices issued a <b>major</b> opinion on the '
-            'landmark case that reshapes federal policy nationwide.</p>')])
-        items = _display()._fetch_usatoday_rss()
-        assert '<' not in items[0] and '&NBSP;' not in items[0]
 
     def test_bozo_feed_with_no_entries_returns_empty(self, monkeypatch):
         _patch_feed(monkeypatch, [], bozo=True)

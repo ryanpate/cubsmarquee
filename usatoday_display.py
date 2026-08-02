@@ -17,7 +17,10 @@ if TYPE_CHECKING:
 class UsaTodayDisplay:
     """Handles USA Today headlines display with RSS feed"""
 
-    RSS_URL = 'http://rssfeeds.usatoday.com/usatoday-NewsTopStories'
+    RSS_URL = (
+        'https://news.google.com/rss/search?q=site:usatoday.com+when:1d'
+        '&hl=en-US&gl=US&ceid=US:en'
+    )
 
     def __init__(self, scoreboard_manager: ScoreboardManager) -> None:
         """Initialize USA Today display"""
@@ -65,30 +68,6 @@ class UsaTodayDisplay:
         print("USA Today logo not found")
         return None
 
-    def _clean_html(self, text: str) -> str:
-        """Remove HTML tags and clean up text"""
-        import re
-        clean = re.sub(r'<[^>]+>', '', text)
-        clean = clean.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
-        clean = clean.replace('&quot;', '"').replace('&#39;', "'").replace('&nbsp;', ' ')
-        clean = re.sub(r'\s+', ' ', clean).strip()
-        return clean
-
-    def _get_first_sentence(self, text: str, max_length: int = 150) -> str:
-        """Extract first sentence or truncate to max length"""
-        for ending in ['. ', '! ', '? ']:
-            idx = text.find(ending)
-            if idx > 0 and idx < max_length:
-                return text[:idx + 1].strip()
-
-        if len(text) > max_length:
-            truncated = text[:max_length]
-            last_space = truncated.rfind(' ')
-            if last_space > max_length - 30:
-                return truncated[:last_space] + '...'
-            return truncated + '...'
-        return text
-
     def _fetch_usatoday_rss(self) -> list[str]:
         """Fetch latest headlines from the USA Today Top Stories feed"""
         news_items: list[str] = []
@@ -109,28 +88,12 @@ class UsaTodayDisplay:
                     if not title:
                         continue
 
-                    summary = None
-                    if hasattr(entry, 'summary') and entry.summary:
-                        summary = self._clean_html(entry.summary)
-                    elif hasattr(entry, 'description') and entry.description:
-                        summary = self._clean_html(entry.description)
+                    # Google News titles are suffixed with the source name;
+                    # summaries are related-link HTML blobs, not article
+                    # text, so this feed is title-only.
+                    title = title.removesuffix(' - USA Today')
 
-                    if summary and len(summary) > 30:
-                        summary_short = self._get_first_sentence(summary, max_length=180)
-
-                        title_words = set(title.lower().split())
-                        summary_words = set(summary_short.lower().split())
-                        new_words = summary_words - title_words
-
-                        if len(new_words) > 5 and summary_short.lower() != title.lower():
-                            title_short = title[:60] + '...' if len(title) > 60 else title
-                            news_text = f"{title_short} - {summary_short}"
-                        else:
-                            news_text = summary_short
-                    else:
-                        news_text = title
-
-                    formatted_news = f"USA TODAY: {news_text.upper()}"
+                    formatted_news = f"USA TODAY: {title.upper()}"
 
                     is_duplicate = False
                     for existing in news_items:
