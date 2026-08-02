@@ -115,3 +115,15 @@ def test_usatoday_fetch_uses_timeout(monkeypatch):
     assert result == []
     assert seen, 'expected RSS fetches to go through rss_fetch'
     assert all(t and t > 0 for t in seen.values())
+
+
+def test_logo_asset_fits_header():
+    """usatoday.png must fit the 96px header band (Newsmax-style layout)"""
+    import os
+    from PIL import Image
+    path = os.path.join(os.path.dirname(__file__), '..', 'usatoday.png')
+    assert os.path.exists(path), 'run tools/gen_usatoday_logo.py'
+    img = Image.open(path)
+    assert img.mode == 'RGBA'
+    assert img.height == 14
+    assert img.width <= 88
