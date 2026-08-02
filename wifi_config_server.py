@@ -160,6 +160,7 @@ def load_config():
         'enable_bible': True,
         'enable_bible_facts': True,
         'enable_newsmax': True,
+        'enable_usatoday': True,
         'enable_stocks': True,
         'enable_spring_training': True,
         'enable_playoff_race': True,
@@ -181,6 +182,7 @@ def load_config():
         'scroll_speed_bible': 5,
         'scroll_speed_bible_facts': 5,
         'scroll_speed_newsmax': 5,
+        'scroll_speed_usatoday': 5,
         'scroll_speed_stocks': 5,
         'scroll_speed_spring_training': 5,
         'scroll_speed_flights': 5,
@@ -810,6 +812,13 @@ HTML_TEMPLATE = """
 
                         <div class="form-group">
                             <label>
+                                <input type="checkbox" id="enable_usatoday">
+                                Enable USA Today news display
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
                                 <input type="checkbox" id="enable_stocks">
                                 Enable Stock Exchange ticker display
                             </label>
@@ -944,6 +953,12 @@ HTML_TEMPLATE = """
                             <label>Newsmax:</label>
                             <input type="range" class="speed-slider" id="scroll_speed_newsmax" min="1" max="10" value="5">
                             <span class="speed-value" id="scroll_speed_newsmax_val">5</span>
+                        </div>
+
+                        <div class="speed-control">
+                            <label>USA Today:</label>
+                            <input type="range" class="speed-slider" id="scroll_speed_usatoday" min="1" max="10" value="5">
+                            <span class="speed-value" id="scroll_speed_usatoday_val">5</span>
                         </div>
 
                         <div class="speed-control">
@@ -1231,6 +1246,7 @@ HTML_TEMPLATE = """
             document.getElementById('enable_bible').checked = config.enable_bible !== false;
             document.getElementById('enable_bible_facts').checked = config.enable_bible_facts !== false;
             document.getElementById('enable_newsmax').checked = config.enable_newsmax !== false;
+            document.getElementById('enable_usatoday').checked = config.enable_usatoday !== false;
             document.getElementById('enable_stocks').checked = config.enable_stocks !== false;
             document.getElementById('enable_spring_training').checked = config.enable_spring_training !== false;
             document.getElementById('enable_playoff_race').checked = config.enable_playoff_race !== false;
@@ -1301,7 +1317,7 @@ HTML_TEMPLATE = """
                 'scroll_speed_pga', 'scroll_speed_pga_news', 'scroll_speed_pga_facts',
                 'scroll_speed_cubs_facts', 'scroll_speed_cubs_news',
                 'scroll_speed_bible', 'scroll_speed_bible_facts',
-                'scroll_speed_newsmax', 'scroll_speed_stocks',
+                'scroll_speed_newsmax', 'scroll_speed_usatoday', 'scroll_speed_stocks',
                 'scroll_speed_spring_training', 'scroll_speed_flights'
             ];
 
@@ -1496,6 +1512,7 @@ HTML_TEMPLATE = """
                 enable_bible: document.getElementById('enable_bible').checked,
                 enable_bible_facts: document.getElementById('enable_bible_facts').checked,
                 enable_newsmax: document.getElementById('enable_newsmax').checked,
+                enable_usatoday: document.getElementById('enable_usatoday').checked,
                 enable_stocks: document.getElementById('enable_stocks').checked,
                 enable_spring_training: document.getElementById('enable_spring_training').checked,
                 enable_playoff_race: document.getElementById('enable_playoff_race').checked,
@@ -1517,6 +1534,7 @@ HTML_TEMPLATE = """
                 scroll_speed_bible: parseInt(document.getElementById('scroll_speed_bible').value),
                 scroll_speed_bible_facts: parseInt(document.getElementById('scroll_speed_bible_facts').value),
                 scroll_speed_newsmax: parseInt(document.getElementById('scroll_speed_newsmax').value),
+                scroll_speed_usatoday: parseInt(document.getElementById('scroll_speed_usatoday').value),
                 scroll_speed_stocks: parseInt(document.getElementById('scroll_speed_stocks').value),
                 scroll_speed_spring_training: parseInt(document.getElementById('scroll_speed_spring_training').value),
                 scroll_speed_flights: parseInt(document.getElementById('scroll_speed_flights').value),
@@ -2096,6 +2114,7 @@ def save_config_route():
             'enable_bible': data.get('enable_bible', True),
             'enable_bible_facts': data.get('enable_bible_facts', True),
             'enable_newsmax': data.get('enable_newsmax', True),
+            'enable_usatoday': data.get('enable_usatoday', True),
             'enable_stocks': data.get('enable_stocks', True),
             'enable_spring_training': data.get('enable_spring_training', True),
             'enable_playoff_race': data.get('enable_playoff_race', True),
@@ -2117,6 +2136,7 @@ def save_config_route():
             'scroll_speed_bible': data.get('scroll_speed_bible', 5),
             'scroll_speed_bible_facts': data.get('scroll_speed_bible_facts', 5),
             'scroll_speed_newsmax': data.get('scroll_speed_newsmax', 5),
+            'scroll_speed_usatoday': data.get('scroll_speed_usatoday', 5),
             'scroll_speed_stocks': data.get('scroll_speed_stocks', 5),
             'scroll_speed_spring_training': data.get('scroll_speed_spring_training', 5),
             'scroll_speed_flights': data.get('scroll_speed_flights', 5),

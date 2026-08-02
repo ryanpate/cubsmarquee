@@ -179,3 +179,26 @@ def test_scan_prefers_live_results(client, tmp_path, monkeypatch):
     data = client.get('/scan_networks').get_json()
     assert data['success'] and not data['cached']
     assert [n['ssid'] for n in data['networks']] == ['LiveNet', 'Neighbor5G']
+
+
+def test_load_config_defaults_usatoday(client, monkeypatch):
+    import wifi_config_server as wcs
+    cfg = wcs.load_config()
+    assert cfg['enable_usatoday'] is True
+    assert cfg['scroll_speed_usatoday'] == 5
+
+
+def test_admin_page_has_usatoday_controls(client):
+    resp = client.get('/admin')
+    assert b'enable_usatoday' in resp.data
+    assert b'scroll_speed_usatoday' in resp.data
+
+
+def test_save_config_round_trips_usatoday(client, tmp_path, monkeypatch):
+    import json
+    resp = client.post('/save_config', json={
+        'enable_usatoday': False, 'scroll_speed_usatoday': 8})
+    assert resp.get_json()['success']
+    saved = json.loads((tmp_path / 'config.json').read_text())
+    assert saved['enable_usatoday'] is False
+    assert saved['scroll_speed_usatoday'] == 8
