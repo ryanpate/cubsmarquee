@@ -394,7 +394,7 @@ class WeatherDisplay:
                                Colors.WHITE, temp_str)
 
         # Draw degree symbol and F
-        degree_x = temp_x + (len(temp_str) * 10) - 2
+        degree_x = temp_x + (len(temp_str) * 10) + 1
         self.manager.draw_text('tiny', degree_x, 22, Colors.WHITE, 'o')
         self.manager.draw_text('small', degree_x + 4, 26, Colors.WHITE, 'F')
 

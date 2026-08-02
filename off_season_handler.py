@@ -142,7 +142,7 @@ class OffSeasonHandler:
         """Pre-generate compact Bears sweater header background for performance"""
         img = Image.new("RGB", (96, 48), self.NFL_PRIMARY)
         pixels = img.load()
-        for y in (0, 1, 11, 12):
+        for y in (0, 1, 13, 14):
             for x in range(96):
                 pixels[x, y] = self.NFL_ACCENT
         print("NFL sweater background cached")
@@ -985,9 +985,9 @@ class OffSeasonHandler:
         # The big title is drawn twice 1px apart - faux-bold thickens the
         # hinted stems (tiny's 5px cells have no room for that).
         if len(header) * 7 <= 96:
-            font, char_width, baseline = 'standard_bold', 7, 11
+            font, char_width, baseline = 'standard_bold', 7, 12
         else:
-            font, char_width, baseline = 'tiny_bold', 5, 10
+            font, char_width, baseline = 'tiny_bold', 5, 11
         x = max(0, (96 - len(header) * char_width) // 2)
         self.manager.draw_text(font, x, baseline, Colors.WHITE, header)
         if font == 'standard_bold':
@@ -1035,7 +1035,7 @@ class OffSeasonHandler:
 
                 # Draw scrolling text, vertically centered below the band
                 self.manager.draw_text(
-                    'medium_bold', int(self.scroll_position), 36,
+                    'medium_bold', int(self.scroll_position), 38,
                     Colors.WHITE, current_headline
                 )
 
@@ -1103,7 +1103,7 @@ class OffSeasonHandler:
                 # Draw scrolling text
                 self.manager.draw_text(
                     'medium_bold', int(self.scroll_position), 48,
-                    Colors.YELLOW, current_headline
+                    Colors.YELLOW, current_headline, smooth=False
                 )
 
                 self.manager.swap_canvas()
@@ -1179,7 +1179,7 @@ class OffSeasonHandler:
                 # Draw scrolling text
                 self.manager.draw_text(
                     'medium_bold', int(self.scroll_position), 48,
-                    Colors.YELLOW, current_message
+                    Colors.YELLOW, current_message, smooth=False
                 )
 
                 self.manager.swap_canvas()

@@ -413,7 +413,8 @@ class GameStateHandler:
                     break
 
             self.manager.draw_text(
-                'medium_bold', int(self.scroll_position), 48, Colors.YELLOW, next_game_text)
+                'medium_bold', int(self.scroll_position), 48, Colors.YELLOW, next_game_text,
+                smooth=False)
 
             # Draw split-squad indicator if active
             if self.manager.split_squad_indicator:
