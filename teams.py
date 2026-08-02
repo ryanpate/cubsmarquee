@@ -39,6 +39,10 @@ class TeamPack:
     history_basename: str      # resolved via data_path_candidates()
     news_rss_url: str
     news_keywords: tuple[str, ...]  # RSS headline filter for team-related news
+    # Baseline for the marquee-screen scroll text; 48 = bottom edge. Art
+    # with a built-in message board (Cubs 96x48 sign) pulls it up into
+    # the board.
+    marquee_scroll_baseline: int = 48
 
 
 TEAMS: dict[str, TeamPack] = {
@@ -107,6 +111,9 @@ TEAMS: dict[str, TeamPack] = {
             # Division
             'NL CENTRAL', 'NATIONAL LEAGUE',
         ),
+        # Full-frame 96x48 sign art with built-in message board rows
+        # 31-45; scroll text centers in the board
+        marquee_scroll_baseline=44,
     ),
     'cardinals': TeamPack(
         slug='cardinals',

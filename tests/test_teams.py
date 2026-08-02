@@ -38,6 +38,10 @@ class TestPackContents:
         assert cubs.primary_color == (0, 51, 102)
         assert cubs.logo_path == './logos/cubs.png'
         assert cubs.marquee_path == './marquee.png'
+        # Cubs sign art has a built-in message board; Cardinals art
+        # keeps the classic bottom-edge scroll
+        assert cubs.marquee_scroll_baseline == 44
+        assert TEAMS['cardinals'].marquee_scroll_baseline == 48
         assert cubs.celebration_path == './W.gif'
 
     def test_cardinals_pack_values(self):

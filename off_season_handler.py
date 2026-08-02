@@ -991,10 +991,12 @@ class OffSeasonHandler:
 
         self.manager.set_image(output_image.convert("RGB"), 0, 0)
 
-        # Display loading message centered at bottom
+        # Display loading message centered at bottom (or in the sign's
+        # message board when the pack's marquee art has one)
         message_width = len(message) * 5
         x_pos = max(0, (96 - message_width) // 2)
-        self.manager.draw_text('small_bold', x_pos, 48,
+        self.manager.draw_text('small_bold', x_pos,
+                               self.team.marquee_scroll_baseline,
                                Colors.YELLOW, message)
 
         self.manager.swap_canvas()
@@ -1124,7 +1126,8 @@ class OffSeasonHandler:
 
                 # Draw scrolling text
                 self.manager.draw_text(
-                    'medium_bold', int(self.scroll_position), 48,
+                    'medium_bold', int(self.scroll_position),
+                    self.team.marquee_scroll_baseline,
                     Colors.YELLOW, current_headline, smooth=False
                 )
 
@@ -1200,7 +1203,8 @@ class OffSeasonHandler:
 
                 # Draw scrolling text
                 self.manager.draw_text(
-                    'medium_bold', int(self.scroll_position), 48,
+                    'medium_bold', int(self.scroll_position),
+                    self.team.marquee_scroll_baseline,
                     Colors.YELLOW, current_message, smooth=False
                 )
 
