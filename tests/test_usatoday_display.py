@@ -51,6 +51,11 @@ class TestUsaTodayFetch:
         items = _display()._fetch_usatoday_rss()
         assert items == ['USA TODAY: STORM SLAMS FLORIDA COAST']
 
+    def test_google_news_sports_suffix_stripped(self, monkeypatch):
+        _patch_feed(monkeypatch, [_entry('Bears win opener - USA TODAY Sports')])
+        items = _display()._fetch_usatoday_rss()
+        assert items == ['USA TODAY: BEARS WIN OPENER']
+
     def test_summary_ignored(self, monkeypatch):
         _patch_feed(monkeypatch, [_entry(
             'Court rules - USA Today',

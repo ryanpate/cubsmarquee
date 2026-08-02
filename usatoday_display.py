@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 import os
 from PIL import Image
@@ -91,7 +92,7 @@ class UsaTodayDisplay:
                     # Google News titles are suffixed with the source name;
                     # summaries are related-link HTML blobs, not article
                     # text, so this feed is title-only.
-                    title = title.removesuffix(' - USA Today')
+                    title = re.sub(r'\s+-\s+USA Today.*$', '', title, flags=re.IGNORECASE)
 
                     formatted_news = f"USA TODAY: {title.upper()}"
 

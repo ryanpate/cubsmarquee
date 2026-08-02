@@ -74,7 +74,7 @@ enforces the socket timeout so a stalled host cannot hang the display thread.
 ## Testing
 
 - Feed parsing/formatting: mocked feed → prefixed uppercase headlines,
-  title+summary composition, dedupe, 12-item cap, empty-feed fallback.
+  source-suffix stripping, summary ignored, dedupe, 12-item cap, empty-feed fallback.
 - Config: `enable_usatoday` / `scroll_speed_usatoday` defaults present in both
   `off_season_handler` and `wifi_config_server` default dicts.
 - Existing suite stays green (443 tests at time of writing).
