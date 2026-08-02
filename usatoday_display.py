@@ -179,8 +179,14 @@ class UsaTodayDisplay:
             live_news = ["CHECK BACK FOR THE LATEST NEWS UPDATES!"]
 
         start_time = time.time()
-        message_index = 0
         self.scroll_position = DisplayConfig.MATRIX_COLS
+
+        # One continuous ticker: headlines chained with a wire-style
+        # separator so there is no empty-screen pause between them
+        separator = '   +++   '
+        ticker = separator.join(live_news) + separator
+        char_width = 10  # large_bold font width
+        text_length = len(ticker) * char_width
 
         while time.time() - start_time < duration:
             try:
@@ -188,24 +194,25 @@ class UsaTodayDisplay:
 
                 self._draw_usatoday_header()
 
-                current_message = live_news[message_index]
-
                 self.scroll_position -= 2  # 2px/frame: fast ticker
-                text_length = len(current_message) * 10  # large_bold font width
 
                 if self.scroll_position + text_length < 0:
                     self.scroll_position = DisplayConfig.MATRIX_COLS
-                    message_index = (message_index + 1) % len(live_news)
+                    print("Refreshing USA Today news")
+                    fresh_news = self._get_live_usatoday_news()
+                    if fresh_news:
+                        live_news = fresh_news
+                        ticker = separator.join(live_news) + separator
+                        text_length = len(ticker) * char_width
 
-                    if message_index == 0:
-                        print("Refreshing USA Today news")
-                        fresh_news = self._get_live_usatoday_news()
-                        if fresh_news:
-                            live_news = fresh_news
-
+                # Draw only the on-screen slice of the (long) ticker so
+                # per-frame cost stays constant regardless of headline count
+                first_char = max(0, int(-self.scroll_position) // char_width)
+                visible = ticker[first_char:first_char + 12]
                 self.manager.draw_text(
-                    'large_bold', int(self.scroll_position), 44,
-                    self.USATODAY_NAVY, current_message, smooth=False
+                    'large_bold',
+                    int(self.scroll_position) + first_char * char_width, 44,
+                    self.USATODAY_NAVY, visible, smooth=False
                 )
 
                 self.manager.swap_canvas()
