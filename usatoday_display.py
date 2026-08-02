@@ -205,12 +205,12 @@ class UsaTodayDisplay:
 
                 self.manager.draw_text(
                     'large_bold', int(self.scroll_position), 44,
-                    self.USATODAY_NAVY, current_message
+                    self.USATODAY_NAVY, current_message, smooth=False
                 )
 
                 self.manager.swap_canvas()
                 config = self._load_scroll_config()
-                scroll_delay = get_scroll_delay(config.get('scroll_speed_usatoday', 5))
+                scroll_delay = get_scroll_delay(config.get('scroll_speed_usatoday', 7))
                 time.sleep(scroll_delay)
 
             except KeyboardInterrupt:
