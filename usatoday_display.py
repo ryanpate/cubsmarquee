@@ -94,7 +94,7 @@ class UsaTodayDisplay:
                     # text, so this feed is title-only.
                     title = re.sub(r'\s+-\s+USA Today.*$', '', title, flags=re.IGNORECASE)
 
-                    formatted_news = f"USA TODAY: {title.upper()}"
+                    formatted_news = title.upper()
 
                     is_duplicate = False
                     for existing in news_items:
@@ -176,7 +176,7 @@ class UsaTodayDisplay:
         live_news = self._get_live_usatoday_news()
 
         if not live_news:
-            live_news = ["USA TODAY: CHECK BACK FOR THE LATEST NEWS UPDATES!"]
+            live_news = ["CHECK BACK FOR THE LATEST NEWS UPDATES!"]
 
         start_time = time.time()
         message_index = 0
@@ -210,7 +210,7 @@ class UsaTodayDisplay:
 
                 self.manager.swap_canvas()
                 config = self._load_scroll_config()
-                scroll_delay = get_scroll_delay(config.get('scroll_speed_usatoday', 7))
+                scroll_delay = get_scroll_delay(config.get('scroll_speed_usatoday', 9))
                 time.sleep(scroll_delay)
 
             except KeyboardInterrupt:

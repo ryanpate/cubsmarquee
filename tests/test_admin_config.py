@@ -185,7 +185,7 @@ def test_load_config_defaults_usatoday(client, monkeypatch):
     import wifi_config_server as wcs
     cfg = wcs.load_config()
     assert cfg['enable_usatoday'] is True
-    assert cfg['scroll_speed_usatoday'] == 7
+    assert cfg['scroll_speed_usatoday'] == 9
 
 
 def test_admin_page_has_usatoday_controls(client):

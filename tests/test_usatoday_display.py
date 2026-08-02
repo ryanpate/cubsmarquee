@@ -33,10 +33,10 @@ def _patch_feed(monkeypatch, entries, bozo=False):
 
 
 class TestUsaTodayFetch:
-    def test_headlines_prefixed_and_uppercased(self, monkeypatch):
+    def test_headlines_uppercased(self, monkeypatch):
         _patch_feed(monkeypatch, [_entry('Storm slams Florida coast')])
         items = _display()._fetch_usatoday_rss()
-        assert items == ['USA TODAY: STORM SLAMS FLORIDA COAST']
+        assert items == ['STORM SLAMS FLORIDA COAST']
 
     def test_fetches_google_news_usatoday_feed(self, monkeypatch):
         calls = _patch_feed(monkeypatch, [_entry('A headline')])
@@ -49,12 +49,12 @@ class TestUsaTodayFetch:
         _patch_feed(monkeypatch, [
             _entry('Storm slams Florida coast - USA Today')])
         items = _display()._fetch_usatoday_rss()
-        assert items == ['USA TODAY: STORM SLAMS FLORIDA COAST']
+        assert items == ['STORM SLAMS FLORIDA COAST']
 
     def test_google_news_sports_suffix_stripped(self, monkeypatch):
         _patch_feed(monkeypatch, [_entry('Bears win opener - USA TODAY Sports')])
         items = _display()._fetch_usatoday_rss()
-        assert items == ['USA TODAY: BEARS WIN OPENER']
+        assert items == ['BEARS WIN OPENER']
 
     def test_summary_ignored(self, monkeypatch):
         _patch_feed(monkeypatch, [_entry(
@@ -62,7 +62,7 @@ class TestUsaTodayFetch:
             '<a href="https://example.com/a">Related story</a>'
             '<a href="https://example.com/b">Another related link</a>')])
         items = _display()._fetch_usatoday_rss()
-        assert items == ['USA TODAY: COURT RULES']
+        assert items == ['COURT RULES']
 
     def test_duplicate_headlines_dropped(self, monkeypatch):
         _patch_feed(monkeypatch, [
@@ -91,7 +91,7 @@ class TestUsaTodayCache:
     def test_fresh_cache_skips_update(self, monkeypatch):
         import time
         d = _display()
-        d.usatoday_news = ['USA TODAY: SOMETHING']
+        d.usatoday_news = ['SOMETHING']
         d.news_update_interval = 1800
         d.last_news_update = time.time()
         assert d._should_update_news() is False

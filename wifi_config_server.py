@@ -182,7 +182,7 @@ def load_config():
         'scroll_speed_bible': 5,
         'scroll_speed_bible_facts': 5,
         'scroll_speed_newsmax': 5,
-        'scroll_speed_usatoday': 7,
+        'scroll_speed_usatoday': 9,
         'scroll_speed_stocks': 5,
         'scroll_speed_spring_training': 5,
         'scroll_speed_flights': 5,
@@ -957,8 +957,8 @@ HTML_TEMPLATE = """
 
                         <div class="speed-control">
                             <label>USA Today:</label>
-                            <input type="range" class="speed-slider" id="scroll_speed_usatoday" min="1" max="10" value="7">
-                            <span class="speed-value" id="scroll_speed_usatoday_val">7</span>
+                            <input type="range" class="speed-slider" id="scroll_speed_usatoday" min="1" max="10" value="9">
+                            <span class="speed-value" id="scroll_speed_usatoday_val">9</span>
                         </div>
 
                         <div class="speed-control">
@@ -2136,7 +2136,7 @@ def save_config_route():
             'scroll_speed_bible': data.get('scroll_speed_bible', 5),
             'scroll_speed_bible_facts': data.get('scroll_speed_bible_facts', 5),
             'scroll_speed_newsmax': data.get('scroll_speed_newsmax', 5),
-            'scroll_speed_usatoday': data.get('scroll_speed_usatoday', 7),
+            'scroll_speed_usatoday': data.get('scroll_speed_usatoday', 9),
             'scroll_speed_stocks': data.get('scroll_speed_stocks', 5),
             'scroll_speed_spring_training': data.get('scroll_speed_spring_training', 5),
             'scroll_speed_flights': data.get('scroll_speed_flights', 5),
