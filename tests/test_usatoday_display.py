@@ -120,14 +120,18 @@ def test_usatoday_fetch_uses_timeout(monkeypatch):
 
 
 def test_logo_asset_fits_header():
-    """usatoday.png must fit the 96px header band (Newsmax-style layout)"""
+    """usatoday.png must fit the 96px header band (Newsmax-style layout).
+
+    The asset is curated from official USA Today artwork (stacked
+    wordmark), downscaled to a 20px-tall header lockup.
+    """
     import os
     from PIL import Image
     path = os.path.join(os.path.dirname(__file__), '..', 'usatoday.png')
-    assert os.path.exists(path), 'run tools/gen_usatoday_logo.py'
+    assert os.path.exists(path), 'usatoday.png missing (curated asset)'
     img = Image.open(path)
     assert img.mode == 'RGBA'
-    assert img.height == 14
+    assert img.height == 20
     assert img.width <= 88
 
 

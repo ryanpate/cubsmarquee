@@ -190,7 +190,7 @@ class UsaTodayDisplay:
 
                 current_message = live_news[message_index]
 
-                self.scroll_position -= 1
+                self.scroll_position -= 2  # 2px/frame: fast ticker
                 text_length = len(current_message) * 10  # large_bold font width
 
                 if self.scroll_position + text_length < 0:
