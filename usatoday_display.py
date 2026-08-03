@@ -194,7 +194,7 @@ class UsaTodayDisplay:
 
                 self._draw_usatoday_header()
 
-                self.scroll_position -= 2  # 2px/frame: fast ticker
+                self.scroll_position -= 1  # 1px/frame, same as Cubs facts scroll
 
                 if self.scroll_position + text_length < 0:
                     self.scroll_position = DisplayConfig.MATRIX_COLS
@@ -217,7 +217,7 @@ class UsaTodayDisplay:
 
                 self.manager.swap_canvas()
                 config = self._load_scroll_config()
-                scroll_delay = get_scroll_delay(config.get('scroll_speed_usatoday', 9))
+                scroll_delay = get_scroll_delay(config.get('scroll_speed_usatoday', 5))
                 time.sleep(scroll_delay)
 
             except KeyboardInterrupt:
