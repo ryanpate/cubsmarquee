@@ -45,9 +45,24 @@ class UsaTodayDisplay:
         self._usatoday_bg: Image.Image = self._create_usatoday_background()
 
     def _create_usatoday_background(self) -> Image.Image:
-        """Pre-generate white background image for performance"""
+        """Pre-composite the full header (white bg + logo + blue rule) once.
+
+        The logo must NOT be redrawn per frame: pixel-by-pixel draw_pixel
+        loops cost more than the scroll delay on the Pi, which made the
+        ticker slower and choppier than the other scrolling screens.
+        """
         img = Image.new("RGB", (DisplayConfig.MATRIX_COLS, DisplayConfig.MATRIX_ROWS), self.USATODAY_WHITE)
-        print("USA Today background cached")
+
+        if self.usatoday_logo:
+            logo_x = (DisplayConfig.MATRIX_COLS - self.usatoday_logo.width) // 2
+            logo_y = 4
+            img.paste(self.usatoday_logo, (logo_x, logo_y), self.usatoday_logo)
+
+            separator_y = logo_y + self.usatoday_logo.height + 2
+            rule = Image.new("RGB", (DisplayConfig.MATRIX_COLS, 2), self.USATODAY_BLUE)
+            img.paste(rule, (0, separator_y))
+
+        print("USA Today header cached")
         return img
 
     def _load_usatoday_logo(self) -> Image.Image | None:
@@ -131,41 +146,13 @@ class UsaTodayDisplay:
         return self.usatoday_news if self.usatoday_news else []
 
     def _draw_usatoday_header(self):
-        """Draw USA Today header: white background, logo, blue rule"""
+        """Draw USA Today header from the pre-composited cached image"""
         self.manager.set_image(self._usatoday_bg, 0, 0)
 
-        if self.usatoday_logo:
-            logo_width = self.usatoday_logo.width
-            logo_height = self.usatoday_logo.height
-            logo_x = (DisplayConfig.MATRIX_COLS - logo_width) // 2
-            logo_y = 4
-
-            self._draw_logo(logo_x, logo_y, self.usatoday_logo)
-
-            separator_y = logo_y + logo_height + 2
-            for x in range(DisplayConfig.MATRIX_COLS):
-                self.manager.draw_pixel(x, separator_y, *self.USATODAY_BLUE)
-                self.manager.draw_pixel(x, separator_y + 1, *self.USATODAY_BLUE)
-        else:
+        if not self.usatoday_logo:
             self.manager.draw_text('small_bold', 18, 16, self.USATODAY_NAVY, 'USA TODAY')
             for x in range(DisplayConfig.MATRIX_COLS):
                 self.manager.draw_pixel(x, 20, *self.USATODAY_BLUE)
-
-    def _draw_logo(self, x: int, y: int, logo: Image.Image) -> None:
-        """Draw the logo at the specified position"""
-        try:
-            for py in range(logo.height):
-                for px in range(logo.width):
-                    pixel = logo.getpixel((px, py))
-                    if len(pixel) == 4:
-                        r, g, b, a = pixel
-                        if a > 128:
-                            self.manager.draw_pixel(x + px, y + py, r, g, b)
-                    else:
-                        r, g, b = pixel[:3]
-                        self.manager.draw_pixel(x + px, y + py, r, g, b)
-        except Exception as e:
-            print(f"Error drawing USA Today logo: {e}")
 
     def _load_scroll_config(self) -> dict:
         """Load scroll speed settings from config file"""
