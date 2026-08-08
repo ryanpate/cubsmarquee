@@ -59,3 +59,22 @@ class TestPanelVersion:
     def test_empty_config_leaves_options_untouched(self):
         options = apply({})
         assert not hasattr(options, "row_address_type")
+
+
+class TestRefreshCap:
+    def test_absent_by_default(self):
+        options = apply({"panel_version": "v2"})
+        assert not hasattr(options, "limit_refresh_rate_hz")
+
+    def test_applied_when_set(self):
+        options = apply({"panel_version": "v2", "limit_refresh_rate_hz": 120})
+        assert options.limit_refresh_rate_hz == 120
+
+    def test_applies_independently_of_panel_version(self):
+        options = apply({"limit_refresh_rate_hz": 100})
+        assert options.limit_refresh_rate_hz == 100
+        assert not hasattr(options, "row_address_type")
+
+    def test_invalid_value_leaves_library_default(self):
+        options = apply({"limit_refresh_rate_hz": "fast"})
+        assert not hasattr(options, "limit_refresh_rate_hz")

@@ -139,14 +139,22 @@ class ScoreboardManager:
                 version,
             )
 
-        if slowdown is not None:
+        def set_int(name: str, value: object) -> None:
+            if value is None:
+                return
             try:
-                options.gpio_slowdown = int(slowdown)
+                setattr(options, name, int(value))
             except (TypeError, ValueError):
                 _logger.warning(
-                    "Invalid gpio_slowdown %r in config; leaving library default",
-                    slowdown,
+                    "Invalid %s %r in config; leaving library default",
+                    name, value,
                 )
+
+        set_int('gpio_slowdown', slowdown)
+        # Pinning the refresh rate absorbs the jitter from interrupts that
+        # preempt the refresh thread; without it the rate dips under load and
+        # reads as a brightness flicker. Set below the free-running rate.
+        set_int('limit_refresh_rate_hz', config.get('limit_refresh_rate_hz'))
 
     FONT_MAPPING: dict[str, str] = {
         'large_bold': Fonts.LARGE_BOLD,

@@ -180,6 +180,7 @@ User configuration stored at `/home/pi/config.json`:
 - `nfl_team` — active NFL team pack slug (`bears` default, `chiefs`)
 - `panel_version` — panel hardware revision (`v1` default, `v2`); set by `install_panel_v2.sh`
 - `gpio_slowdown` — optional matrix timing override (Pi 5: 2, Pi 4/earlier: 4)
+- `limit_refresh_rate_hz` — optional cap that pins the refresh rate so interrupt jitter stops reading as flicker; set below the free-running rate (measure with `show_refresh_rate`)
 
 Access admin panel at `http://cubsmarquee.local/admin` for GUI configuration.
 
