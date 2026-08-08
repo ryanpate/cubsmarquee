@@ -104,7 +104,49 @@ class ScoreboardManager:
         options.parallel = DisplayConfig.PARALLEL
         options.hardware_mapping = DisplayConfig.HARDWARE_MAPPING
         options.brightness = self._load_brightness()
+        self._apply_panel_options(options)
         return RGBMatrix(options=options)
+
+    def _apply_panel_options(self, options: RGBMatrixOptions) -> None:
+        """
+        Apply panel hardware-revision options from config.json.
+
+        A config without a panel_version key gets exactly the options the V1
+        builds have always used, so existing Pis are unaffected.
+
+        Note the Waveshare docs tell you to pass --led-panel-type for V2. That
+        flag only expands to these settings inside the C++ argument parser,
+        which the Python bindings never call, and its own panel init is a
+        no-op for this panel -- so setting the fields directly is what works.
+        """
+        config = load_user_config()
+        version = str(config.get('panel_version', 'v1')).strip().lower()
+        slowdown = config.get('gpio_slowdown')
+
+        if version == 'v2':
+            options.row_address_type = DisplayConfig.PANEL_V2_ROW_ADDRESS_TYPE
+            options.led_rgb_sequence = DisplayConfig.PANEL_V2_RGB_SEQUENCE
+            if slowdown is None:
+                slowdown = DisplayConfig.PANEL_V2_GPIO_SLOWDOWN
+            _logger.info(
+                "V2 panel: row_address_type=%d, rgb_sequence=%s",
+                DisplayConfig.PANEL_V2_ROW_ADDRESS_TYPE,
+                DisplayConfig.PANEL_V2_RGB_SEQUENCE,
+            )
+        elif version != 'v1':
+            _logger.warning(
+                "Unknown panel_version %r in config; using V1 panel options",
+                version,
+            )
+
+        if slowdown is not None:
+            try:
+                options.gpio_slowdown = int(slowdown)
+            except (TypeError, ValueError):
+                _logger.warning(
+                    "Invalid gpio_slowdown %r in config; leaving library default",
+                    slowdown,
+                )
 
     FONT_MAPPING: dict[str, str] = {
         'large_bold': Fonts.LARGE_BOLD,

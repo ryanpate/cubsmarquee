@@ -25,6 +25,16 @@ class DisplayConfig:
     BRIGHTNESS_MIN: int = 10
     BRIGHTNESS_MAX: int = 100
 
+    # Waveshare V2 panels pick a row by clocking a single bit through an
+    # SM5368 shift register (A=clock, B=enable, C=data) instead of putting a
+    # binary row number on A/B/C, and they wire the LEDs BGR. Applied only
+    # when config.json says panel_version=v2; V1 builds keep the defaults.
+    # Requires the Waveshare rgbmatrix build (install_panel_v2.sh) -- the
+    # upstream library rejects a row_address_type above 4.
+    PANEL_V2_ROW_ADDRESS_TYPE: int = 5
+    PANEL_V2_RGB_SEQUENCE: str = 'BGR'
+    PANEL_V2_GPIO_SLOWDOWN: int = 4
+
 
 class TeamConfig:
     """Team-specific configuration"""

@@ -43,6 +43,7 @@ sudo systemctl start cubs-scoreboard
 | `cubs-scoreboard.service` | Systemd service definition |
 | `wifi-manager.service` | WiFi connectivity management service |
 | `wifi-web-config.service` | Web admin panel service |
+| `install_panel_v2.sh` | One-time per-Pi switch to a V2 (SM5368) panel: installs Waveshare's rgbmatrix build and sets `panel_version` |
 | `auto_update.sh` | Nightly self-update from GitHub (4 AM via `marquee-update.timer`): pulls main, py_compile gate, syncs tracked files to `/home/pi/`, reboots |
 
 ### Data Files
@@ -139,6 +140,21 @@ All display constants are in `scoreboard_config.py`:
 - Scroll speed: `GameConfig.SCROLL_SPEED` (default 0.002s)
 - Scroll distance: `GameConfig.SCROLL_PIXELS` (default 1 pixel)
 
+### Panel hardware revisions
+
+Both revisions are HUB75 on the same 16-pin ribbon. V2 panels select a row by
+clocking a bit through an SM5368 shift register (A=clock, B=enable, C=data)
+rather than putting a binary row number on A/B/C, and wire the LEDs BGR.
+Driving a V2 panel with V1 settings gives horizontal banding and ghosting
+while the software framebuffer renders clean.
+
+`ScoreboardManager._apply_panel_options()` applies the V2 profile only when
+config.json has `panel_version: "v2"`, so V1 Pis are unaffected. V2 also needs
+Waveshare's rgbmatrix build (`install_panel_v2.sh`) — upstream rejects a
+`row_address_type` above 4. Passing `--led-panel-type` the way the Waveshare
+docs describe does nothing from Python: that flag is expanded by the C++
+argument parser, which the bindings never call.
+
 ### Color Constants (in `Colors` class)
 - Cubs Blue: `Colors.CUBS_BLUE` - `(0, 51, 102)`
 - Yellow: `Colors.YELLOW` - `(255, 223, 0)`
@@ -162,6 +178,8 @@ User configuration stored at `/home/pi/config.json`:
 - Weather location
 - `team` — active team pack slug (`cubs` default, `cardinals`)
 - `nfl_team` — active NFL team pack slug (`bears` default, `chiefs`)
+- `panel_version` — panel hardware revision (`v1` default, `v2`); set by `install_panel_v2.sh`
+- `gpio_slowdown` — optional matrix timing override (Pi 5: 2, Pi 4/earlier: 4)
 
 Access admin panel at `http://cubsmarquee.local/admin` for GUI configuration.
 
