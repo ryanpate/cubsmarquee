@@ -1843,28 +1843,119 @@ def _parse_iwlist(output):
     return unique_networks
 
 
+# Bookworm/Trixie images hand wlan0 to NetworkManager: there is no
+# wpa_supplicant.conf to write and iwlist scans come back empty, so the
+# wpa_supplicant path above is inert there. Cache written by wifi_manager_nm.sh.
+NM_SCAN_CACHE_PATH = '/var/tmp/wifi_scan_cache_nm.txt'
+
+
+def _use_networkmanager():
+    """True when NetworkManager owns the WiFi rather than wpa_supplicant."""
+    try:
+        result = subprocess.run(
+            ['systemctl', 'is-active', 'NetworkManager'],
+            capture_output=True, text=True, timeout=5
+        )
+        return result.stdout.strip() == 'active'
+    except Exception:
+        return False
+
+
+def _parse_nmcli_scan(output):
+    """Parse `nmcli -t -f SSID,SIGNAL dev wifi list` into the same shape
+    _parse_iwlist returns, so the page renders both identically."""
+    networks = []
+    seen_ssids = set()
+    for line in output.split('\n'):
+        if not line.strip():
+            continue
+        # nmcli -t escapes colons inside fields as '\:'
+        parts = re.split(r'(?<!\\):', line)
+        ssid = parts[0].replace('\\:', ':').strip()
+        if not ssid or ssid in seen_ssids:
+            continue
+        seen_ssids.add(ssid)
+        try:
+            strength = int(parts[1])
+        except (IndexError, ValueError):
+            strength = 0
+        bars = '█' * (strength // 20)
+        networks.append({'ssid': ssid, 'signal': f"{bars} {strength}%"})
+    return networks
+
+
+def _connect_wifi_nm(ssid, password):
+    """Save and activate a WiFi profile via NetworkManager."""
+    con_name = f'marquee-{ssid}'
+    subprocess.run(['sudo', 'nmcli', 'connection', 'delete', con_name],
+                   check=False, capture_output=True, timeout=15)
+
+    added = subprocess.run(
+        ['sudo', 'nmcli', 'connection', 'add', 'type', 'wifi',
+         'con-name', con_name, 'ifname', 'wlan0', 'ssid', ssid,
+         'wifi-sec.key-mgmt', 'wpa-psk', 'wifi-sec.psk', password,
+         'connection.autoconnect', 'yes',
+         'connection.autoconnect-priority', '50'],
+        capture_output=True, text=True, timeout=30
+    )
+    if added.returncode != 0:
+        return jsonify({'success': False,
+                        'message': f'Could not save network: {added.stderr.strip()}'})
+
+    # One radio cannot host an AP and join a network at once. Dropping the
+    # hotspot kills this HTTP response if the browser arrived over it -- the
+    # profile is already saved and autoconnects, so that is expected.
+    subprocess.run(['sudo', 'nmcli', 'connection', 'down', 'marquee-hotspot'],
+                   check=False, capture_output=True, timeout=20)
+
+    up = subprocess.run(['sudo', 'nmcli', 'connection', 'up', con_name],
+                        capture_output=True, text=True, timeout=60)
+    hostname = get_hostname()
+    if up.returncode == 0:
+        return jsonify({
+            'success': True,
+            'message': f'Connected to {ssid}! Admin page: http://{hostname}.local/admin'
+        })
+    return jsonify({
+        'success': True,
+        'message': (f'Saved {ssid} but it has not connected yet '
+                    f'({up.stderr.strip()}). It will keep retrying.')
+    })
+
+
 @app.route('/scan_networks')
 def scan_networks():
     """Scan for available WiFi networks; in hotspot mode the live scan
     fails (hostapd owns the radio), so fall back to the scan cached by
     wifi_manager.sh right before the AP started"""
     networks = []
+    use_nm = _use_networkmanager()
     try:
-        result = subprocess.run(
-            ['sudo', 'iwlist', 'wlan0', 'scan'],
-            capture_output=True,
-            text=True,
-            timeout=15
-        )
-        networks = _parse_iwlist(result.stdout)
+        if use_nm:
+            result = subprocess.run(
+                ['sudo', 'nmcli', '-t', '-f', 'SSID,SIGNAL', 'dev', 'wifi',
+                 'list', '--rescan', 'yes'],
+                capture_output=True, text=True, timeout=20
+            )
+            networks = _parse_nmcli_scan(result.stdout)
+        else:
+            result = subprocess.run(
+                ['sudo', 'iwlist', 'wlan0', 'scan'],
+                capture_output=True,
+                text=True,
+                timeout=15
+            )
+            networks = _parse_iwlist(result.stdout)
     except Exception as e:
         print(f"Live WiFi scan failed: {e}")
 
     cached = False
     if not networks:
+        cache_path = NM_SCAN_CACHE_PATH if use_nm else SCAN_CACHE_PATH
+        parser = _parse_nmcli_scan if use_nm else _parse_iwlist
         try:
-            with open(SCAN_CACHE_PATH) as f:
-                networks = _parse_iwlist(f.read())
+            with open(cache_path) as f:
+                networks = parser(f.read())
             cached = bool(networks)
         except OSError:
             pass
@@ -1886,6 +1977,9 @@ def connect_wifi():
         error = validate_wifi_credentials(ssid, password)
         if error:
             return jsonify({'success': False, 'message': error})
+
+        if _use_networkmanager():
+            return _connect_wifi_nm(ssid, password)
 
         # Read existing wpa_supplicant config
         existing_header = """ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev

@@ -1,0 +1,18 @@
+[Unit]
+Description=Apply WiFi credentials dropped on the boot partition
+# Needs NetworkManager up to create the profile, but must not depend on an
+# actual connection -- the whole point is that there isn't one.
+After=NetworkManager.service
+Requires=NetworkManager.service
+Before=wifi-manager-nm.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/home/pi/wifi_recovery.sh
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=60
+
+[Install]
+WantedBy=multi-user.target

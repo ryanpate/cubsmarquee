@@ -1,0 +1,18 @@
+[Unit]
+Description=WiFi AP fallback for NetworkManager images
+# No Requires=avahi -- that caused a restart loop on the Bullseye units.
+After=NetworkManager.service wifi-recovery.service
+Requires=NetworkManager.service
+Before=cubs-scoreboard.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/home/pi/wifi_manager_nm.sh
+StandardOutput=journal
+StandardError=journal
+# Must exceed the 180s connection wait inside the script.
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target
