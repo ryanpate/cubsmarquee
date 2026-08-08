@@ -144,9 +144,10 @@ class ScoreboardManager:
                 return
             try:
                 setattr(options, name, int(value))
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, AttributeError):
+                # AttributeError: option missing from an older rgbmatrix build.
                 _logger.warning(
-                    "Invalid %s %r in config; leaving library default",
+                    "Could not set %s to %r; leaving library default",
                     name, value,
                 )
 
