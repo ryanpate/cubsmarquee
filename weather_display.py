@@ -733,20 +733,27 @@ class WeatherDisplay:
                 # High temp (orange/red)
                 temp_high_color = (
                     255, 140, 0) if forecast['temp_high'] >= 80 else (255, 180, 60)
+                high_text = f"{forecast['temp_high']}"
                 self.manager.draw_text('tiny_bold', 30, y_pos, temp_high_color,
-                                       f"{forecast['temp_high']}")
-                # Degree symbol positioned at top right
+                                       high_text)
+                # Degree symbol just past the digits. tiny_bold is 5x8, so a
+                # fixed x assuming two digits put the 'o' on top of the last
+                # one at 100+. Two-digit spacing is unchanged (30+10+2 = 42).
                 self.manager.draw_text(
-                    'micro', 42, y_pos - 2, temp_high_color, 'o')
+                    'micro', 30 + len(high_text) * 5 + 2, y_pos - 2,
+                    temp_high_color, 'o')
 
                 # Low temp (light blue)
                 temp_low_color = (
                     120, 180, 255) if forecast['temp_low'] <= 50 else (180, 200, 220)
+                low_text = f"{forecast['temp_low']}"
                 self.manager.draw_text('tiny', 54, y_pos, temp_low_color,
-                                       f"{forecast['temp_low']}")
-                # Degree symbol positioned at top right
+                                       low_text)
+                # Same width-aware placement as the high (54+10+2 = 66 for the
+                # usual two digits).
                 self.manager.draw_text(
-                    'micro', 66, y_pos - 2, temp_low_color, 'o')
+                    'micro', 54 + len(low_text) * 5 + 2, y_pos - 2,
+                    temp_low_color, 'o')
 
                 # Condition text (abbreviated)
                 cond_text = self._get_condition_abbrev(forecast['condition'])
