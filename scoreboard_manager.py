@@ -151,6 +151,15 @@ class ScoreboardManager:
                     name, value,
                 )
 
+        # Wiring revision: 'regular' is direct-to-GPIO, 'adafruit-hat' /
+        # 'adafruit-hat-pwm' are the Adafruit bonnet pinout. Per-Pi because the
+        # units are not wired the same way. Absent leaves the value _setup_matrix
+        # already assigned from DisplayConfig.
+        mapping = str(config.get('hardware_mapping', '') or '').strip().lower()
+        if mapping:
+            options.hardware_mapping = mapping
+            _logger.info("Hardware mapping from config: %s", mapping)
+
         set_int('gpio_slowdown', slowdown)
         # Pinning the refresh rate absorbs the jitter from interrupts that
         # preempt the refresh thread; without it the rate dips under load and

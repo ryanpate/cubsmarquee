@@ -78,3 +78,28 @@ class TestRefreshCap:
     def test_invalid_value_leaves_library_default(self):
         options = apply({"limit_refresh_rate_hz": "fast"})
         assert not hasattr(options, "limit_refresh_rate_hz")
+
+
+class TestHardwareMapping:
+    def test_absent_leaves_setup_matrix_default(self):
+        # _setup_matrix assigns DisplayConfig.HARDWARE_MAPPING before calling
+        # this, so not touching the attribute is what keeps V1 Pis on 'regular'.
+        options = apply({"brightness": 100})
+        assert not hasattr(options, "hardware_mapping")
+
+    def test_applied_when_set(self):
+        options = apply({"hardware_mapping": "adafruit-hat"})
+        assert options.hardware_mapping == "adafruit-hat"
+
+    def test_whitespace_and_case_normalised(self):
+        options = apply({"hardware_mapping": "  Adafruit-Hat-PWM  "})
+        assert options.hardware_mapping == "adafruit-hat-pwm"
+
+    def test_empty_string_treated_as_absent(self):
+        options = apply({"hardware_mapping": "   "})
+        assert not hasattr(options, "hardware_mapping")
+
+    def test_applies_independently_of_panel_version(self):
+        options = apply({"panel_version": "v2", "hardware_mapping": "adafruit-hat"})
+        assert options.hardware_mapping == "adafruit-hat"
+        assert options.row_address_type == 5

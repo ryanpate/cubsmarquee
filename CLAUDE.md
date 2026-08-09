@@ -179,8 +179,9 @@ User configuration stored at `/home/pi/config.json`:
 - `team` — active team pack slug (`cubs` default, `cardinals`)
 - `nfl_team` — active NFL team pack slug (`bears` default, `chiefs`)
 - `panel_version` — panel hardware revision (`v1` default, `v2`); set by `install_panel_v2.sh`
+- `hardware_mapping` — matrix wiring revision (`regular` default = direct to GPIO; `adafruit-hat` / `adafruit-hat-pwm` for the Adafruit bonnet). Per-Pi, since the units are not wired alike; omit to keep `DisplayConfig.HARDWARE_MAPPING`
 - `gpio_slowdown` — optional matrix timing override (Pi 5: 2, Pi 4/earlier: 4)
-- `limit_refresh_rate_hz` — optional cap that pins the refresh rate so interrupt jitter stops reading as flicker; set below the free-running rate (measure with `show_refresh_rate`)
+- `limit_refresh_rate_hz` — optional cap that pins the refresh rate so interrupt jitter stops reading as flicker; set below the free-running rate (measure with `show_refresh_rate`). **A cap the Pi cannot sustain causes a flickering line across the panel** — it is not a harmless no-op (cubsmarquee, 2026-08-09). Leave unset unless measured.
 
 Access admin panel at `http://cubsmarquee.local/admin` for GUI configuration.
 
