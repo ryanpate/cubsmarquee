@@ -67,12 +67,15 @@ def make_celebration():
     NIGHT_TOP = (4, 6, 20)
     NIGHT_BOTTOM = (16, 20, 44)
     GROUND = (24, 26, 34)
-    ARCH_STEEL = (192, 198, 210)
-    ARCH_SHADOW = (128, 134, 148)
+    ARCH_LIT = (226, 233, 246)     # inner face, catching the burst light
+    ARCH_STEEL = (170, 178, 196)   # mid stainless
+    ARCH_EDGE = (94, 101, 118)     # outer rim, away from the light
+    # Kept inside the arch opening, which is only ~22px across at y=19 and
+    # ~29px at y=30 -- bursts centred much off 48 disappear behind a leg.
     BURSTS = [
-        {'cx': 26, 'cy': 12, 'start': 0, 'color': (235, 60, 85)},   # red
-        {'cx': 70, 'cy': 9, 'start': 4, 'color': (255, 205, 90)},   # gold
-        {'cx': 48, 'cy': 6, 'start': 8, 'color': (255, 255, 255)},  # white
+        {'cx': 43, 'cy': 24, 'start': 0, 'color': (235, 60, 85)},   # red
+        {'cx': 54, 'cy': 20, 'start': 4, 'color': (255, 205, 90)},  # gold
+        {'cx': 48, 'cy': 30, 'start': 8, 'color': (255, 255, 255)},  # white
     ]
     FRAME_COUNT = 12
     LIFE = 12  # phases wrap the full loop so the animation cycles seamlessly
@@ -132,23 +135,53 @@ def make_celebration():
         # phases 10-11: dark, ready to relaunch
 
     def draw_arch(img):
-        """Weighted catenary in front of the fireworks, legs thicker
-        than the crown like the real Arch"""
+        """Solid Arch: the region between an outer and an inner weighted
+        catenary, which is how the real one is shaped. Filling between two
+        curves puts the thickness perpendicular to the curve, so the legs come
+        out wide and the crown stays narrow. Stamping a fixed number of pixels
+        downward from a single centreline instead adds length rather than width
+        wherever the curve is near-vertical, which flattened the legs to a
+        hairline and read as two grey lines."""
         px = img.load()
-        k = 1.7
-        half_width = 29
-        apex_y, base_y = 14, 45
+        k = 2.1                      # higher k -> more upright legs
+        base_y = 45
+        W_OUT, APEX_OUT = 24, 5      # outer edge: 48 wide, 40 tall (~1:1)
+        W_IN, APEX_IN = 18, 8        # inner edge -> 6px legs, 3px crown
         cosh_k = math.cosh(k)
-        for i in range(-800, 801):
-            t = i / 800
-            x = int(round(48 + half_width * t))
-            y = base_y - (base_y - apex_y) * (
+
+        def curve_y(x, half_width, apex_y):
+            """Height of the catenary at column x; None outside its span."""
+            t = (x - 48) / half_width
+            if abs(t) > 1:
+                return None
+            return base_y - (base_y - apex_y) * (
                 cosh_k - math.cosh(k * t)) / (cosh_k - 1)
-            y = int(round(y))
-            thickness = 3 if abs(t) > 0.72 else 2
-            for dy in range(thickness):
-                if 0 <= y + dy < 45:
-                    px[x, y + dy] = ARCH_STEEL if dy == 0 else ARCH_SHADOW
+
+        def is_steel(x, y):
+            outer = curve_y(x, W_OUT, APEX_OUT)
+            if outer is None or y < outer or y >= base_y:
+                return False
+            inner = curve_y(x, W_IN, APEX_IN)
+            return inner is None or y < inner
+
+        for x in range(96):
+            for y in range(base_y):
+                if not is_steel(x, y):
+                    continue
+                # The real Arch has a triangular cross-section, so each leg
+                # shows a lit face and a shadowed one. Step one pixel toward
+                # the middle of the opening: leaving the steel there means this
+                # is the inner face, which is what the fireworks light up.
+                dx, dy = 48 - x, 34 - y
+                mag = math.hypot(dx, dy) or 1
+                sx, sy = dx / mag, dy / mag
+                if not is_steel(round(x + sx), round(y + sy)):
+                    color = ARCH_LIT
+                elif not is_steel(round(x - sx), round(y - sy)):
+                    color = ARCH_EDGE
+                else:
+                    color = ARCH_STEEL
+                px[x, y] = color
         return img
 
     frames = []
