@@ -14,7 +14,7 @@ import pendulum
 from PIL import Image
 from typing import TYPE_CHECKING, Any
 
-from scoreboard_config import Colors, GameConfig, RGBColor
+from scoreboard_config import Colors, DisplayConfig, Fonts, GameConfig, RGBColor
 from retry import retry_http_request
 
 if TYPE_CHECKING:
@@ -384,7 +384,8 @@ class WeatherDisplay:
             'tiny_bold', 10, 8, Colors.WHITE, 'CURRENT WEATHER')
 
         # Draw city name
-        city_x = max(2, (96 - len(city) * 4) // 2)
+        city_x = max(2, (DisplayConfig.MATRIX_COLS
+                         - len(city) * Fonts.CHAR_WIDTH_TINY) // 2)
         self.manager.draw_text('tiny', city_x, 16, Colors.YELLOW, city)
 
         # Draw temperature (large)
@@ -399,7 +400,8 @@ class WeatherDisplay:
         self.manager.draw_text('small', degree_x + 4, 26, Colors.WHITE, 'F')
 
         # Draw condition
-        cond_x = max(2, (96 - len(condition_text) * 4) // 2)
+        cond_x = max(2, (DisplayConfig.MATRIX_COLS
+                         - len(condition_text) * Fonts.CHAR_WIDTH_TINY) // 2)
         self.manager.draw_text(
             'tiny', cond_x, 40, Colors.BRIGHT_YELLOW, condition_text)
 
