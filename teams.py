@@ -172,6 +172,9 @@ TEAMS: dict[str, TeamPack] = {
             # Division
             'NL CENTRAL', 'NATIONAL LEAGUE',
         ),
+        # One row up off the bottom edge; the Cardinals art has no message
+        # board to sit the text in, so the default 48 left it flush.
+        marquee_scroll_baseline=47,
     ),
 }
 
