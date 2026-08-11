@@ -870,7 +870,7 @@ class FlightDisplay:
             return False
 
     def _fetch_flight_data(self) -> bool:
-        """Fetch flight data - tries local ADS-B receiver first, falls back to OpenSky."""
+        """Fetch flight data - tries the configured source, then adsb.lol, then OpenSky."""
         if not self.latitude or not self.longitude:
             print("Flight tracking: Location not configured")
             return False
@@ -896,6 +896,12 @@ class FlightDisplay:
                     self.learned_cities = airport_cities.load_learned()
                 except Exception as e:
                     print(f"Route enrichment failed (non-fatal): {e}")
+            return True
+
+        # A dead local receiver degrades to adsb.lol before OpenSky, whose
+        # anonymous feed returns too few aircraft to fill the display.
+        if not self.use_adsb_lol and self._fetch_from_adsb_lol():
+            self.last_fetch_time = time.time()
             return True
 
         # Fall back to OpenSky
