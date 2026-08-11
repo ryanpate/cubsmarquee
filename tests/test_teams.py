@@ -205,9 +205,9 @@ class TestGetActiveNflTeam:
 
 
 class TestNflPackValues:
-    def test_both_packs_present(self):
+    def test_all_packs_present(self):
         from teams import NFL_TEAMS, DEFAULT_NFL_TEAM_SLUG
-        assert set(NFL_TEAMS) == {'bears', 'chiefs'}
+        assert set(NFL_TEAMS) == {'bears', 'chiefs', 'cowboys'}
         assert DEFAULT_NFL_TEAM_SLUG == 'bears'
 
     def test_slug_matches_dict_key(self):
@@ -236,6 +236,18 @@ class TestNflPackValues:
         assert c.accent_color == (255, 184, 28)
         assert c.logo_path == './logos/nfl/KC.png'
         assert c.news_rss_url == 'https://www.chiefs.com/rss/news'
+
+    def test_cowboys_pack_values(self):
+        from teams import NFL_TEAMS
+        d = NFL_TEAMS['cowboys']
+        assert d.espn_slug == 'dal'
+        assert d.abbrev == 'DAL'
+        assert d.header_name == 'DALLAS COWBOYS'
+        assert d.primary_color == (4, 30, 66)
+        assert d.accent_color == (134, 147, 151)
+        assert d.logo_path == './logos/nfl/DAL.png'
+        assert d.celebration_path == './cowboys_win.gif'
+        assert d.news_rss_url == 'https://www.dallascowboys.com/rss/news'
 
     def test_chiefs_keywords_sanity(self):
         from teams import NFL_TEAMS

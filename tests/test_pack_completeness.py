@@ -73,7 +73,7 @@ class TestRunScoredSprites:
 
 
 class TestNflCelebrationGifs:
-    def test_both_pack_gifs_exist_and_animate(self):
+    def test_all_pack_gifs_exist_and_animate(self):
         from teams import NFL_TEAMS
         for pack in NFL_TEAMS.values():
             assert os.path.exists(pack.celebration_path), (

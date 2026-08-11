@@ -278,6 +278,54 @@ NFL_TEAMS: dict[str, NFLTeamPack] = {
             'ARROWHEAD', 'GEHA FIELD',
         ),
     ),
+    'cowboys': NFLTeamPack(
+        slug='cowboys',
+        espn_slug='dal',
+        abbrev='DAL',
+        name='Dallas Cowboys',
+        short_name='Cowboys',
+        header_name='DALLAS COWBOYS',
+        primary_color=(4, 30, 66),
+        accent_color=(134, 147, 151),
+        logo_path='./logos/nfl/DAL.png',
+        celebration_path='./cowboys_win.gif',
+        news_rss_url='https://www.dallascowboys.com/rss/news',
+        news_keywords=(
+            # Team names and variations
+            'COWBOYS', 'DALLAS COWBOYS', 'DAL COWBOYS', "AMERICA'S TEAM",
+
+            # Current players (ambiguous bare surnames like LAMB, DIGGS,
+            # BLAND and SMITH are full-name only)
+            'DAK PRESCOTT', 'PRESCOTT',
+            'CEEDEE LAMB',
+            'GEORGE PICKENS', 'PICKENS',
+            'TREVON DIGGS',
+            'DARON BLAND',
+            'TYLER SMITH',
+            'OSA ODIGHIZUWA', 'ODIGHIZUWA',
+            'JAKE FERGUSON', 'FERGUSON',
+            'TYLER GUYTON', 'GUYTON',
+            'MARSHAWN KNEELAND', 'KNEELAND',
+
+            # Coaches and front office
+            'BRIAN SCHOTTENHEIMER', 'SCHOTTENHEIMER',
+            'JERRY JONES', 'STEPHEN JONES',
+
+            # Retired Cowboys legends
+            'ROGER STAUBACH', 'STAUBACH',
+            'TROY AIKMAN', 'AIKMAN',
+            'EMMITT SMITH',
+            'MICHAEL IRVIN', 'IRVIN',
+            'TONY DORSETT', 'DORSETT',
+            'BOB LILLY',
+            'TOM LANDRY',
+            'JASON WITTEN', 'WITTEN',
+            'DEMARCUS WARE',
+
+            # Stadium
+            'AT&T STADIUM', 'THE STAR', 'TEXAS STADIUM',
+        ),
+    ),
 }
 
 

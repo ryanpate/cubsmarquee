@@ -1,4 +1,4 @@
-"""Generate the NFL win celebration GIFs (bears_win.gif, chiefs_win.gif).
+"""Generate the NFL win celebration GIFs, one per pack in NFL_TEAMS.
 
 Matches the MLB celebration format (96x48, 4 frames, 200ms): sweater
 stripes in the pack accent color, the team logo up top, '{TEAM} WIN!'
@@ -28,9 +28,11 @@ GLYPHS = {
     'H': ['101', '101', '111', '101', '101'],
     'I': ['111', '010', '010', '010', '111'],
     'N': ['101', '111', '111', '111', '101'],
+    'O': ['111', '101', '101', '101', '111'],
     'R': ['110', '101', '110', '101', '101'],
     'S': ['011', '100', '010', '001', '110'],
     'W': ['101', '101', '111', '111', '101'],
+    'Y': ['101', '101', '010', '010', '010'],
     '!': ['010', '010', '010', '000', '010'],
     ' ': ['000', '000', '000', '000', '000'],
 }
