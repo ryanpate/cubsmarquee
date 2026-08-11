@@ -112,8 +112,8 @@ TEAMS: dict[str, TeamPack] = {
             'NL CENTRAL', 'NATIONAL LEAGUE',
         ),
         # Full-frame 96x48 sign art with built-in message board rows
-        # 31-45; scroll text centers in the board
-        marquee_scroll_baseline=44,
+        # 31-45; scroll text sits one row up from the board's lower edge
+        marquee_scroll_baseline=43,
     ),
     'cardinals': TeamPack(
         slug='cardinals',
