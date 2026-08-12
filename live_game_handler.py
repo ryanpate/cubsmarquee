@@ -78,9 +78,15 @@ class LiveGameHandler:
                     or current_status == 'Cancelled'):
                 return
 
-            # Get current game data
+            # Get current game data. The live feed already carries the
+            # play-by-play under liveData.plays, so asking for it separately
+            # re-downloads ~489KB on top of the feed's ~634KB every cycle.
+            # Halving that WiFi burst matters: the radio traffic dips the panel
+            # rail enough to blink the display once per cycle. Reusing the feed
+            # also keeps currentPlay consistent with the rest of the frame,
+            # which two sequential requests could not guarantee.
             game_info = retry_api_call(statsapi.get, 'game', {'gamePk': gameid})
-            play_data = retry_api_call(statsapi.get, 'game_playByPlay', {'gamePk': gameid})
+            play_data = game_info['liveData']['plays']
 
             # Clear canvas
             self.manager.clear_canvas()
