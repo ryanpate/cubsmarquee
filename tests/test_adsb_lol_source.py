@@ -115,6 +115,55 @@ class TestFetchAircraft:
             )
         assert flights == []
 
+    def test_retries_once_after_a_timeout(self):
+        """adsb.lol's slow tail should cost a retry, not a blank screen."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = SAMPLE_AC_RESPONSE
+        with patch(
+            "adsb_lol_source.requests.get",
+            side_effect=[requests.Timeout, mock_resp],
+        ) as mock_get:
+            flights = fetch_aircraft(
+                base_url="https://api.adsb.lol",
+                home_lat=41.95,
+                home_lon=-87.65,
+                range_nm=50,
+                min_altitude_ft=500,
+            )
+        assert mock_get.call_count == 2
+        assert len(flights) == 1
+
+    def test_gives_up_after_second_timeout(self):
+        with patch(
+            "adsb_lol_source.requests.get", side_effect=requests.Timeout
+        ) as mock_get:
+            flights = fetch_aircraft(
+                base_url="https://api.adsb.lol",
+                home_lat=41.95,
+                home_lon=-87.65,
+                range_nm=50,
+                min_altitude_ft=500,
+            )
+        assert mock_get.call_count == 2
+        assert flights == []
+
+    def test_does_not_retry_non_timeout_errors(self):
+        """A refused connection is not a slow tail - fail fast to the fallback."""
+        with patch(
+            "adsb_lol_source.requests.get",
+            side_effect=requests.ConnectionError,
+        ) as mock_get:
+            flights = fetch_aircraft(
+                base_url="https://api.adsb.lol",
+                home_lat=41.95,
+                home_lon=-87.65,
+                range_nm=50,
+                min_altitude_ft=500,
+            )
+        assert mock_get.call_count == 1
+        assert flights == []
+
 
 class TestEnrichRoutes:
     def _make_flight(self, callsign, lat=41.9, lon=-87.6):

@@ -11,7 +11,11 @@ from logger import get_logger
 
 logger = get_logger("adsb_lol_source")
 
-FETCH_TIMEOUT_SEC = 5
+# api.adsb.lol usually answers in well under a second, but its tail runs long -
+# measured 4-6s spikes and an outright hang in a 12-request sample. One retry
+# covers the spikes; OpenSky, the next fallback, returns nothing these days.
+FETCH_TIMEOUT_SEC = 8
+FETCH_ATTEMPTS = 2
 ROUTESET_TIMEOUT_SEC = 10
 
 # Same routeset API served by the adsb.im project; used when the primary
@@ -79,21 +83,28 @@ def fetch_aircraft(
     Returns an empty list on any error.
     """
     url = f"{base_url}/v2/lat/{home_lat}/lon/{home_lon}/dist/{range_nm}"
-    try:
-        response = requests.get(url, timeout=FETCH_TIMEOUT_SEC)
-        if response.status_code != 200:
-            logger.warning("adsb.lol returned HTTP %s", response.status_code)
+    for attempt in range(1, FETCH_ATTEMPTS + 1):
+        try:
+            response = requests.get(url, timeout=FETCH_TIMEOUT_SEC)
+            if response.status_code != 200:
+                logger.warning("adsb.lol returned HTTP %s", response.status_code)
+                return []
+            data = response.json()
+            break
+        except requests.Timeout:
+            # Only a timeout is worth retrying - it means the host is slow,
+            # not that it is refusing us
+            if attempt < FETCH_ATTEMPTS:
+                logger.warning("adsb.lol fetch timed out, retrying")
+                continue
+            logger.warning("adsb.lol fetch timed out")
             return []
-        data = response.json()
-    except requests.Timeout:
-        logger.warning("adsb.lol fetch timed out")
-        return []
-    except requests.RequestException as e:
-        logger.warning("adsb.lol fetch failed: %s", e)
-        return []
-    except ValueError as e:
-        logger.warning("adsb.lol returned invalid JSON: %s", e)
-        return []
+        except requests.RequestException as e:
+            logger.warning("adsb.lol fetch failed: %s", e)
+            return []
+        except ValueError as e:
+            logger.warning("adsb.lol returned invalid JSON: %s", e)
+            return []
 
     aircraft_list = data.get("ac", []) or []
     max_range_mi = range_nm * KNOTS_TO_MPH
