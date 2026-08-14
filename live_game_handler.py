@@ -18,6 +18,21 @@ from teams import get_active_team, contrast_background
 
 logger = get_logger("live_game")
 
+# Key names the live-game cycle reads out of the live feed. MLB's `fields`
+# query param prunes the response by key name at any depth, so the container
+# keys have to be listed alongside the leaves. Trimming the feed this way is
+# what keeps the per-cycle refresh cheap -- see the fetch in display_game_on.
+LIVE_FEED_FIELDS = ','.join([
+    'liveData',
+    'linescore', 'inningState', 'currentInningOrdinal', 'outs',
+    'offense', 'first', 'second', 'third',
+    'plays', 'currentPlay', 'matchup', 'batter', 'pitcher', 'fullName', 'id',
+    'count', 'balls', 'strikes',
+    'allPlays', 'result', 'event', 'description',
+    'boxscore', 'teams', 'home', 'away', 'players',
+    'stats', 'pitching', 'numberOfPitches',
+])
+
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
 
@@ -80,12 +95,23 @@ class LiveGameHandler:
 
             # Get current game data. The live feed already carries the
             # play-by-play under liveData.plays, so asking for it separately
-            # re-downloads ~489KB on top of the feed's ~634KB every cycle.
-            # Halving that WiFi burst matters: the radio traffic dips the panel
-            # rail enough to blink the display once per cycle. Reusing the feed
-            # also keeps currentPlay consistent with the rest of the frame,
-            # which two sequential requests could not guarantee.
-            game_info = retry_api_call(statsapi.get, 'game', {'gamePk': gameid})
+            # re-downloads ~489KB on top of the feed every cycle. Reusing the
+            # feed also keeps currentPlay consistent with the rest of the
+            # frame, which two sequential requests could not guarantee.
+            #
+            # Ask only for the keys this loop reads. The unfiltered feed is
+            # ~119KB on the wire and ~722KB parsed; filtering cuts that to
+            # ~4KB and ~3.6ms. That matters because the radio traffic each
+            # cycle destabilises the matrix refresh -- measured on cardsmarquee
+            # (Pi 3B+, V2 panel, 135Hz free-running) the share of frames
+            # dipping under the refresh cap went 3.08% -> 1.39% with this
+            # filter, against a 0.25% floor with no fetch at all. The residual
+            # is the WiFi radio itself, not the payload, so this reduces the
+            # once-per-cycle blink rather than curing it; the cure is getting
+            # that unit onto ethernet.
+            game_info = retry_api_call(
+                statsapi.get, 'game',
+                {'gamePk': gameid, 'fields': LIVE_FEED_FIELDS})
             play_data = game_info['liveData']['plays']
 
             # Clear canvas
