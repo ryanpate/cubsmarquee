@@ -34,11 +34,14 @@ class BibleDisplay:
         self.current_verse_date: date | None = None
         self.todays_verse: dict[str, str] | None = None
 
-        # Load Bible facts for facts display
+        # Load Bible facts for facts display. Same deck treatment as the verses:
+        # one fixed-seed shuffle that is never re-shuffled, so a fact never comes
+        # back until every other one has run. The starting point follows the date
+        # so the nightly reboot does not always restart at the same fact.
         self.bible_facts: list[str] = self._load_bible_facts()
         self.shuffled_bible_facts: list[str] = self.bible_facts.copy()
-        random.shuffle(self.shuffled_bible_facts)
-        self.bible_facts_index: int = 0
+        random.Random(self.DECK_SEED).shuffle(self.shuffled_bible_facts)
+        self.bible_facts_index: int = date.today().toordinal() % len(self.shuffled_bible_facts)
 
         # Color scheme - warm gold and white on deep purple/navy
         self.BIBLE_NAVY: RGBColor = (20, 20, 60)  # Deep navy/purple
@@ -349,17 +352,15 @@ class BibleDisplay:
                 self.scroll_position -= 1
                 text_length = len(current_fact) * 9
 
-                # Reset scroll when text finishes and move to next fact
+                # Reset scroll when text finishes and move to next fact.
+                # Wrap around the deck rather than re-shuffling it - a re-shuffle
+                # would let the fact ending one pass reappear at the start of the
+                # next one.
                 if self.scroll_position + text_length < 0:
                     self.scroll_position = 96
-                    self.bible_facts_index += 1
-
-                    # Check if we've shown all facts - re-shuffle
-                    if self.bible_facts_index >= len(self.shuffled_bible_facts):
-                        print(f"Completed full cycle of {len(self.shuffled_bible_facts)} Bible facts - re-shuffling")
-                        self.shuffled_bible_facts = self.bible_facts.copy()
-                        random.shuffle(self.shuffled_bible_facts)
-                        self.bible_facts_index = 0
+                    self.bible_facts_index = (self.bible_facts_index + 1) % len(self.shuffled_bible_facts)
+                    if self.bible_facts_index == 0:
+                        print(f"Completed full cycle of {len(self.shuffled_bible_facts)} Bible facts")
 
                 # Draw scrolling text
                 self.manager.draw_text(
