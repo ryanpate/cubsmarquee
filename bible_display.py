@@ -19,13 +19,16 @@ if TYPE_CHECKING:
 class BibleDisplay:
     """Handles Bible Verse of the Day display"""
 
+    # Fixed seed for the verse-of-the-day shuffle - changing it reorders the deck
+    DECK_SEED = 1908
+
     def __init__(self, scoreboard_manager: ScoreboardManager) -> None:
         """Initialize Bible display"""
         self.manager = scoreboard_manager
         self.scroll_position: int = DisplayConfig.MATRIX_COLS
 
         # Load Bible verses
-        self.bible_verses: list[dict[str, str]] = self._load_bible_verses()
+        self.bible_verses: list[dict[str, str]] = self._dedupe_by_reference(self._load_bible_verses())
 
         # Track today's verse - same verse all day, changes daily
         self.current_verse_date: date | None = None
@@ -127,6 +130,25 @@ class BibleDisplay:
             print(f"Error loading Bible verses: {e}")
             return default_verses
 
+    def _dedupe_by_reference(self, verses: list[dict[str, str]]) -> list[dict[str, str]]:
+        """Drop verses whose reference already appeared.
+
+        The verse file carries a handful of references twice with different
+        wording (two translations of Jeremiah 29:11, etc). Those read as the
+        same verse on the display, so keep only the first of each.
+        """
+        seen: set[str] = set()
+        unique = []
+        for verse in verses:
+            reference = verse.get('reference', '')
+            if reference in seen:
+                continue
+            seen.add(reference)
+            unique.append(verse)
+        if len(unique) != len(verses):
+            print(f"Dropped {len(verses) - len(unique)} duplicate Bible verse references, {len(unique)} remain")
+        return unique
+
     def _load_bible_facts(self) -> list[str]:
         """Load Bible facts from JSON file"""
         facts_path = '/home/pi/bible_facts.json'
@@ -205,15 +227,18 @@ class BibleDisplay:
 
         # Check if we need to pick a new verse (new day or first run)
         if self.current_verse_date != display_date or self.todays_verse is None:
-            # Use date as seed for consistent daily selection
-            # This ensures the same verse shows all day but changes at 1am
-            day_seed = display_date.year * 1000 + display_date.timetuple().tm_yday
-            random.seed(day_seed)
-            self.todays_verse = random.choice(self.bible_verses)
+            # Deal from a shuffled deck instead of picking at random, so every
+            # verse is shown once before any repeats. The shuffle uses a fixed
+            # seed and the date indexes into it, so the same day always yields
+            # the same verse (survives reboots) and repeats are always a full
+            # deck apart - re-shuffling per deck would let a verse at the end
+            # of one deck land at the start of the next.
+            deck = self.bible_verses.copy()
+            random.Random(self.DECK_SEED).shuffle(deck)
+            position = display_date.toordinal() % len(deck)
+            self.todays_verse = deck[position]
             self.current_verse_date = display_date
-            # Reset seed to not affect other random operations
-            random.seed()
-            print(f"Bible verse of the day ({display_date}): {self.todays_verse.get('reference', 'Unknown')}")
+            print(f"Bible verse of the day ({display_date}): {self.todays_verse.get('reference', 'Unknown')} [{position + 1}/{len(deck)}]")
 
         return self.todays_verse
 
