@@ -125,6 +125,15 @@ def extended_month_gate() -> bool:
     return month >= 8 or month <= 2
 
 
+def is_shutdown_requested() -> bool:
+    """Lazy import to avoid a circular dependency with main.py."""
+    try:
+        from main import is_shutdown_requested as _check
+        return _check()
+    except Exception:
+        return False
+
+
 class BearsDisplay:
     """Handles NFL game information display for the configured team"""
 
@@ -296,6 +305,28 @@ class BearsDisplay:
             print(f"NFL schedule window check failed: {e}")
             return extended_month_gate()
 
+    def live_game(self) -> dict | None:
+        """Today's game when ESPN reports it in progress, else None.
+
+        Liveness is read from the scoreboard endpoint rather than the
+        schedule, because the schedule is cached for an hour
+        (GameConfig.SCHEDULE_UPDATE_INTERVAL) and its state field would lag
+        kickoff badly. Falls back to the schedule event's own state if the
+        scoreboard call comes back empty.
+        """
+        try:
+            if self._should_update_schedule():
+                self._fetch_bears_schedule()
+            game = self._get_todays_game()
+            if not game:
+                return None
+            fresh = self._fetch_live_scores(game.get('id')) or game
+            state = fresh['competitions'][0]['status']['type']['state']
+            return game if state == 'in' else None
+        except Exception as e:
+            print(f"NFL live check failed: {e}")
+            return None
+
     def _get_current_scores(self, game, game_id):
         """
         Get current scores for a game
@@ -457,8 +488,15 @@ class BearsDisplay:
             self.manager.draw_text('small_bold', 52, 24, self.TEXT_WHITE,
                                    f'{opp_abbr} {opp_score}')
 
-    def display_bears_info(self, duration=180):
-        """Display Bears game information"""
+    def display_bears_info(self, duration=180, loop_until_final=False,
+                           force_scheduled=False):
+        """Display NFL game information.
+
+        loop_until_final: keep the live game on screen until it ends,
+            mirroring how MLB owns the display (preempt mode).
+        force_scheduled: show today's game as an upcoming card instead of
+            live scores, because MLB currently owns the day.
+        """
         # Fetch schedule if needed
         if self._should_update_schedule():
             if not self._fetch_bears_schedule():
@@ -471,13 +509,17 @@ class BearsDisplay:
         todays_game = self._get_todays_game()
 
         if todays_game:
-            self._display_game_day(todays_game, duration)
+            if force_scheduled:
+                self._display_next_game(todays_game, duration)
+            else:
+                self._display_game_day(
+                    todays_game, duration, loop_until_final=loop_until_final)
         else:
             next_game = self._get_next_game()
             if next_game:
                 self._display_next_game(next_game, duration)
 
-    def _display_game_day(self, game, duration):
+    def _display_game_day(self, game, duration, loop_until_final=False):
         """Display today's Bears game with live score updates"""
         start_time = time.time()
         last_score_update = 0
@@ -501,7 +543,14 @@ class BearsDisplay:
             print(f"Game status: {score_data['status']}, "
                   f"Detail: {score_data['game_time']}")
 
-            while time.time() - start_time < duration:
+            while True:
+                if loop_until_final:
+                    if (score_data['status'] == 'STATUS_FINAL'
+                            or is_shutdown_requested()):
+                        break
+                elif time.time() - start_time >= duration:
+                    break
+
                 # Refresh live scores every LIVE_SCORE_UPDATE_INTERVAL seconds
                 current_time = time.time()
                 if (score_data['status'] == 'STATUS_IN_PROGRESS' and

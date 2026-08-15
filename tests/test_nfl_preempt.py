@@ -72,3 +72,68 @@ class TestExtendedMonthGate:
             bd.pendulum, 'now',
             lambda *a, **k: pendulum.datetime(2026, 5, 15, tz='America/Chicago'))
         assert bd.extended_month_gate() is False
+
+
+class TestLiveGameDetection:
+    def _ready(self, monkeypatch, events, scoreboard_state):
+        d = _make_bears(events)
+        monkeypatch.setattr(d, '_should_update_schedule', lambda: False)
+        if scoreboard_state is None:
+            monkeypatch.setattr(d, '_fetch_live_scores', lambda gid: None)
+        else:
+            monkeypatch.setattr(
+                d, '_fetch_live_scores',
+                lambda gid: {'competitions': [
+                    {'status': {'type': {'state': scoreboard_state}}}]})
+        return d
+
+    def test_in_progress_game_is_live(self, monkeypatch):
+        d = self._ready(monkeypatch, [_event(0)], 'in')
+        assert d.live_game() is not None
+
+    def test_scheduled_game_is_not_live(self, monkeypatch):
+        d = self._ready(monkeypatch, [_event(0)], 'pre')
+        assert d.live_game() is None
+
+    def test_finished_game_is_not_live(self, monkeypatch):
+        d = self._ready(monkeypatch, [_event(0)], 'post')
+        assert d.live_game() is None
+
+    def test_no_game_today_is_not_live(self, monkeypatch):
+        d = self._ready(monkeypatch, [_event(5)], 'in')
+        assert d.live_game() is None
+
+    def test_falls_back_to_schedule_state_when_scoreboard_is_down(
+            self, monkeypatch):
+        # _fetch_live_scores returning None must not crash the guard; the
+        # schedule event's own state is the fallback.
+        d = self._ready(monkeypatch, [_event(0, state='in')], None)
+        assert d.live_game() is not None
+
+
+class TestTakeoverRouting:
+    def _routed(self, monkeypatch, **kwargs):
+        """Record which display branch display_bears_info picks."""
+        d = _make_bears([_event(0)])
+        calls = []
+        monkeypatch.setattr(d, '_should_update_schedule', lambda: False)
+        monkeypatch.setattr(
+            d, '_display_game_day',
+            lambda g, dur, loop_until_final=False: calls.append(
+                ('game_day', loop_until_final)))
+        monkeypatch.setattr(
+            d, '_display_next_game',
+            lambda g, dur: calls.append(('next_game', False)))
+        d.display_bears_info(**kwargs)
+        return calls
+
+    def test_default_shows_the_live_game_card(self, monkeypatch):
+        assert self._routed(monkeypatch) == [('game_day', False)]
+
+    def test_loop_until_final_is_forwarded(self, monkeypatch):
+        assert self._routed(
+            monkeypatch, loop_until_final=True) == [('game_day', True)]
+
+    def test_force_scheduled_shows_the_scheduled_card(self, monkeypatch):
+        assert self._routed(
+            monkeypatch, force_scheduled=True) == [('next_game', False)]
