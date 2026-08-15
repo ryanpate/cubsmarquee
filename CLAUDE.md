@@ -166,7 +166,12 @@ argument parser, which the bindings never call.
 
 - **MLB Stats API** - Game schedules, scores, lineups, play-by-play
 - **Open-Meteo API** - Temperature, forecasts, and ZIP geocoding (no API key). Its `current` block is forecast-model output, not an observation, so it can report overcast during a thunderstorm — the condition shown comes from NWS instead
-- **NWS API** (`api.weather.gov`) - Observed current condition from the nearest METAR station, plus active thunderstorm/tornado *warnings* (not watches) as an override. US only, no API key, but requires a `User-Agent`. Any failure falls back to the Open-Meteo condition
+- **NWS API** (`api.weather.gov`) - Observed condition from the nearest METAR station; a thunder scan over stations within 40 mi; and active thunderstorm/tornado *warnings* (not watches). US only, no API key, but requires a `User-Agent`
+- **RainViewer** (`api.rainviewer.com`) - Radar reflectivity at the exact coordinates, the only source that sees what is falling on *this* roof. Free tier caps zoom at 7 (~940 m/pixel); colour scheme 4 ramps blue→yellow→orange→red, magenta for snow
+
+The current condition is resolved in order of how local the evidence is: Open-Meteo model → nearest station → radar overhead → thunder within 40 mi → active warning. Each step only overrides when it has an opinion, and every source falls back cleanly, so an outage anywhere cannot take weather off the display.
+
+**Why this is layered:** a station is still miles away. On 2026-08-15 a storm sat over Rochester while KSPI (10 mi west) reported "Cloudy" — its `VCTS` never reaches the NWS structured `presentWeather` field, so only radar (orange pixel overhead) and the 40-mile thunder scan (KIJX, KAAA) caught it. Do not "simplify" this back to a single source.
 - **ESPN API** - Bears NFL scores and PGA Tour leaderboards
 - **RSS Feeds** - Cubs and Bears breaking news
 

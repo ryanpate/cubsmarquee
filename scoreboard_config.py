@@ -313,7 +313,7 @@ class GameConfig:
     MODE_SWITCH_DURATION: int = 15  # seconds between display mode switches
 
     # API update intervals (in seconds)
-    WEATHER_UPDATE_INTERVAL: int = 1800  # 30 minutes
+    WEATHER_UPDATE_INTERVAL: int = 300  # 5 min, matching the radar cadence
     NEWS_UPDATE_INTERVAL: int = 1800  # 30 minutes
     SCHEDULE_UPDATE_INTERVAL: int = 3600  # 1 hour
     LIVE_SCORE_UPDATE_INTERVAL: int = 60  # 1 minute

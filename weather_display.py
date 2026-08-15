@@ -6,6 +6,8 @@ drawing code was written against, so animations and layout are untouched.
 
 from __future__ import annotations
 
+import io
+import math
 import time
 import json
 import os
@@ -31,6 +33,18 @@ NWS_POINTS_URL = 'https://api.weather.gov/points'
 NWS_STATIONS_URL = 'https://api.weather.gov/stations'
 NWS_ALERTS_URL = 'https://api.weather.gov/alerts/active'
 NWS_HEADERS = {'User-Agent': '(cubsmarquee LED scoreboard, cubsmarquee.local)'}
+
+# A station is still miles away. Radar is the only source that measures
+# what is falling on THIS roof, so it outranks the station for precip.
+RAINVIEWER_MAPS_URL = 'https://api.rainviewer.com/public/weather-maps.json'
+RADAR_ZOOM = 7          # RainViewer's free tier stops here (~940m/pixel)
+RADAR_MIN_ALPHA = 128   # below this is the feathered halo around a cell
+
+# Lightning never reaches the radar tile, and the nearest station reports
+# a nearby storm as VCTS, which NWS drops from its structured field. So
+# scan out to a radius instead: a storm this close is the one overhead.
+THUNDER_RADIUS_MI = 40
+THUNDER_STATIONS = 5
 
 # WMO weather code -> (OpenWeatherMap-style condition, description).
 # The condition strings drive the animation/background/icon pickers,
@@ -106,6 +120,43 @@ def metar_to_condition(
     return None
 
 
+def radar_tile_xy(lat: float, lon: float, zoom: int) -> tuple[int, int, int, int]:
+    """Web-Mercator (tile_x, tile_y, pixel_x, pixel_y) for a coordinate."""
+    n = 2 ** zoom
+    x = (lon + 180.0) / 360.0 * n
+    y = (1.0 - math.asinh(math.tan(math.radians(lat))) / math.pi) / 2.0 * n
+    return int(x), int(y), int((x - int(x)) * 256), int((y - int(y)) * 256)
+
+
+def radar_pixel_to_condition(
+        pixel: tuple[int, int, int, int]) -> tuple[str, str] | None:
+    """Map a RainViewer colour-scheme-4 pixel to (condition, description).
+
+    The scheme ramps blue -> yellow -> orange -> red as intensity rises,
+    with magenta for snow. Returns None where nothing is falling, so the
+    caller keeps whatever the station or model reported (radar cannot see
+    fog, and a dry pixel must not erase a real observation).
+    """
+    r, g, b, a = pixel
+    if a < RADAR_MIN_ALPHA:
+        return None
+    if r > 200 and b > 200:
+        return 'Snow', 'radar: snow overhead'
+    if b > r:
+        return 'Drizzle', 'radar: light precipitation'
+    if g >= 183:
+        return 'Rain', 'radar: rain overhead'
+    return 'Rain', 'radar: heavy rain overhead'
+
+
+def miles_between(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance in statute miles"""
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp, dl = math.radians(lat2 - lat1), math.radians(lon2 - lon1)
+    h = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * 3958.8 * math.asin(math.sqrt(h))
+
+
 class WeatherDisplay:
     """Handles weather data fetching and display"""
 
@@ -169,8 +220,8 @@ class WeatherDisplay:
               f"({self._geo[1]:.4f}, {self._geo[2]:.4f})")
         return self._geo[1], self._geo[2], self._geo[3]
 
-    def _nws_station(self, zip_code, lat, lon):
-        """Resolve the nearest NWS observation station, cached per boot"""
+    def _nws_stations(self, zip_code, lat, lon):
+        """Nearby NWS stations as [(id, miles)], nearest first, per boot"""
         if self._station and self._station[0] == zip_code:
             return self._station[1]
         points = retry_http_request(
@@ -179,13 +230,27 @@ class WeatherDisplay:
         stations = retry_http_request(
             points['properties']['observationStations'], timeout=10,
             headers=NWS_HEADERS).json()
-        features = stations.get('features') or []
-        if not features:
-            return None
-        station_id = features[0]['properties']['stationIdentifier']
-        self._station = (zip_code, station_id)
-        print(f"Nearest NWS station for {zip_code}: {station_id}")
-        return station_id
+        nearby = []
+        for feature in stations.get('features') or []:
+            coords = (feature.get('geometry') or {}).get('coordinates')
+            if not coords:
+                continue
+            nearby.append((feature['properties']['stationIdentifier'],
+                           miles_between(lat, lon, coords[1], coords[0])))
+        nearby.sort(key=lambda s: s[1])
+        if not nearby:
+            return []
+        self._station = (zip_code, nearby)
+        print(f"Nearest NWS station for {zip_code}: {nearby[0][0]} "
+              f"({nearby[0][1]:.1f} mi)")
+        return nearby
+
+    def _station_observation(self, station_id):
+        """presentWeather array for a station"""
+        observation = retry_http_request(
+            f'{NWS_STATIONS_URL}/{station_id}/observations/latest',
+            timeout=10, headers=NWS_HEADERS).json()
+        return observation['properties'].get('presentWeather') or []
 
     def _observed_condition(self, zip_code, lat, lon):
         """Current condition from the nearest station's METAR, or None.
@@ -194,17 +259,47 @@ class WeatherDisplay:
         unreachable -- and the caller keeps the Open-Meteo condition.
         """
         try:
-            station_id = self._nws_station(zip_code, lat, lon)
-            if not station_id:
+            stations = self._nws_stations(zip_code, lat, lon)
+            if not stations:
                 return None
-            observation = retry_http_request(
-                f'{NWS_STATIONS_URL}/{station_id}/observations/latest',
-                timeout=10, headers=NWS_HEADERS).json()
-            present = observation['properties'].get('presentWeather') or []
-            return metar_to_condition(present)
+            return metar_to_condition(self._station_observation(stations[0][0]))
         except Exception as e:
             print(f"NWS observation unavailable: {e}")
             return None
+
+    def _radar_condition(self, lat, lon):
+        """What the newest radar frame shows over this exact point, or None"""
+        try:
+            maps = retry_http_request(RAINVIEWER_MAPS_URL, timeout=10).json()
+            frames = maps['radar']['past']
+            if not frames:
+                return None
+            xt, yt, px, py = radar_tile_xy(lat, lon, RADAR_ZOOM)
+            tile = retry_http_request(
+                f"{maps['host']}{frames[-1]['path']}"
+                f"/256/{RADAR_ZOOM}/{xt}/{yt}/4/0_1.png", timeout=10)
+            image = Image.open(io.BytesIO(tile.content)).convert('RGBA')
+            return radar_pixel_to_condition(image.getpixel((px, py)))
+        except Exception as e:
+            print(f"Radar unavailable: {e}")
+            return None
+
+    def _thunder_nearby(self, zip_code, lat, lon):
+        """True when a station within THUNDER_RADIUS_MI reports thunder"""
+        try:
+            stations = self._nws_stations(zip_code, lat, lon)
+            for station_id, distance in stations[:THUNDER_STATIONS]:
+                if distance > THUNDER_RADIUS_MI:
+                    break
+                present = self._station_observation(station_id)
+                if any(e.get('weather') == 'thunderstorms' for e in present):
+                    print(f"Thunder reported at {station_id} "
+                          f"({distance:.1f} mi)")
+                    return True
+            return False
+        except Exception as e:
+            print(f"NWS thunder scan unavailable: {e}")
+            return False
 
     def _storm_alert_active(self, lat, lon):
         """True when a thunderstorm/tornado warning covers this point.
@@ -260,10 +355,17 @@ class WeatherDisplay:
             condition, description = wmo_to_condition(current['weather_code'])
 
             # Prefer what the sky is actually doing over what the model
-            # predicted for this grid cell.
+            # predicted, in order of how local the evidence is: the model
+            # grid, then the nearest station, then radar directly overhead,
+            # then thunder close enough to be this storm.
             observed = self._observed_condition(zip_code, lat, lon)
             if observed:
                 condition, description = observed
+            radar = self._radar_condition(lat, lon)
+            if radar:
+                condition, description = radar
+            if self._thunder_nearby(zip_code, lat, lon):
+                condition, description = 'Thunderstorm', 'thunder nearby'
             if self._storm_alert_active(lat, lon):
                 condition, description = 'Thunderstorm', 'storm warning'
 

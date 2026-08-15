@@ -13,8 +13,24 @@ class FakeResponse:
         return self._payload
 
 
+def _radar_tile(color):
+    """A 256x256 PNG whose every pixel is `color`, as RainViewer serves."""
+    import io
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new('RGBA', (256, 256), color).save(buf, format='PNG')
+    return buf.getvalue()
+
+
+class FakeBytesResponse:
+    def __init__(self, payload):
+        self.content = payload
+
+
 def _install_fake_openmeteo(monkeypatch, current_code=61, present_weather=(),
-                            alerts=(), station='KSPI', nws_down=False):
+                            alerts=(), station='KSPI', nws_down=False,
+                            radar=(0, 0, 0, 0), radar_down=False,
+                            thunder_at=()):
     import weather_display as wd
     now = pendulum.now('UTC').start_of('hour')
     geo_payload = {'results': [
@@ -45,14 +61,33 @@ def _install_fake_openmeteo(monkeypatch, current_code=61, present_weather=(),
                 'observationStations':
                     'https://api.weather.gov/gridpoints/ILX/52,54/stations'}})
         if url.endswith('/stations'):
-            return FakeResponse({'features': [
-                {'properties': {'stationIdentifier': station}}]})
+            # nearest station first, then any thunder stations placed at a
+            # given distance due east (0.0182 deg lon ~= 1 mile here)
+            features = [{'properties': {'stationIdentifier': station},
+                         'geometry': {'coordinates': [-89.53, 39.75]}}]
+            for i, miles in enumerate(thunder_at):
+                features.append({
+                    'properties': {'stationIdentifier': f'KT{i}'},
+                    'geometry': {'coordinates': [-89.53 + miles / 53.3, 39.75]}})
+            return FakeResponse({'features': features})
         if 'observations' in url:
+            if '/KT' in url:
+                return FakeResponse({'properties': {
+                    'presentWeather': _metar('thunderstorms')}})
             return FakeResponse({'properties': {
                 'presentWeather': list(present_weather)}})
         if 'alerts' in url:
             return FakeResponse({'features': [
                 {'properties': {'event': e}} for e in alerts]})
+        # order matters: the tile host is itself a rainviewer.com domain
+        if 'tilecache' in url:
+            return FakeBytesResponse(_radar_tile(radar))
+        if 'rainviewer' in url:
+            if radar_down:
+                raise RuntimeError('rainviewer unreachable')
+            return FakeResponse({'host': 'https://tilecache.rainviewer.com',
+                                 'radar': {'past': [
+                                     {'time': 1, 'path': '/v2/radar/abc'}]}})
         raise AssertionError(f'unexpected request: {url}')
 
     monkeypatch.setattr(wd, 'retry_http_request', fake_request)
@@ -241,3 +276,95 @@ class TestSevereAlertOverride:
         d = _make_display({'zip_code': '62563'})
         assert d._fetch_weather() is True
         assert d.weather_data['weather'][0]['main'] == 'Clouds'
+
+
+class TestRadarTileMath:
+    def test_rochester_lands_on_the_verified_tile_and_pixel(self):
+        from weather_display import radar_tile_xy
+        # Verified against live RainViewer tiles on 2026-08-15: this tile
+        # and pixel is the one showing the cell over the house.
+        assert radar_tile_xy(39.7495, -89.5318, 7) == (32, 48, 42, 146)
+
+    def test_zoom_changes_the_tile(self):
+        from weather_display import radar_tile_xy
+        assert radar_tile_xy(39.7495, -89.5318, 5)[:2] == (8, 12)
+
+
+class TestRadarPalette:
+    def test_no_echo_is_no_opinion(self):
+        from weather_display import radar_pixel_to_condition
+        assert radar_pixel_to_condition((0, 0, 0, 0)) is None
+
+    def test_faint_smoothing_halo_is_not_rain(self):
+        from weather_display import radar_pixel_to_condition
+        # RainViewer feathers a cell's edge with low-alpha pixels; counting
+        # those as rain would report precipitation next to every shower.
+        assert radar_pixel_to_condition((99, 97, 89, 20)) is None
+
+    def test_blue_ramp_is_light_precipitation(self):
+        from weather_display import radar_pixel_to_condition
+        assert radar_pixel_to_condition((0, 71, 104, 255))[0] == 'Drizzle'
+        assert radar_pixel_to_condition((136, 221, 238, 255))[0] == 'Drizzle'
+
+    def test_yellow_through_red_is_rain(self):
+        from weather_display import radar_pixel_to_condition
+        assert radar_pixel_to_condition((255, 238, 0, 255))[0] == 'Rain'
+        # the exact orange measured over the house during the storm
+        assert radar_pixel_to_condition((255, 149, 0, 255))[0] == 'Rain'
+        assert radar_pixel_to_condition((255, 68, 0, 255))[0] == 'Rain'
+        assert radar_pixel_to_condition((93, 0, 0, 255))[0] == 'Rain'
+
+    def test_magenta_is_snow(self):
+        from weather_display import radar_pixel_to_condition
+        assert radar_pixel_to_condition((255, 139, 255, 255))[0] == 'Snow'
+
+
+class TestRadarOverride:
+    def test_radar_beats_a_station_that_cannot_see_the_cell(
+            self, monkeypatch):
+        # The reported bug: KSPI 10 miles west read "Cloudy" while the
+        # radar pixel over the house was orange.
+        _install_fake_openmeteo(monkeypatch, current_code=3,
+                                present_weather=[],
+                                radar=(255, 149, 0, 255))
+        d = _make_display({'zip_code': '62563'})
+        assert d._fetch_weather() is True
+        assert d.weather_data['weather'][0]['main'] == 'Rain'
+
+    def test_clear_radar_leaves_the_station_report_alone(self, monkeypatch):
+        # Radar cannot see fog, so a dry pixel must not erase it.
+        _install_fake_openmeteo(monkeypatch, current_code=3,
+                                present_weather=_metar('fog_mist'),
+                                radar=(0, 0, 0, 0))
+        d = _make_display({'zip_code': '62563'})
+        assert d._fetch_weather() is True
+        assert d.weather_data['weather'][0]['main'] == 'Mist'
+
+    def test_unreachable_radar_falls_back_to_the_station(self, monkeypatch):
+        _install_fake_openmeteo(monkeypatch, current_code=3,
+                                present_weather=_metar('rain'),
+                                radar_down=True)
+        d = _make_display({'zip_code': '62563'})
+        assert d._fetch_weather() is True
+        assert d.weather_data['weather'][0]['main'] == 'Rain'
+
+
+class TestThunderNearby:
+    def test_thunder_within_range_upgrades_rain_to_storm(self, monkeypatch):
+        # KSPI silent, but KAAA at 30mi reported thunderstorms.
+        _install_fake_openmeteo(monkeypatch, current_code=3,
+                                present_weather=[],
+                                radar=(255, 149, 0, 255),
+                                thunder_at=(30.0,))
+        d = _make_display({'zip_code': '62563'})
+        assert d._fetch_weather() is True
+        assert d.weather_data['weather'][0]['main'] == 'Thunderstorm'
+
+    def test_distant_thunder_is_ignored(self, monkeypatch):
+        _install_fake_openmeteo(monkeypatch, current_code=3,
+                                present_weather=[],
+                                radar=(255, 149, 0, 255),
+                                thunder_at=(120.0,))
+        d = _make_display({'zip_code': '62563'})
+        assert d._fetch_weather() is True
+        assert d.weather_data['weather'][0]['main'] == 'Rain'
