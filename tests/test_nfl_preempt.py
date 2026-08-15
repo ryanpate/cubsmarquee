@@ -275,3 +275,55 @@ class TestTakeoverBackstop:
         # its own via the duration bound, not the iteration ceiling.
         assert fetches == 1
         assert frames < 500
+
+
+class TestMlbInProgress:
+    def _handler(self, schedule, config=None):
+        import off_season_handler as osh
+
+        class _FakeManager:
+            def get_schedule(self_inner):
+                if isinstance(schedule, Exception):
+                    raise schedule
+                return schedule
+
+        h = osh.OffSeasonHandler.__new__(osh.OffSeasonHandler)
+        h.manager = _FakeManager()
+        h.config = config or {}
+        h._mlb_status_cached = False
+        h._mlb_status_checked = None
+        return h
+
+    def test_in_progress_game_is_detected(self):
+        assert self._handler([{'status': 'In Progress'}])._mlb_in_progress()
+
+    def test_replay_review_counts_as_in_progress(self):
+        # route_by_status treats challenges/reviews as mid-game states.
+        h = self._handler([{'status': 'Manager challenge: Force play'}])
+        assert h._mlb_in_progress() is True
+
+    def test_scheduled_game_is_not_in_progress(self):
+        assert self._handler([{'status': 'Scheduled'}])._mlb_in_progress() is False
+
+    def test_schedule_error_does_not_suppress_nfl(self):
+        # Failing open here keeps live NFL scores on screen.
+        h = self._handler(RuntimeError('statsapi down'))
+        assert h._mlb_in_progress() is False
+
+    def test_result_is_cached_within_the_ttl(self):
+        calls = []
+        import off_season_handler as osh
+
+        class _CountingManager:
+            def get_schedule(self_inner):
+                calls.append(1)
+                return [{'status': 'In Progress'}]
+
+        h = osh.OffSeasonHandler.__new__(osh.OffSeasonHandler)
+        h.manager = _CountingManager()
+        h.config = {}
+        h._mlb_status_cached = False
+        h._mlb_status_checked = None
+        assert h._mlb_in_progress() is True
+        assert h._mlb_in_progress() is True
+        assert len(calls) == 1

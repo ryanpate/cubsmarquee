@@ -35,6 +35,11 @@ if TYPE_CHECKING:
 class OffSeasonHandler:
     """Manages off-season content rotation"""
 
+    # How long an MLB in-progress lookup stays good. The rotation loops
+    # continuously in no_games mode and get_schedule's today path is not
+    # cached upstream, so this keeps statsapi calls down.
+    MLB_STATUS_TTL = 120
+
     def __init__(self, scoreboard_manager: ScoreboardManager) -> None:
         """Initialize with reference to main scoreboard manager"""
         self.manager = scoreboard_manager
@@ -114,6 +119,10 @@ class OffSeasonHandler:
         # Track when we last checked for new season
         self.last_season_check: float | None = None
         self.season_check_interval: int = GameConfig.SEASON_CHECK_INTERVAL
+
+        # Cached answer for _mlb_in_progress (value, checked_at)
+        self._mlb_status_cached: bool = False
+        self._mlb_status_checked: float | None = None
 
         # Cache marquee image to avoid loading every frame
         self._marquee_image: Image.Image | None = self._load_marquee_image()
@@ -420,6 +429,37 @@ class OffSeasonHandler:
         """
         return self.bears_display.has_game_within()
 
+    def _mlb_in_progress(self) -> bool:
+        """True when the MLB game is actually underway.
+
+        manager.current_status is set only by route_by_status, which never
+        runs in no_games mode -- the very mode this check matters in -- so
+        the schedule is queried directly, behind a short TTL. Any failure
+        returns False, which keeps live NFL scores on screen rather than
+        suppressing them.
+        """
+        now = time.time()
+        if (self._mlb_status_checked is not None
+                and now - self._mlb_status_checked < self.MLB_STATUS_TTL):
+            return self._mlb_status_cached
+
+        live = False
+        try:
+            for game in self.manager.get_schedule() or []:
+                status = game.get('status', '')
+                if (status == 'In Progress'
+                        or 'challenge' in status.lower()
+                        or 'review' in status.lower()):
+                    live = True
+                    break
+        except Exception as e:
+            print(f"MLB status check failed: {e}")
+            live = False
+
+        self._mlb_status_cached = live
+        self._mlb_status_checked = now
+        return live
+
     def _is_golf_season(self):
         """
         Determine if it's currently golf season
@@ -561,13 +601,22 @@ class OffSeasonHandler:
                 return bool(between_callback())
             return False
 
-        # Display Bears info if it's football season and enabled
+        # Display NFL info if it's football season and enabled
         bears_enabled = self.config.get('enable_bears', True)
         if self._is_football_season() and bears_enabled:
-            print("Displaying Bears info (football season)...")
+            # MLB owns the day while its game is actually underway, so the
+            # NFL slot drops to an upcoming-game card instead of live scores.
+            force_scheduled = (
+                not self.config.get('nfl_preempt_mlb', False)
+                and self._mlb_in_progress())
+            if force_scheduled:
+                print("MLB game in progress - showing NFL game as scheduled")
+            else:
+                print("Displaying Bears info (football season)...")
             try:
                 self.bears_display.display_bears_info(
-                    duration=self.rotation_schedule['bears'] * 60
+                    duration=self.rotation_schedule['bears'] * 60,
+                    force_scheduled=force_scheduled
                 )
                 print("Bears display finished")
             except Exception as e:
