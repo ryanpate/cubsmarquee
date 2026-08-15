@@ -152,6 +152,7 @@ def load_config():
         'enable_allstar': True,
         'enable_bears': True,
         'enable_bears_news': True,
+        'nfl_preempt_mlb': False,
         'enable_pga': True,
         'enable_pga_news': True,
         'enable_pga_facts': True,
@@ -774,6 +775,14 @@ HTML_TEMPLATE = """
 
                         <div class="form-group">
                             <label>
+                                <input type="checkbox" id="nfl_preempt_mlb">
+                                NFL preempts MLB
+                            </label>
+                            <div class="help-text">A live football game takes over the display, the way a baseball game normally does. Off by default, so baseball wins.</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
                                 <input type="checkbox" id="enable_pga">
                                 Enable PGA Tour leaderboard display (golf season)
                             </label>
@@ -1238,6 +1247,7 @@ HTML_TEMPLATE = """
             document.getElementById('enable_allstar').checked = config.enable_allstar !== false;
             document.getElementById('enable_bears').checked = config.enable_bears !== false;
             document.getElementById('enable_bears_news').checked = config.enable_bears_news !== false;
+            document.getElementById('nfl_preempt_mlb').checked = config.nfl_preempt_mlb === true;
             document.getElementById('enable_pga').checked = config.enable_pga !== false;
             document.getElementById('enable_pga_news').checked = config.enable_pga_news !== false;
             document.getElementById('enable_pga_facts').checked = config.enable_pga_facts !== false;
@@ -1504,6 +1514,7 @@ HTML_TEMPLATE = """
                 enable_allstar: document.getElementById('enable_allstar').checked,
                 enable_bears: document.getElementById('enable_bears').checked,
                 enable_bears_news: document.getElementById('enable_bears_news').checked,
+                nfl_preempt_mlb: document.getElementById('nfl_preempt_mlb').checked,
                 enable_pga: document.getElementById('enable_pga').checked,
                 enable_pga_news: document.getElementById('enable_pga_news').checked,
                 enable_pga_facts: document.getElementById('enable_pga_facts').checked,
@@ -2200,6 +2211,8 @@ def save_config_route():
             'enable_allstar': data.get('enable_allstar', True),
             'enable_bears': data.get('enable_bears', True),
             'enable_bears_news': data.get('enable_bears_news', True),
+            'nfl_preempt_mlb': data.get(
+                'nfl_preempt_mlb', current_config.get('nfl_preempt_mlb', False)),
             'enable_pga': data.get('enable_pga', True),
             'enable_pga_news': data.get('enable_pga_news', True),
             'enable_pga_facts': data.get('enable_pga_facts', True),

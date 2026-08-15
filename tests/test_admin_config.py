@@ -202,3 +202,20 @@ def test_save_config_round_trips_usatoday(client, tmp_path, monkeypatch):
     saved = json.loads((tmp_path / 'config.json').read_text())
     assert saved['enable_usatoday'] is False
     assert saved['scroll_speed_usatoday'] == 8
+
+
+def test_admin_page_offers_nfl_preempt_toggle(client):
+    html = client.get('/admin').data.decode()
+    assert 'id="nfl_preempt_mlb"' in html
+
+
+def test_save_config_round_trips_nfl_preempt(client, tmp_path):
+    resp = client.post('/save_config', json={'nfl_preempt_mlb': True})
+    assert resp.get_json()['success']
+    saved = json.loads((tmp_path / 'config.json').read_text())
+    assert saved['nfl_preempt_mlb'] is True
+
+
+def test_nfl_preempt_defaults_to_off(client):
+    import wifi_config_server as wcs
+    assert wcs.load_config()['nfl_preempt_mlb'] is False
