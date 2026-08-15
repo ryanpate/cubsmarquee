@@ -194,9 +194,11 @@ SCHEDULED_REBOOT_UNIT = 'marquee-scheduled-reboot'
 SCHEDULED_REBOOT_TIME = '04:00'
 
 
-def load_config():
-    """Load configuration from JSON file"""
-    default_config = {
+# Every admin-managed key and the value a fresh board starts with. Shared
+# by load_config() and /save_config so the two cannot drift: a key added
+# here is automatically preserved on save and checked by the
+# reboot-classification completeness test.
+DEFAULT_CONFIG = {
         'team': DEFAULT_TEAM_SLUG,
         'nfl_team': DEFAULT_NFL_TEAM_SLUG,
         'zip_code': '',
@@ -254,7 +256,12 @@ def load_config():
         'dim_start': '22:00',
         'dim_end': '07:00',
         'dim_brightness': 30
-    }
+}
+
+
+def load_config():
+    """Load configuration from JSON file"""
+    default_config = dict(DEFAULT_CONFIG)
 
     try:
         if os.path.exists(CONFIG_PATH):
@@ -2368,69 +2375,32 @@ def save_config_route():
         # re-save of the same value.
         previous_config = dict(current_config)
 
-        # Update with new values
+        # A key the request omits keeps whatever is already saved. Falling
+        # back to a hardcoded default here would silently reset every
+        # setting the caller did not happen to mention -- blanking the
+        # weather ZIP, re-enabling switched-off screens, and so on. Note
+        # this is `key in data`, not data.get(key) or default: an explicit
+        # False, 0 or "" is a real edit and must survive.
         current_config.update({
-            'team': data.get(
-                'team', current_config.get('team', DEFAULT_TEAM_SLUG)),
-            'nfl_team': data.get(
-                'nfl_team', current_config.get('nfl_team', DEFAULT_NFL_TEAM_SLUG)),
-            'zip_code': data.get('zip_code', ''),
-            'weather_api_key': data.get('weather_api_key', ''),
-            'custom_message': data.get(
-                'custom_message', current_config.get('custom_message', 'GO CUBS GO!')),
-            'display_mode': data.get('display_mode', 'auto'),
-            'enable_weather': data.get('enable_weather', True),
-            'enable_allstar': data.get('enable_allstar', True),
-            'enable_bears': data.get('enable_bears', True),
-            'enable_bears_news': data.get('enable_bears_news', True),
-            'nfl_preempt_mlb': data.get(
-                'nfl_preempt_mlb', current_config.get('nfl_preempt_mlb', False)),
-            'enable_pga': data.get('enable_pga', True),
-            'enable_pga_news': data.get('enable_pga_news', True),
-            'enable_pga_facts': data.get('enable_pga_facts', True),
-            'enable_cubs_facts': data.get('enable_cubs_facts', True),
-            'enable_cubs_news': data.get('enable_cubs_news', True),
-            'enable_bible': data.get('enable_bible', True),
-            'enable_bible_facts': data.get('enable_bible_facts', True),
-            'enable_newsmax': data.get('enable_newsmax', True),
-            'enable_usatoday': data.get('enable_usatoday', True),
-            'enable_stocks': data.get('enable_stocks', True),
-            'enable_spring_training': data.get('enable_spring_training', True),
-            'enable_playoff_race': data.get('enable_playoff_race', True),
-            'enable_flights': data.get('enable_flights', True),
-            'enable_flight_radar': data.get('enable_flight_radar', True),
-            'enable_clock': data.get('enable_clock', True),
-            'enable_cubs_history': data.get('enable_cubs_history', True),
-            'enable_sky': data.get('enable_sky', True),
-            'enable_iss': data.get('enable_iss', True),
-            'enable_celebrations': data.get('enable_celebrations', True),
-            'flights_between_displays': data.get('flights_between_displays', False),
-            'scroll_speed_bears': data.get('scroll_speed_bears', 5),
-            'scroll_speed_bears_news': data.get('scroll_speed_bears_news', 5),
-            'scroll_speed_pga': data.get('scroll_speed_pga', 5),
-            'scroll_speed_pga_news': data.get('scroll_speed_pga_news', 5),
-            'scroll_speed_pga_facts': data.get('scroll_speed_pga_facts', 5),
-            'scroll_speed_cubs_facts': data.get('scroll_speed_cubs_facts', 5),
-            'scroll_speed_cubs_news': data.get('scroll_speed_cubs_news', 5),
-            'scroll_speed_bible': data.get('scroll_speed_bible', 5),
-            'scroll_speed_bible_facts': data.get('scroll_speed_bible_facts', 5),
-            'scroll_speed_newsmax': data.get('scroll_speed_newsmax', 5),
-            'scroll_speed_usatoday': data.get('scroll_speed_usatoday', 5),
-            'scroll_speed_stocks': data.get('scroll_speed_stocks', 5),
-            'scroll_speed_spring_training': data.get('scroll_speed_spring_training', 5),
-            'scroll_speed_flights': data.get('scroll_speed_flights', 5),
-            'flight_tracking_address': data.get('flight_tracking_address', ''),
-            'flight_tracking_latitude': data.get('flight_tracking_latitude'),
-            'flight_tracking_longitude': data.get('flight_tracking_longitude'),
-            'flight_source': data.get('flight_source', 'adsb_lol'),
-            'adsb_receiver_url': data.get('adsb_receiver_url', ''),
-            'flight_max_range_nm': data.get('flight_max_range_nm', 50),
-            'airlabs_api_key': data.get('airlabs_api_key', ''),
-            'brightness': _clamp_brightness(data.get('brightness')),
-            'dim_enabled': bool(data.get('dim_enabled', False)),
-            'dim_start': _validate_hhmm(data.get('dim_start'), '22:00'),
-            'dim_end': _validate_hhmm(data.get('dim_end'), '07:00'),
-            'dim_brightness': _clamp_brightness(data.get('dim_brightness', 30))
+            key: data[key] if key in data else current_config.get(key, default)
+            for key, default in DEFAULT_CONFIG.items()
+        })
+
+        # Fields that need coercion or validation. These fall back to
+        # previous_config, not current_config: the passthrough above has
+        # already copied the incoming value in, so validating against
+        # current_config would let a bad value validate against itself.
+        current_config.update({
+            'brightness': _clamp_brightness(
+                data.get('brightness', previous_config.get('brightness'))),
+            'dim_enabled': bool(
+                data.get('dim_enabled', previous_config.get('dim_enabled', False))),
+            'dim_start': _validate_hhmm(
+                data.get('dim_start'), previous_config.get('dim_start', '22:00')),
+            'dim_end': _validate_hhmm(
+                data.get('dim_end'), previous_config.get('dim_end', '07:00')),
+            'dim_brightness': _clamp_brightness(
+                data.get('dim_brightness', previous_config.get('dim_brightness', 30))),
         })
 
         # Report which reboot-requiring settings actually changed value, so
