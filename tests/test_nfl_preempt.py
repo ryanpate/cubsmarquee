@@ -137,3 +137,141 @@ class TestTakeoverRouting:
     def test_force_scheduled_shows_the_scheduled_card(self, monkeypatch):
         assert self._routed(
             monkeypatch, force_scheduled=True) == [('next_game', False)]
+
+
+class _CeilingManager:
+    """Stub ScoreboardManager that counts drawn frames and blows up past a
+    ceiling, so a regression to an infinite takeover loop fails the test
+    loudly instead of hanging the suite forever."""
+
+    def __init__(self, max_iters):
+        self.max_iters = max_iters
+        self.iters = 0
+
+    def clear_canvas(self):
+        pass
+
+    def swap_canvas(self):
+        self.iters += 1
+        if self.iters > self.max_iters:
+            raise RuntimeError(
+                'takeover loop exceeded the test iteration ceiling - '
+                'looks like an infinite loop')
+
+    def set_image(self, *a, **k):
+        pass
+
+    def draw_text(self, *a, **k):
+        pass
+
+    def draw_pixel(self, *a, **k):
+        pass
+
+    def get_frame_copy(self):
+        return None
+
+
+class TestTakeoverBackstop:
+    """Covers the fix for a Critical review finding: the takeover loop's
+    score refresh was gated on score_data['status'] == 'STATUS_IN_PROGRESS',
+    so a live-but-not-that-string status (e.g. ESPN's STATUS_HALFTIME) would
+    never refresh again, status could never reach STATUS_FINAL, and the only
+    exit was process shutdown."""
+
+    def _score(self, status):
+        return {
+            'status': status,
+            'game_time': '1:23 - 2ND',
+            'bears_score': '7',
+            'opp_score': '0',
+            'opponent_abbr': 'CLE',
+            'opponent_name': 'Browns',
+            'possession': None,
+            'down_distance': None,
+            'is_red_zone': False,
+            'last_play': None,
+        }
+
+    def _run(self, monkeypatch, statuses, loop_until_final=True,
+              duration=999999, max_iters=500):
+        """Run _display_game_day against a scripted status sequence (each
+        call to _get_current_scores advances one step, holding the last
+        entry once exhausted). Every drawing/sleeping call is stubbed so
+        nothing touches hardware or real time, and the manager enforces a
+        hard iteration ceiling so a hung loop fails fast."""
+        import bears_display as bd
+        d = bd.BearsDisplay.__new__(bd.BearsDisplay)
+        d.manager = _CeilingManager(max_iters)
+        d.live_update_interval = 0
+
+        game = _event(0)
+        calls = {'n': 0}
+
+        def fake_scores(g, gid):
+            i = min(calls['n'], len(statuses) - 1)
+            calls['n'] += 1
+            return self._score(statuses[i])
+
+        monkeypatch.setattr(d, '_get_current_scores', fake_scores)
+        monkeypatch.setattr(
+            d, '_maybe_play_win_celebration', lambda sd, played: played)
+        monkeypatch.setattr(d, '_play_scoring_celebration', lambda delta: None)
+        monkeypatch.setattr(d, '_draw_sweater_header', lambda: None)
+        monkeypatch.setattr(d, '_draw_live_content', lambda *a, **k: None)
+        monkeypatch.setattr(d, '_draw_final_content', lambda *a, **k: None)
+        monkeypatch.setattr(d, '_draw_pregame_content', lambda *a, **k: None)
+        monkeypatch.setattr(d, '_scroll_last_play', lambda text: None)
+        monkeypatch.setattr(bd.time, 'sleep', lambda s: None)
+        monkeypatch.setattr(bd, 'is_shutdown_requested', lambda: False)
+
+        d._display_game_day(
+            game, duration, loop_until_final=loop_until_final)
+        return calls['n'], d.manager.iters
+
+    def test_takeover_exits_on_final_after_a_few_refreshes(self, monkeypatch):
+        fetches, frames = self._run(
+            monkeypatch,
+            ['STATUS_IN_PROGRESS', 'STATUS_IN_PROGRESS', 'STATUS_FINAL'])
+        assert fetches == 3
+        assert frames <= 5
+
+    def test_takeover_does_not_hang_at_halftime(self, monkeypatch):
+        # Without the refresh-gate fix, status gets stuck at
+        # 'STATUS_HALFTIME' forever (the refresh block only fires when
+        # status == 'STATUS_IN_PROGRESS'), so this would exhaust the
+        # iteration ceiling and fail with the manager's RuntimeError rather
+        # than ever reaching STATUS_FINAL.
+        fetches, frames = self._run(
+            monkeypatch,
+            ['STATUS_IN_PROGRESS', 'STATUS_HALFTIME', 'STATUS_HALFTIME',
+             'STATUS_FINAL'])
+        assert fetches == 4
+        assert frames <= 5
+
+    def test_non_takeover_path_still_exits_after_duration(self, monkeypatch):
+        # Deterministic fake clock: each time.time() call advances by a
+        # fixed step, so the duration bound is exercised without relying on
+        # real wall-clock time.
+        import bears_display as bd
+        clock = {'t': 0.0}
+
+        def fake_time():
+            clock['t'] += 1.0
+            return clock['t']
+
+        monkeypatch.setattr(bd.time, 'time', fake_time)
+        try:
+            fetches, frames = self._run(
+                monkeypatch,
+                ['STATUS_HALFTIME'] * 10,
+                loop_until_final=False,
+                duration=2.5)
+        finally:
+            pass
+
+        # Status never reaches STATUS_IN_PROGRESS, so the (unchanged)
+        # non-takeover refresh gate must never re-fetch - only the initial
+        # fetch before the loop happens - and the loop must still end on
+        # its own via the duration bound, not the iteration ceiling.
+        assert fetches == 1
+        assert frames < 500

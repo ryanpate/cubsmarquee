@@ -134,6 +134,12 @@ def is_shutdown_requested() -> bool:
         return False
 
 
+# A takeover holds the display until the game ends. Nothing in an ESPN
+# payload should be able to freeze a panel bolted to a wall, so the loop
+# carries a hard backstop well beyond any real game, delays included.
+TAKEOVER_MAX_SECONDS = 6 * 60 * 60
+
+
 class BearsDisplay:
     """Handles NFL game information display for the configured team"""
 
@@ -546,14 +552,20 @@ class BearsDisplay:
             while True:
                 if loop_until_final:
                     if (score_data['status'] == 'STATUS_FINAL'
-                            or is_shutdown_requested()):
+                            or is_shutdown_requested()
+                            or time.time() - start_time >= TAKEOVER_MAX_SECONDS):
                         break
                 elif time.time() - start_time >= duration:
                     break
 
-                # Refresh live scores every LIVE_SCORE_UPDATE_INTERVAL seconds
+                # Refresh live scores every LIVE_SCORE_UPDATE_INTERVAL seconds.
+                # In takeover mode this must not be gated on the exact
+                # 'STATUS_IN_PROGRESS' string - ESPN's live-but-not-that
+                # sub-states (e.g. halftime) would otherwise never refresh
+                # again, so 'status' could never advance to final and the
+                # loop's only exit would be process shutdown.
                 current_time = time.time()
-                if (score_data['status'] == 'STATUS_IN_PROGRESS' and
+                if ((loop_until_final or score_data['status'] == 'STATUS_IN_PROGRESS') and
                         current_time - last_score_update >= self.live_update_interval):
                     print("Updating live scores...")
                     updated_data = self._get_current_scores(game, game_id)
