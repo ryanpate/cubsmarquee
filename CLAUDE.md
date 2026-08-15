@@ -165,7 +165,8 @@ argument parser, which the bindings never call.
 ## APIs Used
 
 - **MLB Stats API** - Game schedules, scores, lineups, play-by-play
-- **Open-Meteo API** - Weather data, forecasts, and ZIP geocoding (no API key)
+- **Open-Meteo API** - Temperature, forecasts, and ZIP geocoding (no API key). Its `current` block is forecast-model output, not an observation, so it can report overcast during a thunderstorm — the condition shown comes from NWS instead
+- **NWS API** (`api.weather.gov`) - Observed current condition from the nearest METAR station, plus active thunderstorm/tornado *warnings* (not watches) as an override. US only, no API key, but requires a `User-Agent`. Any failure falls back to the Open-Meteo condition
 - **ESPN API** - Bears NFL scores and PGA Tour leaderboards
 - **RSS Feeds** - Cubs and Bears breaking news
 

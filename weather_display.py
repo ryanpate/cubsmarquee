@@ -23,6 +23,15 @@ if TYPE_CHECKING:
 GEOCODE_URL = 'https://geocoding-api.open-meteo.com/v1/search'
 FORECAST_URL = 'https://api.open-meteo.com/v1/forecast'
 
+# Open-Meteo's current block is forecast-model output, not an observation,
+# so a convective storm sitting over the house can read as plain overcast.
+# NWS serves the actual METAR from the nearest station (US only, no key,
+# but it does require a User-Agent that identifies the caller).
+NWS_POINTS_URL = 'https://api.weather.gov/points'
+NWS_STATIONS_URL = 'https://api.weather.gov/stations'
+NWS_ALERTS_URL = 'https://api.weather.gov/alerts/active'
+NWS_HEADERS = {'User-Agent': '(cubsmarquee LED scoreboard, cubsmarquee.local)'}
+
 # WMO weather code -> (OpenWeatherMap-style condition, description).
 # The condition strings drive the animation/background/icon pickers,
 # so they must stay the names the drawing code already handles.
@@ -64,6 +73,39 @@ def wmo_to_condition(code: int) -> tuple[str, str]:
     return WMO_CODES.get(code, ('Clouds', f'weather code {code}'))
 
 
+# NWS present-weather tokens, most significant first: a station reporting
+# "+TSRA BR" is a thunderstorm, not mist. Same condition vocabulary as
+# WMO_CODES so nothing new reaches the drawing code.
+METAR_CONDITIONS: list[tuple[str, tuple[str, ...]]] = [
+    ('Thunderstorm', ('thunderstorms', 'funnel_cloud', 'water_spout',
+                      'squalls', 'hail')),
+    ('Snow', ('snow', 'snow_grains', 'snow_pellets', 'ice_pellets',
+              'ice_crystals')),
+    ('Rain', ('rain', 'freezing_rain', 'spray')),
+    ('Drizzle', ('drizzle', 'freezing_drizzle')),
+    ('Mist', ('fog_mist', 'fog', 'freezing_fog')),
+    ('Haze', ('haze',)),
+    ('Smoke', ('smoke',)),
+]
+
+
+def metar_to_condition(
+        present_weather: list[dict[str, Any]]) -> tuple[str, str] | None:
+    """Map an NWS presentWeather array to (condition, description).
+
+    Returns None when the station reports no present weather (a clear or
+    merely cloudy sky) or only tokens we have no animation for -- the
+    caller then keeps the forecast source's answer.
+    """
+    reported = {entry.get('weather') for entry in present_weather}
+    for condition, tokens in METAR_CONDITIONS:
+        if reported.intersection(tokens):
+            described = ', '.join(
+                sorted(reported.intersection(tokens))).replace('_', ' ')
+            return condition, f'observed {described}'
+    return None
+
+
 class WeatherDisplay:
     """Handles weather data fetching and display"""
 
@@ -97,6 +139,10 @@ class WeatherDisplay:
         # process so the geocoder is hit once per boot, not per refresh.
         self._geo: tuple[str, float, float, str] | None = None
 
+        # Nearest NWS observation station: (zip_code, station_id). Resolved
+        # once per boot the same way, since it only moves when the ZIP does.
+        self._station: tuple[str, str] | None = None
+
     def _load_config(self):
         """Load configuration"""
         config_path = '/home/pi/config.json'
@@ -122,6 +168,66 @@ class WeatherDisplay:
         print(f"Geocoded {zip_code} -> {self._geo[3]} "
               f"({self._geo[1]:.4f}, {self._geo[2]:.4f})")
         return self._geo[1], self._geo[2], self._geo[3]
+
+    def _nws_station(self, zip_code, lat, lon):
+        """Resolve the nearest NWS observation station, cached per boot"""
+        if self._station and self._station[0] == zip_code:
+            return self._station[1]
+        points = retry_http_request(
+            f'{NWS_POINTS_URL}/{lat:.4f},{lon:.4f}', timeout=10,
+            headers=NWS_HEADERS).json()
+        stations = retry_http_request(
+            points['properties']['observationStations'], timeout=10,
+            headers=NWS_HEADERS).json()
+        features = stations.get('features') or []
+        if not features:
+            return None
+        station_id = features[0]['properties']['stationIdentifier']
+        self._station = (zip_code, station_id)
+        print(f"Nearest NWS station for {zip_code}: {station_id}")
+        return station_id
+
+    def _observed_condition(self, zip_code, lat, lon):
+        """Current condition from the nearest station's METAR, or None.
+
+        None means "no opinion" -- the station is quiet, out of range, or
+        unreachable -- and the caller keeps the Open-Meteo condition.
+        """
+        try:
+            station_id = self._nws_station(zip_code, lat, lon)
+            if not station_id:
+                return None
+            observation = retry_http_request(
+                f'{NWS_STATIONS_URL}/{station_id}/observations/latest',
+                timeout=10, headers=NWS_HEADERS).json()
+            present = observation['properties'].get('presentWeather') or []
+            return metar_to_condition(present)
+        except Exception as e:
+            print(f"NWS observation unavailable: {e}")
+            return None
+
+    def _storm_alert_active(self, lat, lon):
+        """True when a thunderstorm/tornado warning covers this point.
+
+        Warnings only: a watch means conditions are favorable, not that a
+        storm is overhead. Covers the gap when the nearest station is
+        miles away from the cell that is actually on top of the house.
+        """
+        try:
+            alerts = retry_http_request(
+                f'{NWS_ALERTS_URL}?point={lat:.4f},{lon:.4f}', timeout=10,
+                headers=NWS_HEADERS).json()
+            for feature in alerts.get('features') or []:
+                event = feature['properties'].get('event', '')
+                if not event.endswith('Warning'):
+                    continue
+                if 'Thunderstorm' in event or 'Tornado' in event:
+                    print(f"Active alert overriding condition: {event}")
+                    return True
+            return False
+        except Exception as e:
+            print(f"NWS alerts unavailable: {e}")
+            return False
 
     def _fetch_weather(self):
         """Fetch weather from Open-Meteo and adapt it to the OWM shapes
@@ -152,6 +258,15 @@ class WeatherDisplay:
 
             current = data['current']
             condition, description = wmo_to_condition(current['weather_code'])
+
+            # Prefer what the sky is actually doing over what the model
+            # predicted for this grid cell.
+            observed = self._observed_condition(zip_code, lat, lon)
+            if observed:
+                condition, description = observed
+            if self._storm_alert_active(lat, lon):
+                condition, description = 'Thunderstorm', 'storm warning'
+
             self.weather_data = {
                 'name': city,
                 'weather': [{'main': condition, 'description': description}],

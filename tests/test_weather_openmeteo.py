@@ -13,7 +13,8 @@ class FakeResponse:
         return self._payload
 
 
-def _install_fake_openmeteo(monkeypatch, current_code=61):
+def _install_fake_openmeteo(monkeypatch, current_code=61, present_weather=(),
+                            alerts=(), station='KSPI', nws_down=False):
     import weather_display as wd
     now = pendulum.now('UTC').start_of('hour')
     geo_payload = {'results': [
@@ -31,10 +32,28 @@ def _install_fake_openmeteo(monkeypatch, current_code=61):
     }
     calls = []
 
-    def fake_request(url, timeout=10):
+    def fake_request(url, timeout=10, headers=None):
         calls.append(url)
-        return FakeResponse(
-            geo_payload if 'geocoding' in url else forecast_payload)
+        if 'geocoding' in url:
+            return FakeResponse(geo_payload)
+        if 'open-meteo' in url:
+            return FakeResponse(forecast_payload)
+        if nws_down:
+            raise RuntimeError('api.weather.gov unreachable')
+        if '/points/' in url:
+            return FakeResponse({'properties': {
+                'observationStations':
+                    'https://api.weather.gov/gridpoints/ILX/52,54/stations'}})
+        if url.endswith('/stations'):
+            return FakeResponse({'features': [
+                {'properties': {'stationIdentifier': station}}]})
+        if 'observations' in url:
+            return FakeResponse({'properties': {
+                'presentWeather': list(present_weather)}})
+        if 'alerts' in url:
+            return FakeResponse({'features': [
+                {'properties': {'event': e}} for e in alerts]})
+        raise AssertionError(f'unexpected request: {url}')
 
     monkeypatch.setattr(wd, 'retry_http_request', fake_request)
     return calls
@@ -48,6 +67,7 @@ def _make_display(config):
     d.forecast_data = None
     d.last_update = None
     d._load_config = lambda: config
+    d._station = None
     return d
 
 
@@ -114,3 +134,110 @@ class TestOpenMeteoFetch:
         assert d._fetch_weather() is True
         geocode_calls = [c for c in calls if 'geocoding' in c]
         assert len(geocode_calls) == 1
+
+
+def _metar(*tokens):
+    return [{'intensity': None, 'modifier': None, 'weather': t,
+             'rawString': t} for t in tokens]
+
+
+class TestMetarMapping:
+    def test_precipitation_outranks_obscuration(self):
+        from weather_display import metar_to_condition
+        # KDEC 151215Z reported "+RA BR" -- rain matters, mist doesn't
+        assert metar_to_condition(_metar('rain', 'fog_mist'))[0] == 'Rain'
+
+    def test_thunderstorm_outranks_its_own_rain(self):
+        from weather_display import metar_to_condition
+        assert metar_to_condition(
+            _metar('thunderstorms', 'rain', 'fog_mist'))[0] == 'Thunderstorm'
+
+    def test_maps_to_the_vocabulary_the_drawing_code_knows(self):
+        from weather_display import metar_to_condition
+        assert metar_to_condition(_metar('drizzle'))[0] == 'Drizzle'
+        assert metar_to_condition(_metar('snow'))[0] == 'Snow'
+        assert metar_to_condition(_metar('freezing_rain'))[0] == 'Rain'
+        assert metar_to_condition(_metar('fog_mist'))[0] == 'Mist'
+        assert metar_to_condition(_metar('haze'))[0] == 'Haze'
+
+    def test_no_present_weather_is_not_a_condition(self):
+        from weather_display import metar_to_condition
+        # A clear or merely cloudy sky reports no present weather at all;
+        # the sky-cover question is left to the forecast source.
+        assert metar_to_condition([]) is None
+
+    def test_unrecognized_token_is_not_a_condition(self):
+        from weather_display import metar_to_condition
+        assert metar_to_condition(_metar('volcanic_ash')) is None
+
+
+class TestObservedConditionOverride:
+    def test_observation_overrides_a_model_that_missed_the_storm(
+            self, monkeypatch):
+        # The reported bug: Open-Meteo said code 3 (overcast) while the
+        # nearest station was reporting a thunderstorm.
+        _install_fake_openmeteo(
+            monkeypatch, current_code=3,
+            present_weather=_metar('thunderstorms', 'rain'))
+        d = _make_display({'zip_code': '62563'})
+        assert d._fetch_weather() is True
+        assert d.weather_data['weather'][0]['main'] == 'Thunderstorm'
+
+    def test_temperature_still_comes_from_open_meteo(self, monkeypatch):
+        _install_fake_openmeteo(monkeypatch, current_code=3,
+                                present_weather=_metar('rain'))
+        d = _make_display({'zip_code': '62563'})
+        assert d._fetch_weather() is True
+        assert d.weather_data['main']['temp'] == 82.1
+        assert d.weather_data['main']['feels_like'] == 85.0
+
+    def test_quiet_observation_leaves_the_forecast_condition_alone(
+            self, monkeypatch):
+        _install_fake_openmeteo(monkeypatch, current_code=3,
+                                present_weather=[])
+        d = _make_display({'zip_code': '62563'})
+        assert d._fetch_weather() is True
+        assert d.weather_data['weather'][0]['main'] == 'Clouds'
+
+    def test_unreachable_nws_falls_back_to_open_meteo(self, monkeypatch):
+        _install_fake_openmeteo(monkeypatch, current_code=61, nws_down=True)
+        d = _make_display({'zip_code': '62563'})
+        assert d._fetch_weather() is True
+        assert d.weather_data['weather'][0]['main'] == 'Rain'
+
+    def test_station_lookup_cached_across_fetches(self, monkeypatch):
+        calls = _install_fake_openmeteo(monkeypatch,
+                                        present_weather=_metar('rain'))
+        d = _make_display({'zip_code': '62563'})
+        assert d._fetch_weather() is True
+        assert d._fetch_weather() is True
+        assert len([c for c in calls if '/points/' in c]) == 1
+
+
+class TestSevereAlertOverride:
+    def test_warning_forces_a_storm_the_station_cannot_see(self, monkeypatch):
+        # Rochester sits between stations; a warning covering the point is
+        # better evidence than a calm ob 8 miles away.
+        _install_fake_openmeteo(monkeypatch, current_code=3,
+                                present_weather=[],
+                                alerts=['Severe Thunderstorm Warning'])
+        d = _make_display({'zip_code': '62563'})
+        assert d._fetch_weather() is True
+        assert d.weather_data['weather'][0]['main'] == 'Thunderstorm'
+
+    def test_watch_does_not_force_a_storm(self, monkeypatch):
+        # A watch means conditions are favorable, not that it is storming.
+        _install_fake_openmeteo(monkeypatch, current_code=3,
+                                present_weather=[],
+                                alerts=['Severe Thunderstorm Watch'])
+        d = _make_display({'zip_code': '62563'})
+        assert d._fetch_weather() is True
+        assert d.weather_data['weather'][0]['main'] == 'Clouds'
+
+    def test_unrelated_warning_does_not_force_a_storm(self, monkeypatch):
+        _install_fake_openmeteo(monkeypatch, current_code=3,
+                                present_weather=[],
+                                alerts=['Heat Advisory', 'Flood Warning'])
+        d = _make_display({'zip_code': '62563'})
+        assert d._fetch_weather() is True
+        assert d.weather_data['weather'][0]['main'] == 'Clouds'
