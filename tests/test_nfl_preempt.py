@@ -278,6 +278,123 @@ class TestTakeoverBackstop:
         assert frames < 500
 
 
+def _score_dict(status, state=None):
+    """A _get_current_scores return value, optionally carrying ESPN's
+    coarse state field ('pre' / 'in' / 'post')."""
+    score = {
+        'status': status,
+        'game_time': '1:23 - 2ND',
+        'bears_score': '7',
+        'opp_score': '0',
+        'opponent_abbr': 'CLE',
+        'opponent_name': 'Browns',
+        'possession': None,
+        'down_distance': None,
+        'is_red_zone': False,
+        'last_play': None,
+    }
+    if state is not None:
+        score['state'] = state
+    return score
+
+
+def _drive_game_day(monkeypatch, scores, loop_until_final=True,
+                    duration=999999, max_iters=500):
+    """Run _display_game_day against a scripted sequence of score dicts.
+
+    Each call to _get_current_scores advances one step, holding the last
+    entry once exhausted. Drawing and sleeping are stubbed, and the manager
+    enforces a hard iteration ceiling so a hung loop fails fast.
+    """
+    import bears_display as bd
+    d = bd.BearsDisplay.__new__(bd.BearsDisplay)
+    d.manager = _CeilingManager(max_iters)
+    d.live_update_interval = 0
+    calls = {'n': 0}
+
+    def fake_scores(g, gid):
+        i = min(calls['n'], len(scores) - 1)
+        calls['n'] += 1
+        return scores[i]
+
+    monkeypatch.setattr(d, '_get_current_scores', fake_scores)
+    monkeypatch.setattr(
+        d, '_maybe_play_win_celebration', lambda sd, played: played)
+    monkeypatch.setattr(d, '_play_scoring_celebration', lambda delta: None)
+    monkeypatch.setattr(d, '_draw_sweater_header', lambda: None)
+    monkeypatch.setattr(d, '_draw_live_content', lambda *a, **k: None)
+    monkeypatch.setattr(d, '_draw_final_content', lambda *a, **k: None)
+    monkeypatch.setattr(d, '_draw_pregame_content', lambda *a, **k: None)
+    monkeypatch.setattr(d, '_scroll_last_play', lambda text: None)
+    monkeypatch.setattr(bd.time, 'sleep', lambda s: None)
+    monkeypatch.setattr(bd, 'is_shutdown_requested', lambda: False)
+
+    d._display_game_day(_event(0), duration, loop_until_final=loop_until_final)
+    return calls['n'], d.manager.iters
+
+
+class TestTakeoverTerminalStates:
+    """The takeover is entered on status.type.state == 'in', so it has to
+    leave on state != 'in'. ESPN's terminal 'post' state covers more names
+    than STATUS_FINAL - a game canceled or suspended after kickoff would
+    otherwise hold the screen for the full six-hour backstop, drawing an
+    'UP NEXT' card for a game that will never resume."""
+
+    def test_canceled_after_kickoff_exits_the_takeover(self, monkeypatch):
+        fetches, frames = _drive_game_day(monkeypatch, [
+            _score_dict('STATUS_IN_PROGRESS', 'in'),
+            _score_dict('STATUS_CANCELED', 'post'),
+        ])
+        assert fetches == 2
+        assert frames <= 3
+
+    def test_suspended_after_kickoff_exits_the_takeover(self, monkeypatch):
+        fetches, frames = _drive_game_day(monkeypatch, [
+            _score_dict('STATUS_IN_PROGRESS', 'in'),
+            _score_dict('STATUS_SUSPENDED', 'post'),
+        ])
+        assert fetches == 2
+        assert frames <= 3
+
+    def test_final_overtime_exits_the_takeover(self, monkeypatch):
+        fetches, frames = _drive_game_day(monkeypatch, [
+            _score_dict('STATUS_IN_PROGRESS', 'in'),
+            _score_dict('STATUS_FINAL_OVERTIME', 'post'),
+        ])
+        assert fetches == 2
+        assert frames <= 3
+
+    def test_live_states_keep_the_takeover_running(self, monkeypatch):
+        # Halftime is still state 'in' - the takeover must hold the screen.
+        fetches, frames = _drive_game_day(monkeypatch, [
+            _score_dict('STATUS_IN_PROGRESS', 'in'),
+            _score_dict('STATUS_HALFTIME', 'in'),
+            _score_dict('STATUS_END_PERIOD', 'in'),
+            _score_dict('STATUS_FINAL', 'post'),
+        ])
+        assert fetches == 4
+        assert frames <= 5
+
+    def test_non_takeover_ignores_state_and_honors_duration(self, monkeypatch):
+        # loop_until_final=False must still exit purely on duration, even
+        # when the state has gone terminal.
+        import bears_display as bd
+        clock = {'t': 0.0}
+
+        def fake_time():
+            clock['t'] += 1.0
+            return clock['t']
+
+        monkeypatch.setattr(bd.time, 'time', fake_time)
+        fetches, frames = _drive_game_day(
+            monkeypatch,
+            [_score_dict('STATUS_CANCELED', 'post')] * 5,
+            loop_until_final=False,
+            duration=2.5)
+        assert fetches == 1
+        assert 0 < frames < 500
+
+
 class TestMlbInProgress:
     def _handler(self, schedule, config=None):
         import off_season_handler as osh
@@ -369,3 +486,185 @@ class TestPreemptGuard:
         board, _ = self._board(tmp_path, {'nfl_preempt_mlb': True}, live=True)
         assert board._nfl_preempts(
             config_path=str(tmp_path / 'nope.json')) is False
+
+
+def _advancing_sleep(clock, sleeps):
+    """A time.sleep stub that records the request and advances a fake clock."""
+    def _sleep(seconds):
+        sleeps.append(seconds)
+        clock['t'] += seconds
+    return _sleep
+
+
+class TestPreemptDwell:
+    """Covers a Critical review finding: display_bears_info has early-return
+    paths (a failed schedule fetch returns before anything is drawn), so a
+    dead ESPN schedule endpoint plus a scoreboard still reporting 'in' would
+    spin the preempt branch at network speed with a frozen panel. The branch
+    must floor each pass."""
+
+    def _run_loop(self, monkeypatch, iterations=4):
+        import main as m
+
+        counts = {'iters': 0, 'display': 0}
+        sleeps = []
+        clock = {'t': 1000.0}
+
+        class _FakeBears:
+            def display_bears_info(self_inner, loop_until_final=False):
+                # Returns instantly, exactly like a failed schedule fetch
+                counts['display'] += 1
+
+        class _FakeHandler:
+            bears_display = _FakeBears()
+
+            def display_off_season_content(self_inner):
+                raise AssertionError('off-season path must not be reached')
+
+        class _FakeManager:
+            def clear_canvas(self_inner):
+                pass
+
+            def swap_canvas(self_inner):
+                pass
+
+            def set_status(self_inner, *a, **k):
+                pass
+
+        board = m.CubsScoreboard.__new__(m.CubsScoreboard)
+        board.manager = _FakeManager()
+        board.off_season_handler = _FakeHandler()
+
+        def count_iteration():
+            counts['iters'] += 1
+            return 'auto'
+
+        monkeypatch.setattr(m, 'needs_setup', lambda: False)
+        # Fake clock: sleeping advances time instead of spending it, so the
+        # 30s dwells are exercised without a two-minute test run.
+        monkeypatch.setattr(m.time, 'sleep', _advancing_sleep(clock, sleeps))
+        monkeypatch.setattr(m.time, 'time', lambda: clock['t'])
+        # Hard ceiling: shutdown trips after a fixed number of loop passes,
+        # so a regression fails on the assertions instead of hanging.
+        monkeypatch.setattr(
+            m, 'is_shutdown_requested', lambda: counts['iters'] > iterations)
+        monkeypatch.setattr(board, '_get_display_mode', count_iteration)
+        monkeypatch.setattr(board, '_nfl_preempts', lambda: True)
+        monkeypatch.setattr(board, 'is_off_season', lambda: (_ for _ in ()).throw(
+            AssertionError('preempt branch must own the iteration')))
+        monkeypatch.setattr(board, 'process_game_cycle', lambda: (_ for _ in ()).throw(
+            AssertionError('preempt branch must own the iteration')))
+
+        board.run()
+        return counts, sleeps
+
+    def test_instant_return_still_dwells(self, monkeypatch):
+        counts, sleeps = self._run_loop(monkeypatch, iterations=4)
+        assert counts['display'] == 5
+        # Five passes, the last cut short by shutdown; even two full dwells
+        # of 30s dwarf the 2s startup sleep, which is the only sleep a
+        # spinning branch would record.
+        assert sum(sleeps) >= 60
+
+    def test_dwell_stops_early_on_shutdown(self, monkeypatch):
+        import main as m
+        board = m.CubsScoreboard.__new__(m.CubsScoreboard)
+        sleeps = []
+        monkeypatch.setattr(m.time, 'sleep', lambda s: sleeps.append(s))
+        monkeypatch.setattr(m, 'is_shutdown_requested', lambda: True)
+        board._sleep_interruptibly(30)
+        assert sleeps == []
+
+    def test_dwell_sleeps_in_short_slices(self, monkeypatch):
+        # SIGTERM must not wait out a 30s uninterruptible block.
+        import main as m
+        board = m.CubsScoreboard.__new__(m.CubsScoreboard)
+        sleeps = []
+        clock = {'t': 1000.0}
+        monkeypatch.setattr(m.time, 'sleep', _advancing_sleep(clock, sleeps))
+        monkeypatch.setattr(m.time, 'time', lambda: clock['t'])
+        monkeypatch.setattr(m, 'is_shutdown_requested', lambda: False)
+        board._sleep_interruptibly(5)
+        assert sum(sleeps) == 5
+        assert max(sleeps) <= 1.0
+
+
+class _LoopCeiling(BaseException):
+    """Escapes display_off_season_content's broad `except Exception`, so a
+    loop that never returns fails the test instead of hanging the suite."""
+
+
+class TestOffSeasonTakeoverHandoff:
+    """Covers an Important review finding: display_off_season_content is a
+    while True that only returns on the once-per-day season check, so the
+    NFL takeover guard in main.py was unreachable for months at a time. The
+    rotation now aborts between segments when a takeover is pending."""
+
+    def _handler(self, monkeypatch, config, live, takeover_raises=False):
+        import off_season_handler as osh
+
+        class _FakeBears:
+            def live_game(self_inner):
+                if takeover_raises:
+                    raise AssertionError(
+                        'live_game must not be called when the flag is off')
+                return {'id': '401'} if live else None
+
+        h = osh.OffSeasonHandler.__new__(osh.OffSeasonHandler)
+        h.config = dict(config)
+        h.bears_display = _FakeBears()
+        h.last_season_check = None
+        h.season_check_interval = 86400
+        monkeypatch.setattr(h, '_load_config', lambda: dict(config))
+        return h
+
+    def _run_content(self, monkeypatch, h, season_started=False, ceiling=5):
+        """Drive display_off_season_content with a rotation stub that just
+        runs the between-segment callback, and a bounded loop count."""
+        import off_season_handler as osh
+        state = {'cycles': 0, 'season_checks': 0}
+        monkeypatch.setattr(osh.time, 'sleep', lambda s: None)
+
+        def fake_rotation(between_callback=None):
+            state['cycles'] += 1
+            if state['cycles'] > ceiling:
+                raise _LoopCeiling('off-season loop never returned')
+            if between_callback is not None:
+                between_callback()
+
+        def fake_season_check():
+            state['season_checks'] += 1
+            return season_started
+
+        monkeypatch.setattr(h, '_display_rotation_cycle', fake_rotation)
+        monkeypatch.setattr(h, '_should_check_season', lambda: True)
+        monkeypatch.setattr(h, '_check_season_started', fake_season_check)
+        h.display_off_season_content()
+        return state
+
+    def test_returns_when_a_takeover_is_pending(self, monkeypatch):
+        h = self._handler(
+            monkeypatch, {'zip_code': '60613', 'nfl_preempt_mlb': True},
+            live=True)
+        state = self._run_content(monkeypatch, h)
+        assert state['cycles'] == 1
+        # Returned on the takeover, not by waiting for the 24hr season check
+        assert state['season_checks'] == 0
+
+    def test_keeps_cycling_when_the_option_is_off(self, monkeypatch):
+        # Flag off: live_game must never even be called (it is an ESPN
+        # request between every rotation segment).
+        h = self._handler(
+            monkeypatch, {'zip_code': '60613', 'nfl_preempt_mlb': False},
+            live=True, takeover_raises=True)
+        state = self._run_content(monkeypatch, h, season_started=True)
+        assert state['cycles'] == 1
+        assert state['season_checks'] == 1
+
+    def test_keeps_cycling_when_no_nfl_game_is_live(self, monkeypatch):
+        h = self._handler(
+            monkeypatch, {'zip_code': '60613', 'nfl_preempt_mlb': True},
+            live=False)
+        state = self._run_content(monkeypatch, h, season_started=True)
+        assert state['cycles'] == 1
+        assert state['season_checks'] == 1

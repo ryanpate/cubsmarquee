@@ -460,6 +460,20 @@ class OffSeasonHandler:
         self._mlb_status_checked = now
         return live
 
+    def _nfl_takeover_pending(self) -> bool:
+        """True when a live NFL game should take the screen from MLB.
+
+        The config flag is read first so boards without the feature never
+        pay for the ESPN scoreboard call this makes.
+        """
+        if not self.config.get('nfl_preempt_mlb', False):
+            return False
+        try:
+            return self.bears_display.live_game() is not None
+        except Exception as e:
+            print(f"NFL takeover check failed: {e}")
+            return False
+
     def _is_golf_season(self):
         """
         Determine if it's currently golf season
@@ -505,7 +519,24 @@ class OffSeasonHandler:
                 elif display_mode == 'message_only':
                     self._display_message_cycle()
                 else:  # auto mode
-                    self._display_rotation_cycle()
+                    # Abort the rotation between segments when a live NFL
+                    # game should take over, and hand control back to the
+                    # run loop, whose preempt guard owns that display.
+                    # Waiting for the season check instead would leave the
+                    # takeover unreachable for up to 24 hours - i.e. most of
+                    # the NFL season. _display_rotation_cycle does not
+                    # report why it stopped, so remember it here.
+                    takeover = {'pending': False}
+
+                    def _takeover_wanted():
+                        takeover['pending'] = self._nfl_takeover_pending()
+                        return takeover['pending']
+
+                    self._display_rotation_cycle(
+                        between_callback=_takeover_wanted)
+                    if takeover['pending']:
+                        print("Live NFL game - leaving off-season rotation")
+                        return
 
                 # Skip season check when user has forced no-games mode
                 if display_mode == 'no_games':

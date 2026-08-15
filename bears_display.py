@@ -357,8 +357,11 @@ class BearsDisplay:
             opponent_name = opponent['team']['displayName']
             opponent_abbr = opponent['team']['abbreviation']
 
-            # Get game status
+            # Get game status. 'state' is ESPN's coarse pre/in/post field,
+            # which the takeover exits on - 'post' covers cancellations and
+            # suspensions that never reach STATUS_FINAL.
             status = competition['status']['type']['name']
+            state = competition['status']['type'].get('state')
             game_time_raw = competition['status']['type']['shortDetail']
 
             # Check if scores exist in schedule data
@@ -387,6 +390,7 @@ class BearsDisplay:
 
                     # Update status from live data
                     status = competition['status']['type']['name']
+                    state = competition['status']['type'].get('state')
                     game_time_raw = competition['status']['type']['shortDetail']
                     print(f"Updated from scoreboard - Status: {status}")
 
@@ -417,6 +421,7 @@ class BearsDisplay:
 
             return {
                 'status': status,
+                'state': state,
                 'game_time': game_time_raw,
                 'bears_score': bears_score,
                 'opp_score': opp_score,
@@ -551,7 +556,16 @@ class BearsDisplay:
 
             while True:
                 if loop_until_final:
-                    if (score_data['status'] == 'STATUS_FINAL'
+                    # The takeover is entered on state == 'in', so it has to
+                    # leave on state != 'in'. Keying the exit on
+                    # STATUS_FINAL alone would hold the screen for the full
+                    # backstop after a game is canceled, postponed or
+                    # suspended past kickoff (all state 'post'). The
+                    # STATUS_FINAL test stays as the fallback for payloads
+                    # with no state field.
+                    state = score_data.get('state')
+                    if ((state is not None and state != 'in')
+                            or score_data['status'] == 'STATUS_FINAL'
                             or is_shutdown_requested()
                             or time.time() - start_time >= TAKEOVER_MAX_SECONDS):
                         break

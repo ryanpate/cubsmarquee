@@ -25,6 +25,10 @@ from config_validator import validate_config_on_startup
 # Global flag for graceful shutdown
 _shutdown_requested: bool = False
 
+# Shortest time one pass of the NFL takeover branch may take. It exists
+# purely to bound the retry rate when the takeover display returns early.
+NFL_PREEMPT_MIN_SECONDS: int = 30
+
 # Module logger
 logger = get_logger("main")
 
@@ -138,10 +142,19 @@ class CubsScoreboard:
                             "NFL game live and nfl_preempt_mlb set - "
                             "NFL takes over the display")
                         self.manager.set_status('NFL game')
+                        started = time.time()
                         self.off_season_handler.bears_display.display_bears_info(
                             loop_until_final=True)
                         if is_shutdown_requested():
                             break
+                        # display_bears_info has early returns that draw
+                        # nothing - a failed schedule fetch is one - so this
+                        # branch cannot assume the call blocks for the game.
+                        # Without a floor, a dead schedule endpoint plus a
+                        # scoreboard still reporting 'in' spins the loop at
+                        # network speed with a frozen panel.
+                        self._sleep_interruptibly(
+                            NFL_PREEMPT_MIN_SECONDS - (time.time() - started))
                         continue
 
                     if self.is_off_season():
@@ -151,6 +164,10 @@ class CubsScoreboard:
                         self.off_season_handler.display_off_season_content()
                         if is_shutdown_requested():
                             break
+                        # It returns either because the season started or
+                        # because an NFL takeover is pending; re-evaluate
+                        # the guards above rather than assuming the former.
+                        continue
 
                     self.process_game_cycle()
 
@@ -204,6 +221,15 @@ class CubsScoreboard:
             logger.debug(traceback.format_exc())
             # Default to regular season if there's an error
             return False
+
+    def _sleep_interruptibly(self, seconds: float) -> None:
+        """Sleep up to `seconds`, in 1s slices so SIGTERM is still prompt."""
+        deadline = time.time() + seconds
+        while not is_shutdown_requested():
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                return
+            time.sleep(min(1.0, remaining))
 
     def _get_display_mode(self) -> str:
         """Read display_mode from /home/pi/config.json, defaulting to 'auto'."""
