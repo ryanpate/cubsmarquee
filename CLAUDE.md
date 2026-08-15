@@ -184,6 +184,7 @@ User configuration stored at `/home/pi/config.json`:
 - Weather location
 - `team` — active team pack slug (`cubs` default, `cardinals`)
 - `nfl_team` — active NFL team pack slug (`bears` default, `chiefs`)
+- `nfl_preempt_mlb` — when `true`, a live NFL game takes over the display the way a live MLB game does, and MLB drops to its scheduled card (default `false`). Football season is detected from the ESPN schedule (game within -3/+14 days), not from a month range, so preseason counts like the regular season
 - `panel_version` — panel hardware revision (`v1` default, `v2`); set by `install_panel_v2.sh`
 - `hardware_mapping` — matrix wiring revision (`regular` default = direct to GPIO; `adafruit-hat` / `adafruit-hat-pwm` for the Adafruit bonnet). Per-Pi, since the units are not wired alike; omit to keep `DisplayConfig.HARDWARE_MAPPING`
 - `gpio_slowdown` — optional matrix timing override (Pi 5: 2, Pi 4/earlier: 4). Set the **lowest value that renders clean** — higher costs refresh. Measured: cubsmarquee (Pi 4, bonnet) is clean at **3**, ghosts at 2. Too low shows as ghosting/noisy pixels, and the threshold scales with CPU clock: curing that Pi's undervoltage took it from 600 MHz to 1800 and introduced ghosting that had never appeared before (2026-08-13)
