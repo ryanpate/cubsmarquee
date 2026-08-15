@@ -139,6 +139,61 @@ def get_ip_address():
         return 'Unknown'
 
 
+# Settings the running scoreboard cannot pick up on its own.
+#
+# Everything else is re-read while the display runs: off_season_handler
+# reloads config.json every rotation iteration, and the display modules
+# call load_user_config(), which re-parses whenever the file's mtime
+# changes. Only these need the process restarted -- the team packs because
+# handlers cache the pack's colors, logos and pre-generated backgrounds in
+# __init__, and the matrix keys because they are applied once when the
+# RGBMatrix is constructed.
+#
+# The four matrix keys are per-Pi and are not in the admin defaults (they
+# are set by install_panel_v2.sh or by hand), so they are named here
+# explicitly rather than coming from load_config().
+REBOOT_REQUIRED_KEYS = {
+    'team',
+    'nfl_team',
+    'panel_version',
+    'hardware_mapping',
+    'gpio_slowdown',
+    'limit_refresh_rate_hz',
+}
+
+# Every other key in the admin defaults, listed so that adding a config key
+# forces a reboot/live decision instead of silently defaulting to "live".
+# tests/test_reboot_prompt.py fails when a key appears in neither set.
+APPLIES_LIVE_KEYS = {
+    'zip_code', 'weather_api_key', 'custom_message', 'display_mode',
+    'enable_weather', 'enable_allstar', 'enable_bears', 'enable_bears_news',
+    'nfl_preempt_mlb', 'enable_pga', 'enable_pga_news', 'enable_pga_facts',
+    'enable_cubs_news', 'enable_cubs_facts', 'enable_bible',
+    'enable_bible_facts', 'enable_newsmax', 'enable_usatoday',
+    'enable_stocks', 'enable_spring_training', 'enable_playoff_race',
+    'enable_flights', 'enable_flight_radar', 'enable_clock',
+    'enable_cubs_history', 'enable_sky', 'enable_iss', 'enable_celebrations',
+    'flights_between_displays',
+    'scroll_speed_bears', 'scroll_speed_bears_news', 'scroll_speed_pga',
+    'scroll_speed_pga_news', 'scroll_speed_pga_facts',
+    'scroll_speed_cubs_facts', 'scroll_speed_cubs_news', 'scroll_speed_bible',
+    'scroll_speed_bible_facts', 'scroll_speed_newsmax',
+    'scroll_speed_usatoday', 'scroll_speed_stocks',
+    'scroll_speed_spring_training', 'scroll_speed_flights',
+    'flight_tracking_latitude', 'flight_tracking_longitude',
+    'flight_tracking_address', 'flight_source', 'adsb_receiver_url',
+    'flight_max_range_nm', 'airlabs_api_key',
+    'brightness', 'dim_enabled', 'dim_start', 'dim_end', 'dim_brightness',
+}
+
+# The nightly updater only reboots when origin/main has moved, so there is
+# no reboot to piggyback on for a quiet night. A transient one-shot timer
+# is used instead; it does not survive a reboot, which is correct here --
+# if the Pi restarts for any other reason the change is already applied.
+SCHEDULED_REBOOT_UNIT = 'marquee-scheduled-reboot'
+SCHEDULED_REBOOT_TIME = '04:00'
+
+
 def load_config():
     """Load configuration from JSON file"""
     default_config = {
@@ -473,6 +528,41 @@ HTML_TEMPLATE = """
         .button-reboot:hover {
             background: #5a6268;
         }
+        .reboot-prompt-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.55);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .reboot-prompt-backdrop.visible { display: flex; }
+        .reboot-prompt-box {
+            background: #fff;
+            border-radius: 8px;
+            padding: 24px;
+            max-width: 460px;
+            width: 100%;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+        }
+        .reboot-prompt-box h3 { margin: 0 0 10px; }
+        .reboot-prompt-box p { margin: 0 0 8px; }
+        .reboot-prompt-keys {
+            font-family: monospace;
+            background: #f2f2f2;
+            padding: 6px 8px;
+            border-radius: 4px;
+            display: inline-block;
+        }
+        .reboot-prompt-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 18px;
+        }
+        .reboot-prompt-actions button { width: auto; flex: 1 1 auto; }
         .speed-control {
             display: flex;
             align-items: center;
@@ -578,6 +668,22 @@ HTML_TEMPLATE = """
     </style>
 </head>
 <body>
+    <div class="reboot-prompt-backdrop" id="reboot-prompt">
+        <div class="reboot-prompt-box">
+            <h3>Reboot needed</h3>
+            <p>Your settings were saved, but this change only takes effect
+               after the Pi restarts:</p>
+            <p><span class="reboot-prompt-keys" id="reboot-prompt-keys"></span></p>
+            <p>Rebooting takes about two minutes, and the display is blank
+               until it finishes.</p>
+            <div class="reboot-prompt-actions">
+                <button onclick="rebootFromPrompt(this)" class="button-reboot">Reboot now</button>
+                <button onclick="scheduleRebootFromPrompt(this)" class="button-restart">Tonight at 4 AM</button>
+                <button onclick="dismissRebootPrompt()">Not now</button>
+            </div>
+            <div id="reboot-prompt-status"></div>
+        </div>
+    </div>
     <div class="container">
         <h1>⚾ {{ active_team.short_name }} Scoreboard Admin</h1>
         <div class="subtitle">Configuration & Management Panel</div>
@@ -1577,17 +1683,20 @@ HTML_TEMPLATE = """
                 const data = await response.json();
 
                 if (data.success) {
-                    const teamChanged =
-                        config.team !== window._loadedTeam;
-                    const nflTeamChanged =
-                        config.nfl_team !== window._loadedNflTeam;
                     window._loadedTeam = config.team;
                     window._loadedNflTeam = config.nfl_team;
-                    showStatus('config-status',
-                        (teamChanged || nflTeamChanged)
-                            ? 'Configuration saved! REBOOT the Pi for the team change to take effect (System tab).'
-                            : 'Configuration saved successfully! Restart the service for changes to take effect.',
-                        true);
+                    // The server decides: it compares the saved values
+                    // against the previous ones, so we only prompt when a
+                    // reboot would actually change something. Everything
+                    // else the running display picks up on its own.
+                    if (data.reboot_required) {
+                        showRebootPrompt(data.reboot_keys);
+                        showStatus('config-status', 'Configuration saved.', true);
+                    } else {
+                        showStatus('config-status',
+                            'Configuration saved. Changes apply within a few minutes.',
+                            true);
+                    }
                 } else {
                     showStatus('config-status', 'Error: ' + data.message, false);
                 }
@@ -1702,6 +1811,66 @@ HTML_TEMPLATE = """
             } finally {
                 button.disabled = false;
                 button.textContent = originalText;
+            }
+        }
+
+        function showRebootPrompt(keys) {
+            document.getElementById('reboot-prompt-keys').textContent =
+                (keys && keys.length) ? keys.join(', ') : 'this setting';
+            document.getElementById('reboot-prompt-status').innerHTML = '';
+            document.getElementById('reboot-prompt').classList.add('visible');
+        }
+
+        function dismissRebootPrompt() {
+            document.getElementById('reboot-prompt').classList.remove('visible');
+        }
+
+        async function rebootFromPrompt(button) {
+            button.disabled = true;
+            button.textContent = 'Rebooting...';
+            try {
+                const response = await fetch('/reboot', { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    showStatus('reboot-prompt-status',
+                        'Rebooting... wait about 2 minutes before reconnecting.', true);
+                } else {
+                    showStatus('reboot-prompt-status',
+                        'Reboot error: ' + data.message, false);
+                    button.disabled = false;
+                    button.textContent = 'Reboot now';
+                }
+            } catch (error) {
+                showStatus('reboot-prompt-status',
+                    'Reboot error: ' + error.message, false);
+                button.disabled = false;
+                button.textContent = 'Reboot now';
+            }
+        }
+
+        async function scheduleRebootFromPrompt(button) {
+            button.disabled = true;
+            button.textContent = 'Scheduling...';
+            try {
+                const response = await fetch('/schedule_reboot', { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    showStatus('reboot-prompt-status', data.message, true);
+                    setTimeout(dismissRebootPrompt, 2000);
+                } else {
+                    // Say so plainly - a user who thinks the reboot is
+                    // booked will not come back to check.
+                    showStatus('reboot-prompt-status',
+                        'Could not schedule: ' + data.message +
+                        ' - reboot now or from the System tab instead.', false);
+                    button.disabled = false;
+                    button.textContent = 'Tonight at 4 AM';
+                }
+            } catch (error) {
+                showStatus('reboot-prompt-status',
+                    'Could not schedule: ' + error.message, false);
+                button.disabled = false;
+                button.textContent = 'Tonight at 4 AM';
             }
         }
 
@@ -2195,6 +2364,9 @@ def save_config_route():
     try:
         data = request.json
         current_config = load_config()
+        # Snapshot before the update so we can tell a real change from a
+        # re-save of the same value.
+        previous_config = dict(current_config)
 
         # Update with new values
         current_config.update({
@@ -2261,8 +2433,19 @@ def save_config_route():
             'dim_brightness': _clamp_brightness(data.get('dim_brightness', 30))
         })
 
+        # Report which reboot-requiring settings actually changed value, so
+        # the page only prompts when a reboot would really change something.
+        reboot_keys = sorted(
+            key for key in REBOOT_REQUIRED_KEYS
+            if key in current_config
+            and current_config[key] != previous_config.get(key))
+
         if save_config(current_config):
-            return jsonify({'success': True})
+            return jsonify({
+                'success': True,
+                'reboot_required': bool(reboot_keys),
+                'reboot_keys': reboot_keys,
+            })
         else:
             return jsonify({'success': False, 'message': 'Failed to save configuration'})
 
@@ -2374,6 +2557,34 @@ def reboot_device():
         )
         return jsonify({'success': True, 'message': 'Reboot initiated - Pi will restart in a few seconds'})
     except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+
+@app.route('/schedule_reboot', methods=['POST'])
+def schedule_reboot():
+    """Book a one-shot reboot for tonight instead of rebooting now.
+
+    Any previously scheduled reboot is cancelled first, so repeatedly
+    saving settings cannot stack up timers.
+    """
+    try:
+        subprocess.run(
+            ['sudo', 'systemctl', 'stop', f'{SCHEDULED_REBOOT_UNIT}.timer'],
+            capture_output=True, timeout=10)
+        subprocess.run(
+            ['sudo', 'systemd-run',
+             f'--unit={SCHEDULED_REBOOT_UNIT}',
+             f'--on-calendar=*-*-* {SCHEDULED_REBOOT_TIME}:00',
+             '--timer-property=AccuracySec=1min',
+             '/sbin/reboot'],
+            capture_output=True, timeout=10, check=True)
+        return jsonify({
+            'success': True,
+            'message': f'Reboot scheduled for {SCHEDULED_REBOOT_TIME} tonight',
+        })
+    except Exception as e:
+        # Never report success we cannot back up: a user who believes the
+        # reboot is booked will not check again.
         return jsonify({'success': False, 'message': str(e)})
 
 
