@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 
 import pendulum
@@ -327,3 +328,44 @@ class TestMlbInProgress:
         assert h._mlb_in_progress() is True
         assert h._mlb_in_progress() is True
         assert len(calls) == 1
+
+
+class TestPreemptGuard:
+    def _board(self, tmp_path, config, live):
+        import main as m
+        path = tmp_path / 'config.json'
+        path.write_text(json.dumps(config))
+
+        class _FakeBears:
+            def live_game(self_inner):
+                return {'id': '401'} if live else None
+
+        class _FakeHandler:
+            bears_display = _FakeBears()
+
+        board = m.CubsScoreboard.__new__(m.CubsScoreboard)
+        board.off_season_handler = _FakeHandler()
+        return board, str(path)
+
+    def test_preempts_when_enabled_and_nfl_is_live(self, tmp_path):
+        board, path = self._board(tmp_path, {'nfl_preempt_mlb': True}, live=True)
+        assert board._nfl_preempts(config_path=path) is True
+
+    def test_does_not_preempt_when_option_is_off(self, tmp_path):
+        board, path = self._board(
+            tmp_path, {'nfl_preempt_mlb': False}, live=True)
+        assert board._nfl_preempts(config_path=path) is False
+
+    def test_does_not_preempt_when_no_nfl_game_is_live(self, tmp_path):
+        board, path = self._board(
+            tmp_path, {'nfl_preempt_mlb': True}, live=False)
+        assert board._nfl_preempts(config_path=path) is False
+
+    def test_defaults_to_off_when_key_is_absent(self, tmp_path):
+        board, path = self._board(tmp_path, {}, live=True)
+        assert board._nfl_preempts(config_path=path) is False
+
+    def test_missing_config_file_does_not_preempt(self, tmp_path):
+        board, _ = self._board(tmp_path, {'nfl_preempt_mlb': True}, live=True)
+        assert board._nfl_preempts(
+            config_path=str(tmp_path / 'nope.json')) is False

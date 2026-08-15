@@ -131,6 +131,19 @@ class CubsScoreboard:
                         # we just fall through and will re-enter on the next iteration.
                         continue
 
+                    # Football-first mode: a live NFL game takes the screen
+                    # the way a live MLB game normally would.
+                    if self._nfl_preempts():
+                        logger.info(
+                            "NFL game live and nfl_preempt_mlb set - "
+                            "NFL takes over the display")
+                        self.manager.set_status('NFL game')
+                        self.off_season_handler.bears_display.display_bears_info(
+                            loop_until_final=True)
+                        if is_shutdown_requested():
+                            break
+                        continue
+
                     if self.is_off_season():
                         logger.info(
                             "Off-season detected - entering off-season display mode")
@@ -199,6 +212,26 @@ class CubsScoreboard:
                 return json.load(f).get('display_mode', 'auto')
         except Exception:
             return 'auto'
+
+    def _nfl_preempts(self, config_path: str = '/home/pi/config.json') -> bool:
+        """True when the user wants football first and an NFL game is live.
+
+        Off by default, so existing boards keep MLB priority. Any failure
+        returns False, which leaves normal MLB routing in charge.
+        """
+        try:
+            with open(config_path, 'r') as f:
+                if not json.load(f).get('nfl_preempt_mlb', False):
+                    return False
+        except Exception:
+            return False
+
+        try:
+            return (self.off_season_handler.bears_display.live_game()
+                    is not None)
+        except Exception as e:
+            logger.error(f"NFL preempt check failed: {e}")
+            return False
 
     def process_game_cycle(self) -> None:
         """Process one complete game cycle"""
