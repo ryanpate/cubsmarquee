@@ -413,12 +413,12 @@ class OffSeasonHandler:
         return self.bears_news if self.bears_news else []
 
     def _is_football_season(self):
+        """Football season is whatever the NFL schedule says.
+
+        Schedule-driven rather than month-driven, so preseason games count
+        exactly like regular season ones.
         """
-        Determine if it's currently football season
-        Bears season typically runs September through early February
-        """
-        month = pendulum.now().month
-        return month >= 9 or month <= 2  # Sept through Feb
+        return self.bears_display.has_game_within()
 
     def _is_golf_season(self):
         """

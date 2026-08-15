@@ -114,6 +114,17 @@ def format_kickoff_time(dt) -> str:
     return dt.format('h:mm A')
 
 
+def extended_month_gate() -> bool:
+    """Fallback season window when the schedule cannot be reached.
+
+    August through February, so preseason still counts. Used only when the
+    ESPN schedule is unavailable -- returning False there would silently
+    hide every NFL screen on a network blip.
+    """
+    month = pendulum.now().month
+    return month >= 8 or month <= 2
+
+
 class BearsDisplay:
     """Handles NFL game information display for the configured team"""
 
@@ -255,6 +266,35 @@ class BearsDisplay:
         except Exception as e:
             print(f"Error parsing Bears game: {e}")
             return None
+
+    def has_game_within(self, days_back: int = 3, days_ahead: int = 14) -> bool:
+        """True when the schedule holds a game in the recent past or near future.
+
+        This replaces a hardcoded month gate, so preseason, regular season
+        and playoffs all count without a code change. The window deliberately
+        stays narrow: ESPN publishes next season's schedule months ahead, and
+        a bare "are there any events?" test would light up NFL screens in
+        spring.
+        """
+        try:
+            if self._should_update_schedule():
+                self._fetch_bears_schedule()
+            if not self.bears_data:
+                return extended_month_gate()
+
+            now = pendulum.now('America/Chicago')
+            window_start = now.subtract(days=days_back)
+            window_end = now.add(days=days_ahead)
+
+            for event in self.bears_data.get('events', []):
+                when = pendulum.parse(
+                    event['date']).in_timezone('America/Chicago')
+                if window_start <= when <= window_end:
+                    return True
+            return False
+        except Exception as e:
+            print(f"NFL schedule window check failed: {e}")
+            return extended_month_gate()
 
     def _get_current_scores(self, game, game_id):
         """
