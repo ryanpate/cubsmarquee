@@ -28,6 +28,26 @@ PIL_FONT_DIR = '/var/tmp/pil_fonts'
 
 _logger = get_logger("scoreboard")
 
+# The bitmap fonts are latin-1 only - PIL raises UnicodeEncodeError above
+# U+00FF and the BDF has no glyph either. RSS headlines and the admin custom
+# message routinely carry typographic punctuation, so fold it down to the
+# ASCII equivalent. Substitutions are one character wide: tickers place each
+# character at index * char_width, so a longer result would shift the scroll.
+_BITMAP_TEXT_MAP = str.maketrans({
+    '‘': "'", '’': "'", '‚': "'", '‛': "'",
+    '′': "'", '“': '"', '”': '"', '„': '"',
+    '″': '"', '–': '-', '—': '-', '―': '-',
+    '−': '-', '…': '.', '•': '*',
+})
+
+
+def to_bitmap_text(text: str) -> str:
+    """Fold text down to what a latin-1 bitmap font can render"""
+    return ''.join(
+        ch if ord(ch) < 256 else '?'
+        for ch in text.translate(_BITMAP_TEXT_MAP)
+    )
+
 
 class ScoreboardManager:
     """Manages the LED scoreboard display and game state"""
@@ -622,6 +642,7 @@ class ScoreboardManager:
             print(f"Font {font_name} not found")
             return
 
+        text = to_bitmap_text(text)
         color = graphics.Color(*color_tuple)
         graphics.DrawText(self.canvas, font, x, y, color, text)
 
