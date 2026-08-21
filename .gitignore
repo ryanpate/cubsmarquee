@@ -28,3 +28,6 @@ Thumbs.db
 *.tmp
 /tmp/
 flight_previews/
+
+# Claude Code worktrees
+.claude/worktrees/
