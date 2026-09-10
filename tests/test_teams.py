@@ -572,8 +572,8 @@ class TestNflScreenParity:
         bears = self._card_skeleton(monkeypatch, {})
         chiefs = self._card_skeleton(monkeypatch, {'nfl_team': 'chiefs'})
         assert bears == chiefs
-        # both used the logo layout: two 16x16 logo placements
-        logo_calls = [c for c in bears if c[0] == 'image' and c[3] == (16, 16)]
+        # both used the logo layout: two 20x20 logo placements
+        logo_calls = [c for c in bears if c[0] == 'image' and c[3] == (20, 20)]
         assert len(logo_calls) == 2
 
 

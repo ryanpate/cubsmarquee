@@ -859,9 +859,9 @@ class BearsDisplay:
                         or opponent['team']['displayName']).upper()
             opp_line = f'{vs_at} {opp_name}'
 
-            team_logo = self._get_team_logo(self.nfl_team.abbrev, 16)
+            team_logo = self._get_team_logo(self.nfl_team.abbrev, 20)
             opp_logo = self._get_team_logo(
-                opponent['team'].get('abbreviation', ''), 16)
+                opponent['team'].get('abbreviation', ''), 20)
             use_logos = team_logo is not None and opp_logo is not None
 
             kickoff = pendulum.parse(game['date']).in_timezone('America/Chicago')
@@ -884,10 +884,10 @@ class BearsDisplay:
                 if use_logos:
                     self.manager.draw_text('ultra_micro', 36, 18,
                                            (150, 150, 150), 'UP NEXT')
-                    self.manager.set_image(team_logo, 13, 18)
+                    self.manager.set_image(team_logo, 8, 14)
                     self.manager.draw_text(
-                        'tiny_bold', 43, 28, self.TEXT_WHITE, vs_at)
-                    self.manager.set_image(opp_logo, 67, 18)
+                        'tiny_bold', 43, 27, self.TEXT_WHITE, vs_at)
+                    self.manager.set_image(opp_logo, 68, 14)
 
                     x = max(0, (96 - len(date_line) * Fonts.CHAR_WIDTH_TINY) // 2)
                     self.manager.draw_text('tiny', x, 40,
