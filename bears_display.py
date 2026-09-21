@@ -74,6 +74,34 @@ def extract_week(event: dict) -> int | None:
     return (event.get('week') or {}).get('number')
 
 
+def _score_pair(team_score, opp_score) -> tuple[int | None, int | None]:
+    """Both scores as ints, or (None, None) when either will not parse."""
+    try:
+        return int(float(team_score)), int(float(opp_score))
+    except (ValueError, TypeError):
+        return None, None
+
+
+def extract_linescores(competitor: dict) -> list[str]:
+    """Per-quarter points for one ESPN competitor, as display strings.
+
+    Periods past the fourth sum into a single trailing OT column so the
+    box score never outgrows the five columns the panel has room for."""
+    periods = competitor.get('linescores') or []
+    values = []
+    for period in periods:
+        display = period.get('displayValue')
+        if display is not None:
+            values.append(str(display))
+        else:
+            values.append(str(int(float(period.get('value', 0)))))
+
+    if len(values) > 4:
+        overtime = sum(int(v) for v in values[4:])
+        values = values[:4] + [str(overtime)]
+    return values
+
+
 def format_countdown(seconds: float) -> str:
     """Format seconds until kickoff as '2D 14H', '3H 22M', or '22M'"""
     total_minutes = int(seconds // 60)
@@ -162,6 +190,8 @@ class BearsDisplay:
         self.ACCENT: RGBColor = self.nfl_team.accent_color
         self.TEXT_WHITE: RGBColor = Colors.WHITE
         self.TEXT_GRAY: RGBColor = (170, 170, 170)
+        # Brighter than pure red, which goes muddy against navy on the panel
+        self.LOSS_RED: RGBColor = (220, 60, 60)
 
         # Team logos keyed by (abbrev, size); None = file missing
         self._logo_cache: dict[tuple[str, int], Image.Image | None] = {}
@@ -427,6 +457,8 @@ class BearsDisplay:
                 'opp_score': opp_score,
                 'opponent_abbr': opponent_abbr,
                 'opponent_name': opponent_name,
+                'team_linescores': extract_linescores(bears),
+                'opp_linescores': extract_linescores(opponent),
                 'possession': situation['possession'],
                 'down_distance': situation['down_distance'],
                 'is_red_zone': situation['is_red_zone'],
@@ -462,8 +494,11 @@ class BearsDisplay:
         key = (abbrev, size)
         if key not in self._logo_cache:
             try:
-                logo = Image.open(f'./logos/nfl/{abbrev}.png').convert(
-                    'RGBA').resize((size, size), Image.LANCZOS)
+                logo = Image.open(f'./logos/nfl/{abbrev}.png').convert('RGBA')
+                # Sources are 20x20; resampling below that is what made the
+                # crests mushy, so only resize when the size differs.
+                if logo.size != (size, size):
+                    logo = logo.resize((size, size), Image.LANCZOS)
                 flat = Image.new('RGB', (size, size), self.PRIMARY)
                 flat.paste(logo, (0, 0), logo)
                 self._logo_cache[key] = flat
@@ -471,32 +506,54 @@ class BearsDisplay:
                 self._logo_cache[key] = None
         return self._logo_cache[key]
 
-    def _draw_score_row(self, score_data):
-        """Both scores on one row, each side with a 14x14 logo when the
-        file exists; a missing logo falls back to today's text-only row
-        for that side. Positions are a starting point for on-hardware
-        iteration."""
-        team_score = score_data['bears_score']
-        opp_score = score_data['opp_score']
+    def _draw_score_row(self, score_data, logo_size=14, logo_x=7,
+                        font='small_bold', char_width=Fonts.CHAR_WIDTH_SMALL,
+                        baseline=24, dim_loser=False):
+        """Both scores on one row, each side with a crest when the file
+        exists; a missing logo falls back to a text-only row for that side.
+
+        `logo_size` 20 draws the crests at their native resolution (the
+        final screen); 14 keeps the live screen's smaller row, which leaves
+        the possession dots at x3/x91 clear. Scores are mirrored about the
+        panel centre so a two-digit score stays balanced."""
+        team_score = str(score_data['bears_score'])
+        opp_score = str(score_data['opp_score'])
         opp_abbr = score_data['opponent_abbr']
 
-        team_logo = self._get_team_logo(self.nfl_team.abbrev, 14)
+        team_color = self.TEXT_WHITE
+        opp_color = self.TEXT_WHITE
+        if dim_loser:
+            team_int, opp_int = _score_pair(team_score, opp_score)
+            if team_int is not None and team_int != opp_int:
+                if team_int < opp_int:
+                    team_color = self.TEXT_GRAY
+                else:
+                    opp_color = self.TEXT_GRAY
+
+        right_x = 96 - logo_size - logo_x
+
+        # Scores mirrored about the centre gap, each backing off from it
+        gap = 4
+        team_text_x = 48 - gap - len(team_score) * char_width
+        opp_text_x = 48 + gap
+
+        team_logo = self._get_team_logo(self.nfl_team.abbrev, logo_size)
         if team_logo is not None:
-            self.manager.set_image(team_logo, 7, 13)
-            self.manager.draw_text('small_bold', 24, 24,
-                                   self.TEXT_WHITE, f'{team_score}')
+            self.manager.set_image(team_logo, logo_x, 13)
+            self.manager.draw_text(font, team_text_x, baseline,
+                                   team_color, team_score)
         else:
             self.manager.draw_text(
-                'small_bold', 8, 24, self.TEXT_WHITE,
+                font, 8, baseline, team_color,
                 f'{self.nfl_team.abbrev} {team_score}')
 
-        opp_logo = self._get_team_logo(opp_abbr, 14)
+        opp_logo = self._get_team_logo(opp_abbr, logo_size)
         if opp_logo is not None:
-            self.manager.draw_text('small_bold', 56, 24,
-                                   self.TEXT_WHITE, f'{opp_score}')
-            self.manager.set_image(opp_logo, 75, 13)
+            self.manager.draw_text(font, opp_text_x, baseline,
+                                   opp_color, opp_score)
+            self.manager.set_image(opp_logo, right_x, 13)
         else:
-            self.manager.draw_text('small_bold', 52, 24, self.TEXT_WHITE,
+            self.manager.draw_text(font, 52, baseline, opp_color,
                                    f'{opp_abbr} {opp_score}')
 
     def display_bears_info(self, duration=180, loop_until_final=False,
@@ -810,39 +867,117 @@ class BearsDisplay:
             x = max(0, (96 - len(line) * Fonts.CHAR_WIDTH_MICRO) // 2)
             self.manager.draw_text('micro', x, 47, self.TEXT_GRAY, line)
 
+    # Box score geometry: labelled grid, result badge to its right.
+    # Three rows need a 7px pitch to stay legible and y33-47 only holds
+    # two, so the quarter header sits at y33 - in the band beside the
+    # crests that the score text leaves empty. The grid is anchored by
+    # its right edge (BOX_GRID_RIGHT) so an OT column grows leftward
+    # into the label gap instead of crowding the badge.
+    BOX_LABEL_X = 2
+    BOX_GRID_RIGHT = 69
+    BOX_ROW_Y = (33, 40, 47)
+    BADGE_X = 72
+    BADGE_W = 22
+
     def _draw_final_content(self, score_data, frame_count):
-        """Draw the final-score screen with a win celebration"""
-        bears_score = score_data['bears_score']
-        opp_score = score_data['opp_score']
+        """Draw the final-score screen: native crests, mirrored scores, a
+        quarter-by-quarter box score, and a result badge beside it."""
+        team_lines = score_data.get('team_linescores') or []
+        opp_lines = score_data.get('opp_linescores') or []
+        has_box = bool(team_lines) and bool(opp_lines)
 
-        self._draw_score_row(score_data)
+        self._draw_score_row(
+            score_data,
+            logo_size=20, logo_x=2, font='standard_bold',
+            char_width=Fonts.CHAR_WIDTH_STANDARD, baseline=27,
+            dim_loser=True)
 
-        try:
-            bears_int = int(float(bears_score))
-            opp_int = int(float(opp_score))
-        except (ValueError, TypeError):
-            bears_int = opp_int = None
-
-        if bears_int is None:
-            pass
-        elif bears_int > opp_int:
-            # Alternate orange/white every second (frames are 0.5s)
-            message = f'{self.nfl_team.short_name.upper()} WIN!'
-            if (frame_count // 2) % 2 == 0:
-                color = self.ACCENT
-            else:
-                color = self.TEXT_WHITE
-            x = max(0, (96 - len(message) * Fonts.CHAR_WIDTH_TINY) // 2)
-            self.manager.draw_text('tiny_bold', x, 37, color, message)
-        elif bears_int < opp_int:
-            self.manager.draw_text('tiny_bold', 38, 37, (200, 0, 0), 'LOSS')
+        if has_box:
+            self._draw_box_score(score_data, team_lines, opp_lines)
+            self._draw_result_badge(score_data, frame_count,
+                                    x=self.BADGE_X, centered=False)
         else:
-            message = 'TIE'
-            x = max(0, (96 - len(message) * Fonts.CHAR_WIDTH_TINY) // 2)
-            self.manager.draw_text('tiny_bold', x, 37, self.TEXT_WHITE, message)
+            # No linescores in the payload - fall back to the plain stack
+            self._draw_result_badge(score_data, frame_count, x=0,
+                                    centered=True)
 
-        x = max(0, (96 - 5 * Fonts.CHAR_WIDTH_MICRO) // 2)
-        self.manager.draw_text('micro', x, 46, self.ACCENT, 'FINAL')
+    def _draw_box_score(self, score_data, team_lines, opp_lines):
+        """Quarter grid: header row, then one row per team.
+
+        Digits are ultra_micro - micro's 4x6 zero carries a slash that
+        reads as 'A' on the panel and its N passes for an H, where
+        tom-thumb stays clean at both."""
+        columns = max(len(team_lines), len(opp_lines))
+        headers = [str(q + 1) for q in range(min(columns, 4))]
+        if columns > 4:
+            headers.append('OT')
+        # The grid is anchored to its right edge against the badge, so an
+        # OT column grows leftward into the label gap rather than
+        # squeezing the pitch that keeps '3 14' from reading as '314'.
+        pitch = 12 if columns <= 4 else 11
+
+        def cell_x(index, text):
+            """Right-align within the column, so a 2-digit score keeps a
+            gap from its neighbour instead of reading as one number."""
+            width = len(text) * Fonts.CHAR_WIDTH_ULTRA_MICRO
+            right = self.BOX_GRID_RIGHT - (columns - 1 - index) * pitch
+            return right - width
+
+        head_y, team_y, opp_y = self.BOX_ROW_Y
+        for i, head in enumerate(headers):
+            self.manager.draw_text('ultra_micro', cell_x(i, head),
+                                   head_y, self.ACCENT, head)
+
+        # tiny's 5px letters keep MIN from reading as MIM, and four
+        # columns leave room for them. An OT column does not, so those
+        # rows fall back to the narrower tom-thumb label.
+        label_font = 'tiny' if columns <= 4 else 'ultra_micro'
+
+        rows = ((self.nfl_team.abbrev, team_lines, team_y),
+                (score_data['opponent_abbr'], opp_lines, opp_y))
+        for label, values, y in rows:
+            self.manager.draw_text(label_font, self.BOX_LABEL_X, y,
+                                   self.TEXT_GRAY, label.upper())
+            for i, value in enumerate(values):
+                self.manager.draw_text(
+                    'ultra_micro', cell_x(i, value), y,
+                    self.TEXT_WHITE, value)
+
+    def _draw_result_badge(self, score_data, frame_count, x, centered):
+        """WIN/LOSS/TIE over FINAL, either in the badge slot or centered"""
+        team_int, opp_int = _score_pair(score_data['bears_score'],
+                                        score_data['opp_score'])
+
+        result = None
+        if team_int is None:
+            pass
+        elif team_int > opp_int:
+            # Alternate orange/white every second (frames are 0.5s)
+            color = self.ACCENT if (frame_count // 2) % 2 == 0 else self.TEXT_WHITE
+            result = ('WIN!', color)
+        elif team_int < opp_int:
+            result = ('LOSS', self.LOSS_RED)
+        else:
+            result = ('TIE', self.TEXT_WHITE)
+
+        if centered:
+            if result:
+                text, color = result
+                rx = max(0, (96 - len(text) * Fonts.CHAR_WIDTH_TINY) // 2)
+                self.manager.draw_text('tiny_bold', rx, 37, color, text)
+            fx = max(0, (96 - 5 * Fonts.CHAR_WIDTH_TINY) // 2)
+            self.manager.draw_text('tiny', fx, 46, self.ACCENT, 'FINAL')
+            return
+
+        if result:
+            text, color = result
+            rx = x + max(0, (self.BADGE_W - len(text) * Fonts.CHAR_WIDTH_TINY) // 2)
+            self.manager.draw_text('tiny_bold', rx, 40, color, text)
+        # ultra_micro, not tiny: 20px instead of 25px keeps the badge clear
+        # of the box score, and tom-thumb's N stays readable where micro's
+        # would pass for an H.
+        fx = x + (self.BADGE_W - 5 * Fonts.CHAR_WIDTH_ULTRA_MICRO) // 2
+        self.manager.draw_text('ultra_micro', fx, 47, self.ACCENT, 'FINAL')
 
     def _display_next_game(self, game, duration):
         """Display the next upcoming Bears game as a structured card"""

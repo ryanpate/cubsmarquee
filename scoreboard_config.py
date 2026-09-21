@@ -166,6 +166,7 @@ class Fonts:
     CHAR_WIDTH_SMALL: int = 6
     CHAR_WIDTH_TINY: int = 5
     CHAR_WIDTH_MICRO: int = 4
+    CHAR_WIDTH_ULTRA_MICRO: int = 4  # tom-thumb: 3px glyph + 1px advance
 
 
 # User config file, written by the admin panel

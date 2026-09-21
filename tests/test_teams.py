@@ -330,11 +330,11 @@ class TestBearsDisplayTheming:
         assert d.PRIMARY == (227, 24, 55)
         assert d.ACCENT == (255, 184, 28)
 
-    def test_win_message_strings(self, monkeypatch):
+    def test_final_badge_reads_win(self, monkeypatch):
+        """The badge slot is 34px, so it carries 'WIN!' for every pack -
+        the team name is on the header and the box score row label."""
         from unittest.mock import MagicMock
-        for config, expected in (
-                ({}, 'BEARS WIN!'),
-                ({'nfl_team': 'chiefs'}, 'CHIEFS WIN!')):
+        for config in ({}, {'nfl_team': 'chiefs'}):
             d = self._make_display(monkeypatch, config)
             d.manager = MagicMock()
             d._draw_final_content(
@@ -342,7 +342,22 @@ class TestBearsDisplayTheming:
                  'opponent_abbr': 'GB'}, frame_count=0)
             drawn = [call.args[4] for call in
                      d.manager.draw_text.call_args_list]
+            assert 'WIN!' in drawn
+
+    def test_final_box_score_labels_rows_with_the_pack_abbrev(self, monkeypatch):
+        from unittest.mock import MagicMock
+        for config, expected in (({}, 'CHI'), ({'nfl_team': 'chiefs'}, 'KC')):
+            d = self._make_display(monkeypatch, config)
+            d.manager = MagicMock()
+            d._draw_final_content(
+                {'bears_score': '21', 'opp_score': '14',
+                 'opponent_abbr': 'GB',
+                 'team_linescores': ['7', '0', '7', '7'],
+                 'opp_linescores': ['0', '7', '0', '7']}, frame_count=0)
+            drawn = [call.args[4] for call in
+                     d.manager.draw_text.call_args_list]
             assert expected in drawn
+            assert 'GB' in drawn
 
 
 class TestLiveGameRunAnimations:
