@@ -74,6 +74,18 @@ def extract_week(event: dict) -> int | None:
     return (event.get('week') or {}).get('number')
 
 
+def _centred_x(text: str, char_width: int, span: int = 96,
+               origin: int = 0) -> int:
+    """X that centres `text` by its ink width within `span` from `origin`.
+
+    Every glyph cell carries a blank trailing column for letter spacing,
+    so the drawn ink is one pixel narrower than len(text) * char_width.
+    Centring on the advance width therefore lands a string half a pixel
+    to a full pixel left of true centre - visible at this scale."""
+    ink = len(text) * char_width - 1
+    return origin + max(0, (span - ink) // 2)
+
+
 def _score_pair(team_score, opp_score) -> tuple[int | None, int | None]:
     """Both scores as ints, or (None, None) when either will not parse."""
     try:
@@ -400,7 +412,14 @@ class BearsDisplay:
 
             # For today's games, always fetch from scoreboard to get most current status
             # This ensures we get final scores and status updates immediately
-            if not bears_has_score or not opp_has_score or status in ['STATUS_IN_PROGRESS', 'STATUS_SCHEDULED']:
+            # The schedule endpoint never carries `linescores` - only the
+            # scoreboard does - so a FINAL game must refetch too or the box
+            # score silently falls back to the plain card. A final screen
+            # calls this once, so that is one extra request, not one a frame.
+            needs_linescores = (status == 'STATUS_FINAL'
+                                and not bears.get('linescores'))
+            if (not bears_has_score or not opp_has_score or needs_linescores
+                    or status in ['STATUS_IN_PROGRESS', 'STATUS_SCHEDULED']):
                 print("Fetching from scoreboard for current status...")
                 live_game = self._fetch_live_scores(game_id)
 
@@ -963,20 +982,22 @@ class BearsDisplay:
         if centered:
             if result:
                 text, color = result
-                rx = max(0, (96 - len(text) * Fonts.CHAR_WIDTH_TINY) // 2)
+                rx = _centred_x(text, Fonts.CHAR_WIDTH_TINY)
                 self.manager.draw_text('tiny_bold', rx, 37, color, text)
-            fx = max(0, (96 - 5 * Fonts.CHAR_WIDTH_TINY) // 2)
+            fx = _centred_x('FINAL', Fonts.CHAR_WIDTH_TINY)
             self.manager.draw_text('tiny', fx, 46, self.ACCENT, 'FINAL')
             return
 
         if result:
             text, color = result
-            rx = x + max(0, (self.BADGE_W - len(text) * Fonts.CHAR_WIDTH_TINY) // 2)
+            rx = _centred_x(text, Fonts.CHAR_WIDTH_TINY,
+                            span=self.BADGE_W, origin=x)
             self.manager.draw_text('tiny_bold', rx, 40, color, text)
         # ultra_micro, not tiny: 20px instead of 25px keeps the badge clear
         # of the box score, and tom-thumb's N stays readable where micro's
         # would pass for an H.
-        fx = x + (self.BADGE_W - 5 * Fonts.CHAR_WIDTH_ULTRA_MICRO) // 2
+        fx = _centred_x('FINAL', Fonts.CHAR_WIDTH_ULTRA_MICRO,
+                        span=self.BADGE_W, origin=x)
         self.manager.draw_text('ultra_micro', fx, 47, self.ACCENT, 'FINAL')
 
     def _display_next_game(self, game, duration):

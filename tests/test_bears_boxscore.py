@@ -95,3 +95,81 @@ def test_box_score_cells_never_touch_on_a_row():
                 assert next_left - prev_right >= 2, (
                     f'row y={y} columns collide at {prev_right}->{next_left} '
                     f'with {length} columns')
+
+
+def test_centred_x_centres_on_ink_not_advance():
+    """The last glyph's cell carries a blank trailing column, so centring
+    on len*char_width lands text up to a pixel left of true centre."""
+    import bears_display as bd
+
+    # FINAL in tiny: 5 chars x 5px advance = 25, but only 24px of ink.
+    # Centred on ink it spans 36..59, whose midpoint is the panel's 47.5.
+    x = bd._centred_x('FINAL', 5)
+    assert x == 36
+    assert (x + (x + 24 - 1)) / 2 == 47.5
+
+
+def test_centred_x_offsets_into_a_sub_region():
+    import bears_display as bd
+
+    # A 22px badge starting at x=72 centres 'LOSS' (19px of ink) at 73
+    assert bd._centred_x('LOSS', 5, span=22, origin=72) == 73
+
+
+def _competitor_full(abbrev, score, linescores=None):
+    c = {'team': {'abbreviation': abbrev, 'displayName': abbrev},
+         'score': {'displayValue': score}}
+    if linescores is not None:
+        c['linescores'] = [{'value': float(v)} for v in linescores]
+    return c
+
+
+def _final_game(with_linescores):
+    """A schedule event for a finished game. The real schedule endpoint
+    omits linescores entirely; only the scoreboard endpoint carries them."""
+    home = _competitor_full('CHI', '3', ['0', '3', '0', '0'] if with_linescores else None)
+    away = _competitor_full('MIN', '9', ['3', '0', '3', '3'] if with_linescores else None)
+    return {'id': '401', 'date': '2026-09-20T17:00Z', 'competitions': [{
+        'competitors': [home, away],
+        'status': {'type': {'name': 'STATUS_FINAL', 'state': 'post',
+                            'shortDetail': 'Final'}}}]}
+
+
+def test_final_game_refetches_the_scoreboard_for_missing_linescores(monkeypatch):
+    """The schedule payload has scores but no linescores, so without a
+    refetch the box score silently degrades to the plain card."""
+    from unittest.mock import MagicMock
+    import teams
+    import bears_display
+    monkeypatch.setattr(teams, 'load_user_config', lambda: {})
+    d = bears_display.BearsDisplay(MagicMock())
+
+    schedule_game = _final_game(with_linescores=False)
+    calls = []
+
+    def fake_fetch(game_id):
+        calls.append(game_id)
+        return _final_game(with_linescores=True)
+
+    monkeypatch.setattr(d, '_fetch_live_scores', fake_fetch)
+    result = d._get_current_scores(schedule_game, '401')
+
+    assert calls == ['401'], 'expected one scoreboard refetch'
+    assert result['team_linescores'] == ['0', '3', '0', '0']
+    assert result['opp_linescores'] == ['3', '0', '3', '3']
+
+
+def test_final_game_with_linescores_already_present_does_not_refetch(monkeypatch):
+    from unittest.mock import MagicMock
+    import teams
+    import bears_display
+    monkeypatch.setattr(teams, 'load_user_config', lambda: {})
+    d = bears_display.BearsDisplay(MagicMock())
+
+    calls = []
+    monkeypatch.setattr(d, '_fetch_live_scores',
+                        lambda gid: calls.append(gid) or None)
+    result = d._get_current_scores(_final_game(with_linescores=True), '401')
+
+    assert calls == [], 'a complete payload must not trigger a request'
+    assert result['team_linescores'] == ['0', '3', '0', '0']
