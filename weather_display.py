@@ -38,7 +38,47 @@ NWS_HEADERS = {'User-Agent': '(cubsmarquee LED scoreboard, cubsmarquee.local)'}
 # what is falling on THIS roof, so it outranks the station for precip.
 RAINVIEWER_MAPS_URL = 'https://api.rainviewer.com/public/weather-maps.json'
 RADAR_ZOOM = 7          # RainViewer's free tier stops here (~940m/pixel)
-RADAR_MIN_ALPHA = 128   # below this is the feathered halo around a cell
+RADAR_SCHEME = 2        # Universal Blue: the only palette the free tier serves
+RADAR_MIN_DBZ = 20      # below this is clear-air return, not precipitation
+RADAR_WINDOW = 2        # median over a (2*2+1)^2 pixel box, ~5 km across
+
+# Universal Blue, dBZ 10..69, from RainViewer's published colour table
+# (rainviewer.com/files/rainviewer_api_colors_table.csv). The rain ramp
+# starts with translucent tan below 15 dBZ -- insects, birds and dust in
+# clear air, which blanket central Illinois around dusk -- then runs
+# light blue, dark blue, yellow, orange, red, magenta (hail), white.
+# Snow has its own cyan -> blue ramp. The free tier ignores the scheme
+# requested and always serves this one, so decode it exactly rather than
+# guessing from hue: tan reads as "yellowish", and magenta is hail, not snow.
+_RADAR_RAIN_HEX = (
+    'cec087 d2c48b d6c88f dacc93 ded097 88ddee 6cd1eb 51c5e8 '
+    '36bae5 1baee2 00a3e0 009ad5 0091ca 0088bf 007fb4 0077aa '
+    '0070a3 00699c 006295 005b8e 005588 005180 004e78 004a70 '
+    '004768 ffee00 ffe000 ffd200 ffc500 ffb700 ffaa00 ff9f00 '
+    'ff9500 ff8b00 ff8100 ff4400 f23600 e62800 d91b00 cd0d00 '
+    'c10000 a80000 8f0000 760000 5d0000 ffaaff ff9fff ff95ff '
+    'ff8bff ff81ff ff77ff ff6cff ff62ff ff58ff ff4eff ffffff')
+_RADAR_SNOW_HEX = (
+    'bfffff b8f8ff b2f2ff abebff a5e5ff 9fdfff 98d8ff 92d2ff '
+    '8bcbff 85c5ff 7fbfff 78b8ff 72b2ff 6babff 65a5ff 5f9fff '
+    '5b9bff 5898ff 5595ff 5292ff 4f8fff 4b8bff 4888ff 4585ff '
+    '4282ff 3f7fff 3b7bff 3878ff 3575ff 3272ff 2f6fff 2b6bff '
+    '2868ff 2565ff 2262ff 1f5fff 1b5bff 1858ff 1555ff 1252ff '
+    '0f4fff 0c4bff 0948ff 0645ff 0242ff 003fff 003bff 0038ff '
+    '0035ff 0032ff 002fff 002bff 0028ff 0025ff 0022ff 001fff '
+    '001bff 0018ff 0015ff 0012ff')
+
+
+def _radar_palette() -> dict[tuple[int, int, int], tuple[int, bool]]:
+    palette: dict[tuple[int, int, int], tuple[int, bool]] = {}
+    for ramp, snow in ((_RADAR_RAIN_HEX, False), (_RADAR_SNOW_HEX, True)):
+        for dbz, h in enumerate(ramp.split(), start=10):
+            rgb = (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+            palette.setdefault(rgb, (dbz, snow))
+    return palette
+
+
+RADAR_PALETTE = _radar_palette()
 
 # Lightning never reaches the radar tile, and the nearest station reports
 # a nearby storm as VCTS, which NWS drops from its structured field. So
@@ -128,25 +168,57 @@ def radar_tile_xy(lat: float, lon: float, zoom: int) -> tuple[int, int, int, int
     return int(x), int(y), int((x - int(x)) * 256), int((y - int(y)) * 256)
 
 
+def radar_pixel_dbz(pixel: tuple[int, int, int, int]) -> tuple[int, bool] | None:
+    """Decode a Universal Blue pixel to (dBZ, is_snow), or None for no echo
+    (transparent, faint clear-air tan below the table, or a colour that is
+    not in the palette at all)."""
+    r, g, b, a = pixel
+    if a == 0:
+        return None
+    return RADAR_PALETTE.get((r, g, b))
+
+
 def radar_pixel_to_condition(
         pixel: tuple[int, int, int, int]) -> tuple[str, str] | None:
-    """Map a RainViewer colour-scheme-4 pixel to (condition, description).
+    """Map a Universal Blue pixel to (condition, description).
 
-    The scheme ramps blue -> yellow -> orange -> red as intensity rises,
-    with magenta for snow. Returns None where nothing is falling, so the
-    caller keeps whatever the station or model reported (radar cannot see
-    fog, and a dry pixel must not erase a real observation).
+    Returns None where nothing is falling, so the caller keeps whatever
+    the station or model reported (radar cannot see fog, and a dry pixel
+    must not erase a real observation).
     """
-    r, g, b, a = pixel
-    if a < RADAR_MIN_ALPHA:
+    decoded = radar_pixel_dbz(pixel)
+    if decoded is None or decoded[0] < RADAR_MIN_DBZ:
         return None
-    if r > 200 and b > 200:
+    dbz, snow = decoded
+    if snow:
         return 'Snow', 'radar: snow overhead'
-    if b > r:
+    if dbz < 30:
         return 'Drizzle', 'radar: light precipitation'
-    if g >= 183:
+    if dbz < 45:
         return 'Rain', 'radar: rain overhead'
     return 'Rain', 'radar: heavy rain overhead'
+
+
+def radar_area_to_condition(
+        image: Image.Image, px: int, py: int) -> tuple[str, str] | None:
+    """Condition from the median echo in a small box around (px, py).
+
+    Clear-air return is speckle: scattered pixels poke above the rain
+    threshold while their neighbours stay below it. Real precipitation
+    over a point is coherent across a few kilometres, so the median of
+    the box ignores the speckle without blunting an actual shower.
+    """
+    samples = []
+    for y in range(max(0, py - RADAR_WINDOW),
+                   min(image.height, py + RADAR_WINDOW + 1)):
+        for x in range(max(0, px - RADAR_WINDOW),
+                       min(image.width, px + RADAR_WINDOW + 1)):
+            pixel = image.getpixel((x, y))
+            decoded = radar_pixel_dbz(pixel)
+            dbz = decoded[0] if decoded else -1
+            samples.append((dbz, pixel))
+    samples.sort(key=lambda s: s[0])
+    return radar_pixel_to_condition(samples[len(samples) // 2][1])
 
 
 def miles_between(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -277,9 +349,10 @@ class WeatherDisplay:
             xt, yt, px, py = radar_tile_xy(lat, lon, RADAR_ZOOM)
             tile = retry_http_request(
                 f"{maps['host']}{frames[-1]['path']}"
-                f"/256/{RADAR_ZOOM}/{xt}/{yt}/4/0_1.png", timeout=10)
+                f"/256/{RADAR_ZOOM}/{xt}/{yt}/{RADAR_SCHEME}/0_1.png",
+                timeout=10)
             image = Image.open(io.BytesIO(tile.content)).convert('RGBA')
-            return radar_pixel_to_condition(image.getpixel((px, py)))
+            return radar_area_to_condition(image, px, py)
         except Exception as e:
             print(f"Radar unavailable: {e}")
             return None

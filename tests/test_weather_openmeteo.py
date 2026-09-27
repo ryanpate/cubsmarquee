@@ -291,32 +291,98 @@ class TestRadarTileMath:
 
 
 class TestRadarPalette:
+    """RainViewer's free tier serves Universal Blue whatever scheme is asked
+    for; these are exact entries from its published colour table."""
+
     def test_no_echo_is_no_opinion(self):
         from weather_display import radar_pixel_to_condition
         assert radar_pixel_to_condition((0, 0, 0, 0)) is None
 
-    def test_faint_smoothing_halo_is_not_rain(self):
+    def test_faint_clear_air_tan_is_not_rain(self):
         from weather_display import radar_pixel_to_condition
-        # RainViewer feathers a cell's edge with low-alpha pixels; counting
-        # those as rain would report precipitation next to every shower.
-        assert radar_pixel_to_condition((99, 97, 89, 20)) is None
+        assert radar_pixel_to_condition((99, 97, 89, 20)) is None      # -10
+        # 13 dBZ: the tan that blanketed central Illinois on 2026-09-27
+        # under a partly cloudy sky, and used to read as "Rain"
+        assert radar_pixel_to_condition((218, 204, 147, 180)) is None
+        assert radar_pixel_to_condition((222, 208, 151, 190)) is None  # 14
 
-    def test_blue_ramp_is_light_precipitation(self):
+    def test_lightest_blue_is_below_the_rain_threshold(self):
         from weather_display import radar_pixel_to_condition
-        assert radar_pixel_to_condition((0, 71, 104, 255))[0] == 'Drizzle'
-        assert radar_pixel_to_condition((136, 221, 238, 255))[0] == 'Drizzle'
+        assert radar_pixel_to_condition((136, 221, 238, 255)) is None  # 15
+        assert radar_pixel_to_condition((27, 174, 226, 255)) is None   # 19
 
-    def test_yellow_through_red_is_rain(self):
+    def test_blue_ramp_from_20_dbz_is_light_precipitation(self):
         from weather_display import radar_pixel_to_condition
+        assert radar_pixel_to_condition((0, 163, 224, 255))[0] == 'Drizzle'
+        assert radar_pixel_to_condition((0, 91, 142, 255))[0] == 'Drizzle'
+
+    def test_dark_blue_through_red_is_rain(self):
+        from weather_display import radar_pixel_to_condition
+        assert radar_pixel_to_condition((0, 71, 104, 255))[0] == 'Rain'
         assert radar_pixel_to_condition((255, 238, 0, 255))[0] == 'Rain'
         # the exact orange measured over the house during the storm
         assert radar_pixel_to_condition((255, 149, 0, 255))[0] == 'Rain'
-        assert radar_pixel_to_condition((255, 68, 0, 255))[0] == 'Rain'
+        assert radar_pixel_to_condition((255, 68, 0, 255))[1] == \
+            'radar: heavy rain overhead'
         assert radar_pixel_to_condition((93, 0, 0, 255))[0] == 'Rain'
 
-    def test_magenta_is_snow(self):
+    def test_magenta_is_a_hail_core_not_snow(self):
         from weather_display import radar_pixel_to_condition
-        assert radar_pixel_to_condition((255, 139, 255, 255))[0] == 'Snow'
+        assert radar_pixel_to_condition((255, 139, 255, 255))[0] == 'Rain'
+
+    def test_snow_ramp_is_snow(self):
+        from weather_display import radar_pixel_to_condition
+        assert radar_pixel_to_condition((127, 191, 255, 255))[0] == 'Snow'
+        assert radar_pixel_to_condition((0, 63, 255, 255))[0] == 'Snow'
+        # faint snow below the threshold is no opinion either
+        assert radar_pixel_to_condition((171, 235, 255, 255)) is None
+
+    def test_unknown_colour_is_no_opinion(self):
+        from weather_display import radar_pixel_to_condition
+        assert radar_pixel_to_condition((12, 200, 12, 255)) is None
+
+
+class TestRadarArea:
+    def test_live_clear_air_tile_is_not_rain(self):
+        # Tile 7/32/48 captured 2026-09-27 ~22:00Z: Open-Meteo code 2,
+        # KSPI/KAAA/KDEC clear, yet tan and light-blue return covered
+        # most of the tile and the marquee showed rain.
+        import os
+        from PIL import Image
+        from weather_display import radar_area_to_condition
+        path = os.path.join(os.path.dirname(__file__), 'data',
+                            'rainviewer_clear_air_2026-09-27.png')
+        image = Image.open(path).convert('RGBA')
+        assert radar_area_to_condition(image, 42, 146) is None
+        # nor anywhere within ~19 km of the house (a genuine light echo
+        # sits on the tile's far west edge, so the whole tile is not dry)
+        for py in range(126, 167):
+            for px in range(22, 63):
+                assert radar_area_to_condition(image, px, py) is None, \
+                    (px, py)
+
+    def test_isolated_speckle_is_ignored(self):
+        from PIL import Image
+        from weather_display import radar_area_to_condition
+        image = Image.new('RGBA', (256, 256), (218, 204, 147, 180))
+        image.putpixel((42, 146), (0, 145, 202, 255))
+        image.putpixel((43, 146), (0, 145, 202, 255))
+        assert radar_area_to_condition(image, 42, 146) is None
+
+    def test_coherent_shower_is_reported(self):
+        from PIL import Image
+        from weather_display import radar_area_to_condition
+        image = Image.new('RGBA', (256, 256), (0, 0, 0, 0))
+        for y in range(140, 152):
+            for x in range(38, 48):
+                image.putpixel((x, y), (255, 149, 0, 255))
+        assert radar_area_to_condition(image, 42, 146)[0] == 'Rain'
+
+    def test_window_clamps_at_the_tile_edge(self):
+        from PIL import Image
+        from weather_display import radar_area_to_condition
+        image = Image.new('RGBA', (256, 256), (255, 149, 0, 255))
+        assert radar_area_to_condition(image, 0, 255)[0] == 'Rain'
 
 
 class TestRadarOverride:
