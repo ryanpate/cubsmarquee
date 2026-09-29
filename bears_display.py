@@ -532,9 +532,8 @@ class BearsDisplay:
         exists; a missing logo falls back to a text-only row for that side.
 
         `logo_size` 20 draws the crests at their native resolution (the
-        final screen); 14 keeps the live screen's smaller row, which leaves
-        the possession dots at x3/x91 clear. Scores are mirrored about the
-        panel centre so a two-digit score stays balanced."""
+        final screen). Scores are mirrored about the panel centre so a
+        two-digit score stays balanced."""
         team_score = str(score_data['bears_score'])
         opp_score = str(score_data['opp_score'])
         opp_abbr = score_data['opponent_abbr']
@@ -713,32 +712,48 @@ class BearsDisplay:
 
     def _draw_live_content(self, score_data, frame_count):
         """Draw scores, possession dot, down & distance, and clock (y12-47)"""
-        # Score row
-        self._draw_score_row(score_data)
-
-        # Orange possession dot beside the team with the ball
+        # Each team gets its own half: [dot] logo score | [dot] logo score
         possession = score_data.get('possession')
-        if possession == 'team':
-            self._draw_possession_dot(3)
-        elif possession == 'opponent':
-            self._draw_possession_dot(91)
+        self._draw_live_team(
+            0, self.nfl_team.abbrev, score_data['bears_score'],
+            possession == 'team')
+        self._draw_live_team(
+            48, score_data['opponent_abbr'], score_data['opp_score'],
+            possession == 'opponent')
 
-        # Down & distance; alert-colored and blinking in the red zone
+        # Down & distance (ink y29-34, clear of the crests ending at y26);
+        # alert-colored in the red zone
         down_distance = score_data.get('down_distance')
         if down_distance:
             if score_data.get('is_red_zone'):
-                color = self._red_zone_alert_color() if frame_count % 2 == 0 else None
+                color = self._red_zone_alert_color()
             else:
                 color = self.TEXT_WHITE
-            if color:
-                x = max(0, (96 - len(down_distance) * Fonts.CHAR_WIDTH_TINY) // 2)
-                self.manager.draw_text('tiny', x, 33, color, down_distance)
+            x = max(0, (96 - len(down_distance) * Fonts.CHAR_WIDTH_TINY) // 2)
+            self.manager.draw_text('tiny', x, 35, color, down_distance)
 
-        # Quarter / clock
+        # Quarter / clock (ink y36-40, above the play-scroll strip)
         game_time = score_data.get('game_time') or ''
         if game_time:
             x = max(0, (96 - len(game_time) * Fonts.CHAR_WIDTH_MICRO) // 2)
-            self.manager.draw_text('micro', x, 39, self.ACCENT, game_time)
+            self.manager.draw_text('micro', x, 41, self.ACCENT, game_time)
+
+    def _draw_live_team(self, half_x, abbrev, score, has_ball):
+        """One team's half of the live score row: possession dot, 14px
+        crest, then the score beside it. A missing crest falls back to
+        the abbreviation in its place."""
+        score = str(score)
+        logo_x = half_x + 12
+        if has_ball:
+            self._draw_possession_dot(half_x + 7)
+        logo = self._get_team_logo(abbrev, 14)
+        if logo is not None:
+            self.manager.set_image(logo, logo_x, 13)
+            self.manager.draw_text('small_bold', logo_x + 17, 24,
+                                   self.TEXT_WHITE, score)
+        else:
+            self.manager.draw_text('small_bold', logo_x, 24,
+                                   self.TEXT_WHITE, f'{abbrev} {score}')
 
     def _draw_possession_dot(self, x):
         """Draw a 3x3 orange football dot at the given x, beside the score row"""
@@ -793,13 +808,13 @@ class BearsDisplay:
         return (255, 60, 60)
 
     def _scroll_last_play(self, text):
-        """Scroll a play description once across the bottom strip (y40-47)"""
+        """Scroll a play description once across the bottom strip (y41-47)"""
         original = self.manager.get_frame_copy()
         snapshot = original.copy()
 
         # Clear the strip to plain navy so the text scrolls over clean rows
         pixels = snapshot.load()
-        for y in range(40, 48):
+        for y in range(41, 48):
             for x in range(96):
                 pixels[x, y] = self.PRIMARY
 
@@ -811,7 +826,7 @@ class BearsDisplay:
         scroll_x = 96
         while scroll_x + text_width >= 0:
             self.manager.set_image(snapshot, 0, 0)
-            self.manager.draw_text('micro', scroll_x, 46,
+            self.manager.draw_text('micro', scroll_x, 47,
                                    self.TEXT_WHITE, text)
             self.manager.swap_canvas()
             time.sleep(scroll_delay)
