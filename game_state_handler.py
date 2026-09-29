@@ -411,6 +411,10 @@ class GameStateHandler:
                 game_data = self.manager.get_schedule()
                 if self._should_transition_state(game_data, game_index):
                     break
+                # A live NFL game takes the screen while MLB is idle
+                nfl = getattr(self, 'off_season_handler', None)
+                if nfl is not None and nfl.nfl_fills_idle_screen():
+                    break
 
             self.manager.draw_text(
                 'medium_bold', int(self.scroll_position),

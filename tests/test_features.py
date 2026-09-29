@@ -1152,6 +1152,7 @@ class TestGameOverInterleave:
             'opponent': Image.new('RGBA', (26, 26)),
         }
         handler.off_season_handler = Mock()
+        handler.off_season_handler.nfl_fills_idle_screen.return_value = False
         return handler
 
     def _run_one_cycle(self, monkeypatch):
@@ -1200,6 +1201,24 @@ class TestGameOverInterleave:
         handler, captured, fake_pendulum = self._run_one_cycle(monkeypatch)
 
         fake_pendulum.date = '2026-07-10'
+        assert captured['callback']() is True
+
+    def test_live_nfl_game_ends_the_game_over_loop(self, monkeypatch) -> None:
+        # The final is shown once, then the screen goes to the NFL game
+        # instead of the post-game rotation
+        handler = self._handler(monkeypatch, _FakePendulum())
+        handler.off_season_handler.nfl_fills_idle_screen.return_value = True
+        handler.display_game_over([{'doubleheader': 'N'}], 0, 12345)
+
+        assert any('FINAL' in str(c)
+                   for c in handler.manager.draw_text.call_args_list)
+        handler.off_season_handler._display_rotation_cycle.assert_not_called()
+
+    def test_callback_signals_exit_when_nfl_goes_live(self, monkeypatch) -> None:
+        handler, captured, fake_pendulum = self._run_one_cycle(monkeypatch)
+
+        fake_pendulum.date = '2026-07-09'  # still game day
+        handler.off_season_handler.nfl_fills_idle_screen.return_value = True
         assert captured['callback']() is True
 
 

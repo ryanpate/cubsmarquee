@@ -575,13 +575,15 @@ class BearsDisplay:
                                    f'{opp_abbr} {opp_score}')
 
     def display_bears_info(self, duration=180, loop_until_final=False,
-                           force_scheduled=False):
+                           force_scheduled=False, yield_to=None):
         """Display NFL game information.
 
         loop_until_final: keep the live game on screen until it ends,
             mirroring how MLB owns the display (preempt mode).
         force_scheduled: show today's game as an upcoming card instead of
             live scores, because MLB currently owns the day.
+        yield_to: optional callable, polled at each live-score refresh;
+            returning True hands the screen back (an MLB game started).
         """
         # Fetch schedule if needed
         if self._should_update_schedule():
@@ -599,13 +601,15 @@ class BearsDisplay:
                 self._display_next_game(todays_game, duration)
             else:
                 self._display_game_day(
-                    todays_game, duration, loop_until_final=loop_until_final)
+                    todays_game, duration, loop_until_final=loop_until_final,
+                    yield_to=yield_to)
         else:
             next_game = self._get_next_game()
             if next_game:
                 self._display_next_game(next_game, duration)
 
-    def _display_game_day(self, game, duration, loop_until_final=False):
+    def _display_game_day(self, game, duration, loop_until_final=False,
+                          yield_to=None):
         """Display today's Bears game with live score updates"""
         start_time = time.time()
         last_score_update = 0
@@ -679,6 +683,9 @@ class BearsDisplay:
                               f"Opponent: {score_data['opp_score']}")
 
                     last_score_update = current_time
+
+                    if yield_to is not None and yield_to():
+                        break
 
                 win_gif_played = self._maybe_play_win_celebration(
                     score_data, win_gif_played)

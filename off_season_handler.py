@@ -460,6 +460,40 @@ class OffSeasonHandler:
         self._mlb_status_checked = now
         return live
 
+    def mlb_game_active(self) -> bool:
+        """True while an MLB game owns the screen: pre-game and warmup
+        through the last out, delays and replay reviews included. Any
+        failure returns True, which leaves normal MLB routing in charge."""
+        try:
+            for game in self.manager.get_schedule() or []:
+                status = game.get('status', '')
+                if (status in ('Pre-Game', 'Warmup', 'In Progress')
+                        or status.startswith('Delayed')
+                        or 'challenge' in status.lower()
+                        or 'review' in status.lower()):
+                    return True
+        except Exception as e:
+            print(f"MLB active check failed: {e}")
+            return True
+        return False
+
+    def nfl_fills_idle_screen(self) -> bool:
+        """True during the MLB season when an NFL game is live and no MLB
+        game is on, so the live football screen should take the display.
+
+        NFL is checked first: on a day without an NFL game that is a
+        cached-schedule lookup, so the MLB call is only made on game days.
+        """
+        if not self.config.get('enable_bears', True):
+            return False
+        try:
+            if self.bears_display.live_game() is None:
+                return False
+        except Exception as e:
+            print(f"NFL live check failed: {e}")
+            return False
+        return not self.mlb_game_active()
+
     def _nfl_takeover_pending(self) -> bool:
         """True when a live NFL game should take the screen from MLB.
 

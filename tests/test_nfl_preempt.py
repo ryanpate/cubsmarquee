@@ -120,7 +120,7 @@ class TestTakeoverRouting:
         monkeypatch.setattr(d, '_should_update_schedule', lambda: False)
         monkeypatch.setattr(
             d, '_display_game_day',
-            lambda g, dur, loop_until_final=False: calls.append(
+            lambda g, dur, loop_until_final=False, yield_to=None: calls.append(
                 ('game_day', loop_until_final)))
         monkeypatch.setattr(
             d, '_display_next_game',
@@ -668,3 +668,132 @@ class TestOffSeasonTakeoverHandoff:
         state = self._run_content(monkeypatch, h, season_started=True)
         assert state['cycles'] == 1
         assert state['season_checks'] == 1
+
+
+class TestNflFillsIdleScreen:
+    """During the MLB season a live NFL game takes the screen whenever no
+    MLB game is on, without needing nfl_preempt_mlb."""
+
+    def _handler(self, schedule, nfl_live=True, config=None):
+        import off_season_handler as osh
+
+        class _FakeManager:
+            def get_schedule(self_inner):
+                if isinstance(schedule, Exception):
+                    raise schedule
+                return schedule
+
+        class _FakeBears:
+            def live_game(self_inner):
+                return {'id': '401'} if nfl_live else None
+
+        h = osh.OffSeasonHandler.__new__(osh.OffSeasonHandler)
+        h.manager = _FakeManager()
+        h.bears_display = _FakeBears()
+        h.config = config or {}
+        return h
+
+    def test_mlb_off_day_shows_nfl(self):
+        # Next Cubs game is tomorrow: the schedule lists it as Scheduled
+        assert self._handler([{'status': 'Scheduled'}]).nfl_fills_idle_screen()
+
+    def test_mlb_game_already_over_shows_nfl(self):
+        assert self._handler([{'status': 'Final'}]).nfl_fills_idle_screen()
+
+    def test_postponed_mlb_game_shows_nfl(self):
+        assert self._handler([{'status': 'Postponed'}]).nfl_fills_idle_screen()
+
+    def test_live_mlb_game_keeps_the_screen(self):
+        for status in ('In Progress', 'Warmup', 'Pre-Game',
+                       'Delayed: Rain', 'Manager challenge: Force play'):
+            h = self._handler([{'status': status}])
+            assert h.nfl_fills_idle_screen() is False, status
+
+    def test_live_game_in_second_half_of_doubleheader_keeps_the_screen(self):
+        h = self._handler([{'status': 'Final'}, {'status': 'In Progress'}])
+        assert h.nfl_fills_idle_screen() is False
+
+    def test_no_live_nfl_game_leaves_mlb_alone(self):
+        h = self._handler([{'status': 'Scheduled'}], nfl_live=False)
+        assert h.nfl_fills_idle_screen() is False
+
+    def test_nfl_disabled_leaves_mlb_alone(self):
+        h = self._handler([{'status': 'Scheduled'}],
+                          config={'enable_bears': False})
+        assert h.nfl_fills_idle_screen() is False
+
+    def test_mlb_schedule_error_leaves_mlb_in_charge(self):
+        # Unknown MLB state must not blank a Cubs game for football
+        h = self._handler(RuntimeError('statsapi down'))
+        assert h.nfl_fills_idle_screen() is False
+
+
+class TestIdleScreenTakeover:
+    def _board(self, monkeypatch, fills):
+        import main as m
+        calls = []
+
+        class _FakeBears:
+            def display_bears_info(self_inner, **kwargs):
+                calls.append(kwargs)
+
+        class _FakeHandler:
+            bears_display = _FakeBears()
+
+            def nfl_fills_idle_screen(self_inner):
+                return fills
+
+            def mlb_game_active(self_inner):
+                return False
+
+        from unittest.mock import Mock
+        board = m.CubsScoreboard.__new__(m.CubsScoreboard)
+        board.manager = Mock()
+        board.manager.get_schedule.return_value = []
+        board.allstar_display = Mock()
+        board.allstar_display.asg_is_live.return_value = False
+        board.allstar_display.derby_is_live.return_value = False
+        board.off_season_handler = _FakeHandler()
+        monkeypatch.setattr(board, '_sleep_interruptibly', lambda s: None)
+        board.process_game_cycle()
+        return board, calls
+
+    def test_nfl_game_shown_until_final_yielding_to_mlb(self, monkeypatch):
+        board, calls = self._board(monkeypatch, fills=True)
+        assert len(calls) == 1
+        assert calls[0]['loop_until_final'] is True
+        assert calls[0]['yield_to'] == board.off_season_handler.mlb_game_active
+        board.manager.get_schedule.assert_not_called()
+
+    def test_normal_cycle_when_nfl_does_not_fill(self, monkeypatch):
+        board, calls = self._board(monkeypatch, fills=False)
+        assert calls == []
+        board.manager.get_schedule.assert_called_once()
+
+
+class TestTakeoverYieldsToMlb:
+    def test_mlb_starting_ends_the_nfl_takeover(self, monkeypatch):
+        import bears_display as bd
+        d = bd.BearsDisplay.__new__(bd.BearsDisplay)
+        d.manager = _CeilingManager(500)
+        d.live_update_interval = 0
+        monkeypatch.setattr(
+            d, '_get_current_scores',
+            lambda g, gid: _score_dict('STATUS_IN_PROGRESS', 'in'))
+        monkeypatch.setattr(
+            d, '_maybe_play_win_celebration', lambda sd, played: played)
+        monkeypatch.setattr(d, '_draw_sweater_header', lambda: None)
+        monkeypatch.setattr(d, '_draw_live_content', lambda *a, **k: None)
+        monkeypatch.setattr(d, '_scroll_last_play', lambda text: None)
+        monkeypatch.setattr(bd.time, 'sleep', lambda s: None)
+        monkeypatch.setattr(bd, 'is_shutdown_requested', lambda: False)
+        polls = {'n': 0}
+
+        def mlb_started():
+            polls['n'] += 1
+            return polls['n'] >= 3
+
+        d._display_game_day(_event(0), 999999, loop_until_final=True,
+                            yield_to=mlb_started)
+        assert polls['n'] == 3
+        assert d.manager.iters <= 3

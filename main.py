@@ -72,6 +72,8 @@ class CubsScoreboard:
 
             # Give live handler access to off-season content for post-game cycling
             self.live_handler.off_season_handler = self.off_season_handler
+            # ...and the next-game screen a way to yield to a live NFL game
+            self.state_handler.off_season_handler = self.off_season_handler
 
             self.current_game_index: int = 0
 
@@ -281,6 +283,23 @@ class CubsScoreboard:
                     self.allstar_display.display_derby_final(60)
                 return
 
+            # No MLB game on right now but an NFL game is live: show the
+            # football game until it ends or an MLB game reaches pre-game.
+            # Checked here rather than in run() because the postponed,
+            # cancelled and game-over branches re-enter this method directly.
+            if self.off_season_handler.nfl_fills_idle_screen():
+                logger.info("NFL game live and no MLB game on - showing NFL game")
+                self.manager.set_status('NFL game')
+                started = time.time()
+                self.off_season_handler.bears_display.display_bears_info(
+                    loop_until_final=True,
+                    yield_to=self.off_season_handler.mlb_game_active)
+                # Same floor as the nfl_preempt_mlb branch in run(): the
+                # call can return at once without drawing anything
+                self._sleep_interruptibly(
+                    NFL_PREEMPT_MIN_SECONDS - (time.time() - started))
+                return
+
             # Get current schedule
             game_data: list[dict[str, Any]] = self.manager.get_schedule()
 
@@ -457,12 +476,13 @@ class CubsScoreboard:
                 game_data, self.current_game_index, cycle_content=True)
             if not is_shutdown_requested():
                 # Abort the rotation between segments if the All-Star
-                # Game or Home Run Derby goes live so the takeover
-                # kicks in promptly
+                # Game, Home Run Derby or an NFL game goes live so the
+                # takeover kicks in promptly
                 self.off_season_handler._display_rotation_cycle(
                     between_callback=lambda: (
                         self.allstar_display.asg_is_live()
-                        or self.allstar_display.derby_is_live()))
+                        or self.allstar_display.derby_is_live()
+                        or self.off_season_handler.nfl_fills_idle_screen()))
             return
 
         # Get lineup only for statuses whose displays actually scroll it

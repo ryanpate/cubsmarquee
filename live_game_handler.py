@@ -923,15 +923,21 @@ class LiveGameHandler:
                 time.sleep(GameConfig.GAME_OVER_WAIT_TIME)
                 break
 
+            # A live NFL game takes the screen once the final has shown
+            has_handler = getattr(self, 'off_season_handler', None) is not None
+            if has_handler and self.off_season_handler.nfl_fills_idle_screen():
+                break
+
             # Cycle through off-season content (weather, Bears, PGA, etc.)
             # with the game over screen between every segment
-            has_handler = getattr(self, 'off_season_handler', None) is not None
             logger.info(f"Game over loop: has off_season_handler={has_handler}, cubs_won={cubs_won}")
             if has_handler:
                 try:
                     logger.info("Starting post-game rotation with game-over interludes")
                     self.off_season_handler._display_rotation_cycle(
-                        between_callback=show_game_over_interlude)
+                        between_callback=lambda: (
+                            show_game_over_interlude()
+                            or self.off_season_handler.nfl_fills_idle_screen()))
                     logger.info("Post-game rotation cycle completed")
                 except Exception as e:
                     logger.error(f"Error in post-game rotation cycle: {e}")
