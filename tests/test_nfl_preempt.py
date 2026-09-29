@@ -797,3 +797,46 @@ class TestTakeoverYieldsToMlb:
                             yield_to=mlb_started)
         assert polls['n'] == 3
         assert d.manager.iters <= 3
+
+
+class TestHalftimeDrawsLiveScreen:
+    """ESPN reports halftime as STATUS_HALFTIME with state 'in'. Keying
+    the live layout on the STATUS_IN_PROGRESS name alone put the pre-game
+    'TODAY VS' card up for the whole break (cubsmarquee, 2026-09-28)."""
+
+    def _drawn(self, monkeypatch, score):
+        import bears_display as bd
+        d = bd.BearsDisplay.__new__(bd.BearsDisplay)
+        d.manager = _CeilingManager(500)
+        d.live_update_interval = 0
+        drawn = []
+        monkeypatch.setattr(d, '_get_current_scores', lambda g, gid: score)
+        monkeypatch.setattr(
+            d, '_maybe_play_win_celebration', lambda sd, played: played)
+        monkeypatch.setattr(d, '_draw_sweater_header', lambda: None)
+        monkeypatch.setattr(d, '_draw_live_content',
+                            lambda *a, **k: drawn.append('live'))
+        monkeypatch.setattr(d, '_draw_pregame_content',
+                            lambda *a, **k: drawn.append('pregame'))
+        monkeypatch.setattr(d, '_scroll_last_play', lambda text: None)
+        monkeypatch.setattr(bd.time, 'sleep', lambda s: None)
+        monkeypatch.setattr(bd, 'is_shutdown_requested', lambda: False)
+        polls = {'n': 0}
+
+        def stop_after_two():
+            polls['n'] += 1
+            return polls['n'] > 2
+
+        d._display_game_day(_event(0), 999999, loop_until_final=True,
+                            yield_to=stop_after_two)
+        return drawn
+
+    def test_halftime_draws_the_live_screen(self, monkeypatch):
+        drawn = self._drawn(
+            monkeypatch, _score_dict('STATUS_HALFTIME', 'in'))
+        assert drawn and set(drawn) == {'live'}
+
+    def test_end_of_quarter_draws_the_live_screen(self, monkeypatch):
+        drawn = self._drawn(
+            monkeypatch, _score_dict('STATUS_END_PERIOD', 'in'))
+        assert drawn and set(drawn) == {'live'}

@@ -86,6 +86,14 @@ def _centred_x(text: str, char_width: int, span: int = 96,
     return origin + max(0, (span - ink) // 2)
 
 
+def _is_live(score_data: dict) -> bool:
+    """True while the game is underway. ESPN's state is 'in' through
+    halftime and end-of-quarter breaks, whose status names are not
+    STATUS_IN_PROGRESS; the name is the fallback when state is absent."""
+    return (score_data.get('state') == 'in'
+            or score_data.get('status') == 'STATUS_IN_PROGRESS')
+
+
 def _score_pair(team_score, opp_score) -> tuple[int | None, int | None]:
     """Both scores as ints, or (None, None) when either will not parse."""
     try:
@@ -418,7 +426,10 @@ class BearsDisplay:
             # calls this once, so that is one extra request, not one a frame.
             needs_linescores = (status == 'STATUS_FINAL'
                                 and not bears.get('linescores'))
+            # state 'in' also covers halftime and end-of-quarter, whose
+            # status names are not STATUS_IN_PROGRESS
             if (not bears_has_score or not opp_has_score or needs_linescores
+                    or state == 'in'
                     or status in ['STATUS_IN_PROGRESS', 'STATUS_SCHEDULED']):
                 print("Fetching from scoreboard for current status...")
                 live_game = self._fetch_live_scores(game_id)
@@ -658,7 +669,7 @@ class BearsDisplay:
                 # again, so 'status' could never advance to final and the
                 # loop's only exit would be process shutdown.
                 current_time = time.time()
-                if ((loop_until_final or score_data['status'] == 'STATUS_IN_PROGRESS') and
+                if ((loop_until_final or _is_live(score_data)) and
                         current_time - last_score_update >= self.live_update_interval):
                     print("Updating live scores...")
                     updated_data = self._get_current_scores(game, game_id)
@@ -694,7 +705,7 @@ class BearsDisplay:
                 self._draw_sweater_header()
 
                 status = score_data['status']
-                if status == 'STATUS_IN_PROGRESS':
+                if _is_live(score_data):
                     self._draw_live_content(score_data, frame_count)
                 elif status == 'STATUS_FINAL':
                     self._draw_final_content(score_data, frame_count)
@@ -706,7 +717,7 @@ class BearsDisplay:
                 time.sleep(0.5)
 
                 # Scroll each new play description once across the bottom strip
-                if status == 'STATUS_IN_PROGRESS':
+                if _is_live(score_data):
                     play = score_data.get('last_play')
                     if play and play != last_scrolled_play:
                         self._scroll_last_play(play)
