@@ -476,13 +476,18 @@ class CubsScoreboard:
                 game_data, self.current_game_index, cycle_content=True)
             if not is_shutdown_requested():
                 # Abort the rotation between segments if the All-Star
-                # Game, Home Run Derby or an NFL game goes live so the
-                # takeover kicks in promptly
+                # Game, Home Run Derby or an NFL game goes live, or this
+                # game reaches pre-game, so that display kicks in promptly
+                # instead of after the full ~30 minute rotation. A failed
+                # MLB check keeps rotating so an outage can't cut every
+                # rotation short.
                 self.off_season_handler._display_rotation_cycle(
                     between_callback=lambda: (
                         self.allstar_display.asg_is_live()
                         or self.allstar_display.derby_is_live()
-                        or self.off_season_handler.nfl_fills_idle_screen()))
+                        or self.off_season_handler.nfl_fills_idle_screen()
+                        or self.off_season_handler.mlb_game_active(
+                            on_error=False)))
             return
 
         # Get lineup only for statuses whose displays actually scroll it

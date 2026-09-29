@@ -460,10 +460,11 @@ class OffSeasonHandler:
         self._mlb_status_checked = now
         return live
 
-    def mlb_game_active(self) -> bool:
+    def mlb_game_active(self, on_error: bool = True) -> bool:
         """True while an MLB game owns the screen: pre-game and warmup
         through the last out, delays and replay reviews included. Any
-        failure returns True, which leaves normal MLB routing in charge."""
+        failure returns on_error -- True by default, which leaves normal
+        MLB routing in charge."""
         try:
             for game in self.manager.get_schedule() or []:
                 status = game.get('status', '')
@@ -474,7 +475,7 @@ class OffSeasonHandler:
                     return True
         except Exception as e:
             print(f"MLB active check failed: {e}")
-            return True
+            return on_error
         return False
 
     def nfl_fills_idle_screen(self) -> bool:

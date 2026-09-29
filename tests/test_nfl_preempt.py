@@ -840,3 +840,54 @@ class TestHalftimeDrawsLiveScreen:
         drawn = self._drawn(
             monkeypatch, _score_dict('STATUS_END_PERIOD', 'in'))
         assert drawn and set(drawn) == {'live'}
+
+
+class TestHybridRotationYieldsToMlbPregame:
+    """In display_mode=offseason a Scheduled game runs a ~30 minute content
+    rotation; it must stop as soon as the game reaches pre-game rather than
+    leaving warmup off the screen until the rotation ends (2026-09-29)."""
+
+    def _captured_callback(self, monkeypatch, schedule):
+        import main as m
+        import off_season_handler as osh
+        from unittest.mock import Mock
+
+        class _FakeManager:
+            def get_schedule(self_inner):
+                if isinstance(schedule, Exception):
+                    raise schedule
+                return schedule
+
+        handler = osh.OffSeasonHandler.__new__(osh.OffSeasonHandler)
+        handler.manager = _FakeManager()
+        handler.config = {'enable_bears': False}
+        captured = {}
+        handler._display_rotation_cycle = (
+            lambda between_callback=None:
+                captured.setdefault('callback', between_callback))
+
+        board = m.CubsScoreboard.__new__(m.CubsScoreboard)
+        board.manager = Mock()
+        board.state_handler = Mock()
+        board.allstar_display = Mock()
+        board.allstar_display.asg_is_live.return_value = False
+        board.allstar_display.derby_is_live.return_value = False
+        board.off_season_handler = handler
+        board.current_game_index = 0
+        monkeypatch.setattr(board, '_get_display_mode', lambda: 'offseason')
+        board.route_by_status([{'status': 'Scheduled'}], 1, 'Scheduled')
+        return captured['callback']
+
+    def test_pregame_aborts_rotation(self, monkeypatch):
+        for status in ('Pre-Game', 'Warmup', 'In Progress', 'Delayed: Rain'):
+            cb = self._captured_callback(monkeypatch, [{'status': status}])
+            assert cb() is True, status
+
+    def test_still_scheduled_keeps_rotating(self, monkeypatch):
+        cb = self._captured_callback(monkeypatch, [{'status': 'Scheduled'}])
+        assert cb() is False
+
+    def test_schedule_error_keeps_rotating(self, monkeypatch):
+        # An outage must not cut every rotation short after one segment
+        cb = self._captured_callback(monkeypatch, RuntimeError('statsapi down'))
+        assert cb() is False
