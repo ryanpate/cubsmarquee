@@ -160,6 +160,13 @@ def metar_to_condition(
     return None
 
 
+def sky_is_clear(cloud_layers: list[dict[str, Any]]) -> bool:
+    """True when a station reports no cloud (CLR/SKC) -- nothing can be
+    falling. An empty list is a missing report, not a clear sky."""
+    return bool(cloud_layers) and all(
+        layer.get('amount') in ('CLR', 'SKC') for layer in cloud_layers)
+
+
 def radar_tile_xy(lat: float, lon: float, zoom: int) -> tuple[int, int, int, int]:
     """Web-Mercator (tile_x, tile_y, pixel_x, pixel_y) for a coordinate."""
     n = 2 ** zoom
@@ -318,26 +325,29 @@ class WeatherDisplay:
         return nearby
 
     def _station_observation(self, station_id):
-        """presentWeather array for a station"""
+        """Latest observation properties for a station"""
         observation = retry_http_request(
             f'{NWS_STATIONS_URL}/{station_id}/observations/latest',
             timeout=10, headers=NWS_HEADERS).json()
-        return observation['properties'].get('presentWeather') or []
+        return observation['properties']
 
     def _observed_condition(self, zip_code, lat, lon):
-        """Current condition from the nearest station's METAR, or None.
+        """(condition or None, sky_clear) from the nearest station's METAR.
 
-        None means "no opinion" -- the station is quiet, out of range, or
-        unreachable -- and the caller keeps the Open-Meteo condition.
+        A None condition means "no opinion" -- the station is quiet, out of
+        range, or unreachable -- and the caller keeps the Open-Meteo one.
+        sky_clear is True only when the station reports no cloud at all.
         """
         try:
             stations = self._nws_stations(zip_code, lat, lon)
             if not stations:
-                return None
-            return metar_to_condition(self._station_observation(stations[0][0]))
+                return None, False
+            observation = self._station_observation(stations[0][0])
+            return (metar_to_condition(observation.get('presentWeather') or []),
+                    sky_is_clear(observation.get('cloudLayers') or []))
         except Exception as e:
             print(f"NWS observation unavailable: {e}")
-            return None
+            return None, False
 
     def _radar_condition(self, lat, lon):
         """What the newest radar frame shows over this exact point, or None"""
@@ -364,7 +374,8 @@ class WeatherDisplay:
             for station_id, distance in stations[:THUNDER_STATIONS]:
                 if distance > THUNDER_RADIUS_MI:
                     break
-                present = self._station_observation(station_id)
+                present = self._station_observation(
+                    station_id).get('presentWeather') or []
                 if any(e.get('weather') == 'thunderstorms' for e in present):
                     print(f"Thunder reported at {station_id} "
                           f"({distance:.1f} mi)")
@@ -431,10 +442,12 @@ class WeatherDisplay:
             # predicted, in order of how local the evidence is: the model
             # grid, then the nearest station, then radar directly overhead,
             # then thunder close enough to be this storm.
-            observed = self._observed_condition(zip_code, lat, lon)
+            observed, sky_clear = self._observed_condition(zip_code, lat, lon)
             if observed:
                 condition, description = observed
-            radar = self._radar_condition(lat, lon)
+            # Nothing falls from a cloudless sky, so echo under one is the
+            # clear-air bloom around the KILX radar, not rain.
+            radar = None if sky_clear else self._radar_condition(lat, lon)
             if radar:
                 condition, description = radar
             if self._thunder_nearby(zip_code, lat, lon):

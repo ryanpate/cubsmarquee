@@ -30,7 +30,7 @@ class FakeBytesResponse:
 def _install_fake_openmeteo(monkeypatch, current_code=61, present_weather=(),
                             alerts=(), station='KSPI', nws_down=False,
                             radar=(0, 0, 0, 0), radar_down=False,
-                            thunder_at=()):
+                            thunder_at=(), cloud_layers=()):
     import weather_display as wd
     now = pendulum.now('UTC').start_of('hour')
     geo_payload = {'results': [
@@ -75,7 +75,8 @@ def _install_fake_openmeteo(monkeypatch, current_code=61, present_weather=(),
                 return FakeResponse({'properties': {
                     'presentWeather': _metar('thunderstorms')}})
             return FakeResponse({'properties': {
-                'presentWeather': list(present_weather)}})
+                'presentWeather': list(present_weather),
+                'cloudLayers': [{'amount': a} for a in cloud_layers]}})
         if 'alerts' in url:
             return FakeResponse({'features': [
                 {'properties': {'event': e}} for e in alerts]})
@@ -361,6 +362,18 @@ class TestRadarArea:
                 assert radar_area_to_condition(image, px, py) is None, \
                     (px, py)
 
+    def test_live_radar_bloom_tile_reads_as_light_precipitation(self):
+        # Tile 7/32/48 captured 2026-10-02 ~19:45Z under a cloudless sky:
+        # the bloom ringing KILX is coherent and above 20 dBZ, so no pixel
+        # filter can reject it -- only the station's clear sky can.
+        import os
+        from PIL import Image
+        from weather_display import radar_area_to_condition
+        path = os.path.join(os.path.dirname(__file__), 'data',
+                            'rainviewer_kilx_bloom_2026-10-02.png')
+        image = Image.open(path).convert('RGBA')
+        assert radar_area_to_condition(image, 42, 146)[0] == 'Drizzle'
+
     def test_isolated_speckle_is_ignored(self):
         from PIL import Image
         from weather_display import radar_area_to_condition
@@ -405,6 +418,26 @@ class TestRadarOverride:
         d = _make_display({'zip_code': '62563'})
         assert d._fetch_weather() is True
         assert d.weather_data['weather'][0]['main'] == 'Mist'
+
+    def test_radar_bloom_under_a_clear_sky_is_not_rain(self, monkeypatch):
+        # 2026-10-02 ~19:45Z: sunny, KSPI "Clear" (CLR), Open-Meteo code 0,
+        # but the clear-air bloom ringing the KILX radar put a coherent
+        # 20-25 dBZ field over the house and the marquee showed drizzle.
+        _install_fake_openmeteo(monkeypatch, current_code=0,
+                                present_weather=[], cloud_layers=['CLR'],
+                                radar=(0, 145, 202, 255))
+        d = _make_display({'zip_code': '62563'})
+        assert d._fetch_weather() is True
+        assert d.weather_data['weather'][0]['main'] == 'Clear'
+
+    def test_radar_still_wins_under_cloud(self, monkeypatch):
+        # The 2026-08-15 storm: KSPI had cloud, radar was orange overhead.
+        _install_fake_openmeteo(monkeypatch, current_code=3,
+                                present_weather=[], cloud_layers=['BKN'],
+                                radar=(255, 149, 0, 255))
+        d = _make_display({'zip_code': '62563'})
+        assert d._fetch_weather() is True
+        assert d.weather_data['weather'][0]['main'] == 'Rain'
 
     def test_unreachable_radar_falls_back_to_the_station(self, monkeypatch):
         _install_fake_openmeteo(monkeypatch, current_code=3,
