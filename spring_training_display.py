@@ -1,4 +1,4 @@
-"""Spring Training Countdown display for Cubs LED Scoreboard"""
+"""Spring Training Countdown display for the LED Scoreboard"""
 
 from __future__ import annotations
 
@@ -40,9 +40,10 @@ class SpringTrainingDisplay:
 
     def _load_header_image(self) -> Image.Image | None:
         """Load Spring Training header image"""
+        filename = os.path.basename(self.team.spring_training_path)
         image_paths = [
-            './spring_training.png',
-            '/home/pi/spring_training.png'
+            self.team.spring_training_path,
+            f'/home/pi/{filename}'
         ]
         for path in image_paths:
             if os.path.exists(path):

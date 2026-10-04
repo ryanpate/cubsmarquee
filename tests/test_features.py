@@ -1591,3 +1591,31 @@ class TestWrigleyClockSky:
         assert dusk_horizon[0] > dusk_horizon[2]    # dusk: warm horizon
         night_top, _ = colors('night', 'Clear')
         assert max(night_top) < 60                  # night: dark sky
+
+
+# ============================================================================
+# Spring Training header follows the active team
+# ============================================================================
+
+class TestSpringTrainingHeaderPerTeam:
+    def test_each_team_has_its_own_header_image(self) -> None:
+        import os
+        from teams import TEAMS
+
+        paths = {team.spring_training_path for team in TEAMS.values()}
+        assert len(paths) == len(TEAMS)
+        for path in paths:
+            assert os.path.exists(path), path
+
+    def test_header_loads_active_team_image(self) -> None:
+        from PIL import Image
+        import spring_training_display as std
+        from teams import TEAMS
+
+        display = std.SpringTrainingDisplay.__new__(std.SpringTrainingDisplay)
+        display.team = TEAMS['cardinals']
+        loaded = display._load_header_image()
+
+        expected = Image.open(TEAMS['cardinals'].spring_training_path)
+        assert loaded is not None
+        assert loaded.size == expected.size
