@@ -219,3 +219,34 @@ def test_save_config_round_trips_nfl_preempt(client, tmp_path):
 def test_nfl_preempt_defaults_to_off(client):
     import wifi_config_server as wcs
     assert wcs.load_config()['nfl_preempt_mlb'] is False
+
+
+def _nm_run(up_returncode):
+    """Fake subprocess.run for _connect_wifi_nm; records each nmcli call."""
+    from unittest.mock import MagicMock
+    calls = []
+
+    def run(cmd, **kwargs):
+        calls.append(cmd)
+        rc = up_returncode if ('up' in cmd and 'marquee-hotspot' not in cmd) else 0
+        return MagicMock(returncode=rc, stdout='', stderr='Secrets were required')
+    return run, calls
+
+
+def test_nm_connect_failure_brings_the_hotspot_back(client, monkeypatch):
+    # A mistyped password must not strand the unit with no hotspot and no WiFi
+    import wifi_config_server as wcs
+    run, calls = _nm_run(up_returncode=4)
+    monkeypatch.setattr(wcs.subprocess, 'run', run)
+    with wcs.app.test_request_context():
+        wcs._connect_wifi_nm('Home', 'wrongpass')
+    assert calls[-1][-2:] == ['up', 'marquee-hotspot']
+
+
+def test_nm_connect_success_leaves_the_hotspot_down(client, monkeypatch):
+    import wifi_config_server as wcs
+    run, calls = _nm_run(up_returncode=0)
+    monkeypatch.setattr(wcs.subprocess, 'run', run)
+    with wcs.app.test_request_context():
+        wcs._connect_wifi_nm('Home', 'rightpass')
+    assert not any(c[-2:] == ['up', 'marquee-hotspot'] for c in calls)

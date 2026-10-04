@@ -96,3 +96,29 @@ class TestSetupDisplayRunLoop:
         with patch("setup_display.needs_setup", return_value=True):
             with patch("setup_display.is_shutdown_requested", return_value=True):
                 display.run_until_configured()
+
+
+class TestHotspotContract:
+    """The on-screen instructions must match what the AP scripts actually do."""
+
+    SCRIPTS = ("wifi_manager.sh", "wifi_manager_nm.sh")
+
+    def _read(self, name):
+        from pathlib import Path
+        return (Path(__file__).resolve().parent.parent / name).read_text()
+
+    @pytest.mark.parametrize("script", SCRIPTS)
+    def test_every_ap_script_raises_the_flag_the_display_waits_for(self, script):
+        from setup_display import HOTSPOT_FLAG_PATH
+        src = self._read(script)
+        assert HOTSPOT_FLAG_PATH in src
+        assert "touch" in src
+
+    @pytest.mark.parametrize("script", SCRIPTS)
+    def test_message_names_the_ssid_password_and_ip_the_script_uses(self, script):
+        import re
+        from setup_display import SETUP_MESSAGE
+        src = self._read(script)
+        for var in ("AP_SSID", "AP_PASSWORD", "AP_IP"):
+            value = re.search(rf'^{var}="([^"]+)"', src, re.M).group(1)
+            assert value in SETUP_MESSAGE, f"{var}={value} missing from screen"

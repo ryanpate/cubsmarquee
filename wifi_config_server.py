@@ -2095,7 +2095,9 @@ def _connect_wifi_nm(ssid, password):
     subprocess.run(['sudo', 'nmcli', 'connection', 'down', 'marquee-hotspot'],
                    check=False, capture_output=True, timeout=20)
 
-    up = subprocess.run(['sudo', 'nmcli', 'connection', 'up', con_name],
+    # --wait makes nmcli give up before the subprocess timeout does, so a
+    # wrong password always reaches the hotspot restore below
+    up = subprocess.run(['sudo', 'nmcli', '--wait', '45', 'connection', 'up', con_name],
                         capture_output=True, text=True, timeout=60)
     hostname = get_hostname()
     if up.returncode == 0:
@@ -2103,6 +2105,11 @@ def _connect_wifi_nm(ssid, password):
             'success': True,
             'message': f'Connected to {ssid}! Admin page: http://{hostname}.local/admin'
         })
+    # Bring the hotspot back, or a mistyped password leaves the unit with no
+    # network and no way to retry short of a power cycle. Harmless if the
+    # hotspot was never up (profile missing: nmcli just fails).
+    subprocess.run(['sudo', 'nmcli', 'connection', 'up', 'marquee-hotspot'],
+                   check=False, capture_output=True, timeout=60)
     return jsonify({
         'success': True,
         'message': (f'Saved {ssid} but it has not connected yet '

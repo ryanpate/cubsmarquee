@@ -17,10 +17,14 @@ AP_IP="10.0.0.1"
 AP_CON="marquee-hotspot"
 WAIT_SECS=180          # matches the Bullseye behaviour; deliberate, not a guess
 SCAN_CACHE=/var/tmp/wifi_scan_cache_nm.txt
+# Flag read by setup_display.py: present only while the hotspot is broadcasting
+HOTSPOT_FLAG=/tmp/setup_hotspot_active
 
 log() { echo "[wifi-manager-nm] $*"; }
 
 command -v nmcli >/dev/null 2>&1 || { log "no nmcli, not a NetworkManager image"; exit 0; }
+
+rm -f "$HOTSPOT_FLAG"
 
 is_connected() {
     # "connected" means wlan0 has a NM connection that isn't our own hotspot
@@ -60,6 +64,7 @@ nmcli connection add type wifi ifname wlan0 con-name "$AP_CON" \
     || { log "ERROR: could not create hotspot profile"; exit 1; }
 
 if nmcli connection up "$AP_CON"; then
+    touch "$HOTSPOT_FLAG"
     log "hotspot up: SSID=${AP_SSID} password=${AP_PASSWORD}"
     log "connect to it, then open http://${AP_IP}/admin"
 else

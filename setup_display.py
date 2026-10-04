@@ -51,12 +51,12 @@ def is_shutdown_requested() -> bool:
         return False
 
 
-SETUP_MESSAGE = "Connect phone to WiFi: CubsMarquee-Setup  (password: gocubsgo2024)    Open: cubsmarquee.local/admin"
+SETUP_MESSAGE = "Connect phone to WiFi: CubsMarquee-Setup  (password: gocubsgo2024)    Then open 10.0.0.1 in a browser"
 HEADER_TEXT = "SETUP"
 
-# Written by wifi_manager.sh once hostapd is actually broadcasting; until then
-# the hotspot doesn't exist yet, so we show a "starting" notice instead of
-# instructions to join a network that isn't there.
+# Written by wifi_manager.sh / wifi_manager_nm.sh once the AP is actually
+# broadcasting; until then the hotspot doesn't exist yet, so we show a
+# "starting" notice instead of instructions to join a network that isn't there.
 HOTSPOT_FLAG_PATH = "/tmp/setup_hotspot_active"
 STARTING_LINES = ("Starting setup", "hotspot...")
 

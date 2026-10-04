@@ -3,7 +3,9 @@ Description=WiFi AP fallback for NetworkManager images
 # No Requires=avahi -- that caused a restart loop on the Bullseye units.
 After=NetworkManager.service wifi-recovery.service
 Requires=NetworkManager.service
-Before=cubs-scoreboard.service
+# No Before=cubs-scoreboard: this oneshot runs for up to 180s with no WiFi, and
+# ordering the scoreboard after it left the panel blank for that whole wait
+# instead of showing the "Starting setup hotspot..." screen.
 
 [Service]
 Type=oneshot
