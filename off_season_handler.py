@@ -40,6 +40,11 @@ class OffSeasonHandler:
     # cached upstream, so this keeps statsapi calls down.
     MLB_STATUS_TTL = 120
 
+    # Minimum time per off-season live-NFL pass. display_bears_info can
+    # return without drawing (a failed schedule fetch), and without a floor
+    # the loop would spin on the ESPN liveness check with a frozen panel.
+    NFL_LIVE_MIN_SECONDS = 30
+
     def __init__(self, scoreboard_manager: ScoreboardManager) -> None:
         """Initialize with reference to main scoreboard manager"""
         self.manager = scoreboard_manager
@@ -509,6 +514,16 @@ class OffSeasonHandler:
             print(f"NFL takeover check failed: {e}")
             return False
 
+    def _off_season_nfl_live(self) -> bool:
+        """True when NFL content is enabled and its game is live.
+
+        False under nfl_preempt_mlb, whose takeover the run loop owns.
+        """
+        if (not self.config.get('enable_bears', True)
+                or self.config.get('nfl_preempt_mlb', False)):
+            return False
+        return self.bears_display.live_game() is not None
+
     def _is_golf_season(self):
         """
         Determine if it's currently golf season
@@ -554,6 +569,20 @@ class OffSeasonHandler:
                 elif display_mode == 'message_only':
                     self._display_message_cycle()
                 else:  # auto mode
+                    # run() only reaches this loop in 'auto' once the MLB
+                    # season is over, so a live NFL game gets the whole
+                    # screen until it ends rather than one rotation slot.
+                    # no_games is left out: it can be forced mid-season,
+                    # where MLB keeps its priority.
+                    if display_mode == 'auto' and self._off_season_nfl_live():
+                        print("Live NFL game - showing it until final")
+                        started = time.time()
+                        self.bears_display.display_bears_info(
+                            loop_until_final=True)
+                        time.sleep(max(0, self.NFL_LIVE_MIN_SECONDS
+                                       - (time.time() - started)))
+                        continue
+
                     # Abort the rotation between segments when a live NFL
                     # game should take over, and hand control back to the
                     # run loop, whose preempt guard owns that display.
@@ -565,7 +594,11 @@ class OffSeasonHandler:
 
                     def _takeover_wanted():
                         takeover['pending'] = self._nfl_takeover_pending()
-                        return takeover['pending']
+                        # A kickoff mid-rotation also ends the cycle, so
+                        # the check above picks the game up next pass.
+                        return takeover['pending'] or (
+                            display_mode == 'auto'
+                            and self._off_season_nfl_live())
 
                     self._display_rotation_cycle(
                         between_callback=_takeover_wanted)

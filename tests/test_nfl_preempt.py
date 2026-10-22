@@ -652,10 +652,11 @@ class TestOffSeasonTakeoverHandoff:
         assert state['season_checks'] == 0
 
     def test_keeps_cycling_when_the_option_is_off(self, monkeypatch):
-        # Flag off: live_game must never even be called (it is an ESPN
-        # request between every rotation segment).
+        # Flag off and NFL disabled: live_game must never even be called
+        # (it is an ESPN request between every rotation segment).
         h = self._handler(
-            monkeypatch, {'zip_code': '60613', 'nfl_preempt_mlb': False},
+            monkeypatch, {'zip_code': '60613', 'nfl_preempt_mlb': False,
+                          'enable_bears': False},
             live=True, takeover_raises=True)
         state = self._run_content(monkeypatch, h, season_started=True)
         assert state['cycles'] == 1
@@ -668,6 +669,105 @@ class TestOffSeasonTakeoverHandoff:
         state = self._run_content(monkeypatch, h, season_started=True)
         assert state['cycles'] == 1
         assert state['season_checks'] == 1
+
+
+class TestOffSeasonAutoNflTakeover:
+    """In 'auto' the off-season loop only runs once the MLB season is over,
+    so a live NFL game gets the whole screen until it ends, with or without
+    nfl_preempt_mlb."""
+
+    def _handler(self, monkeypatch, config, live_checks):
+        """live_checks: successive live_game() results; the last repeats."""
+        import off_season_handler as osh
+        calls = {'live': 0, 'display': []}
+
+        class _FakeBears:
+            def live_game(self_inner):
+                i = min(calls['live'], len(live_checks) - 1)
+                calls['live'] += 1
+                return {'id': '401'} if live_checks[i] else None
+
+            def display_bears_info(self_inner, **kwargs):
+                calls['display'].append(kwargs)
+
+        h = osh.OffSeasonHandler.__new__(osh.OffSeasonHandler)
+        h.config = dict(config)
+        h.bears_display = _FakeBears()
+        h.last_season_check = None
+        h.season_check_interval = 86400
+        monkeypatch.setattr(h, '_load_config', lambda: dict(config))
+        return h, calls
+
+    def _run(self, monkeypatch, h, ceiling=5, on_rotation=None):
+        import off_season_handler as osh
+        state = {'cycles': 0, 'sleeps': []}
+        clock = {'t': 1000.0}
+
+        def fake_sleep(s):
+            state['sleeps'].append(s)
+            clock['t'] += s
+
+        monkeypatch.setattr(osh.time, 'sleep', fake_sleep)
+        monkeypatch.setattr(osh.time, 'time', lambda: clock['t'])
+
+        def fake_rotation(between_callback=None):
+            state['cycles'] += 1
+            if state['cycles'] > ceiling:
+                raise _LoopCeiling('off-season loop never returned')
+            if on_rotation is not None:
+                on_rotation()
+            if between_callback is not None:
+                state['aborted'] = between_callback()
+
+        monkeypatch.setattr(h, '_display_rotation_cycle', fake_rotation)
+        monkeypatch.setattr(h, '_should_check_season', lambda: True)
+        monkeypatch.setattr(h, '_check_season_started', lambda: True)
+        h.display_off_season_content()
+        return state
+
+    def test_live_game_shown_until_final_before_rotating(self, monkeypatch):
+        h, calls = self._handler(
+            monkeypatch, {'zip_code': '60613'}, live_checks=[True, False])
+        state = self._run(monkeypatch, h)
+        assert calls['display'] == [{'loop_until_final': True}]
+        # Game over: the normal rotation resumes
+        assert state['cycles'] == 1
+
+    def test_instant_return_still_dwells(self, monkeypatch):
+        # A failed schedule fetch returns without drawing; the pass must
+        # still take the floor instead of spinning on ESPN.
+        h, calls = self._handler(
+            monkeypatch, {'zip_code': '60613'}, live_checks=[True, False])
+        state = self._run(monkeypatch, h)
+        assert sum(state['sleeps']) >= h.NFL_LIVE_MIN_SECONDS
+
+    def test_kickoff_mid_rotation_ends_the_cycle(self, monkeypatch):
+        h, calls = self._handler(
+            monkeypatch, {'zip_code': '60613'}, live_checks=[False, True])
+        state = self._run(monkeypatch, h)
+        assert state['aborted'] is True
+
+    def test_nfl_disabled_keeps_rotating(self, monkeypatch):
+        h, calls = self._handler(
+            monkeypatch, {'zip_code': '60613', 'enable_bears': False},
+            live_checks=[True])
+        state = self._run(monkeypatch, h)
+        assert calls['live'] == 0
+        assert calls['display'] == []
+        assert state['cycles'] == 1
+
+    def test_no_games_mode_does_not_take_over(self, monkeypatch):
+        # no_games can be forced mid-season, where MLB keeps priority, and
+        # it never runs the season check, so the loop only ends at the
+        # test ceiling.
+        import pytest
+        h, calls = self._handler(
+            monkeypatch, {'zip_code': '60613', 'display_mode': 'no_games'},
+            live_checks=[True])
+        with pytest.raises(_LoopCeiling):
+            self._run(monkeypatch, h, ceiling=2)
+        assert calls['live'] == 0
+        assert calls['display'] == []
 
 
 class TestNflFillsIdleScreen:
