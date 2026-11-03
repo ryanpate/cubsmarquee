@@ -739,7 +739,7 @@ class BearsDisplay:
             48, score_data['opponent_abbr'], score_data['opp_score'],
             possession == 'opponent')
 
-        # Down & distance (ink y29-34, clear of the crests ending at y26);
+        # Down & distance (ink y34-39, clear of the crests ending at y32);
         # alert-colored in the red zone
         down_distance = score_data.get('down_distance')
         if down_distance:
@@ -748,35 +748,36 @@ class BearsDisplay:
             else:
                 color = self.TEXT_WHITE
             x = max(0, (96 - len(down_distance) * Fonts.CHAR_WIDTH_TINY) // 2)
-            self.manager.draw_text('tiny', x, 35, color, down_distance)
+            self.manager.draw_text('tiny', x, 39, color, down_distance)
 
-        # Quarter / clock (ink y36-40, above the play-scroll strip)
+        # Quarter / clock on the bottom strip (y41-47); a new play's
+        # scroll takes this strip over, then hands it back
         game_time = score_data.get('game_time') or ''
         if game_time:
             x = max(0, (96 - len(game_time) * Fonts.CHAR_WIDTH_MICRO) // 2)
-            self.manager.draw_text('micro', x, 41, self.ACCENT, game_time)
+            self.manager.draw_text('micro', x, 47, self.ACCENT, game_time)
 
     def _draw_live_team(self, half_x, abbrev, score, has_ball):
-        """One team's half of the live score row: possession dot, 14px
-        crest, then the score beside it. A missing crest falls back to
-        the abbreviation in its place."""
+        """One team's half of the live score row: possession dot, 20px
+        crest (native size, y13-32), then the score beside it. A missing
+        crest falls back to the abbreviation in its place."""
         score = str(score)
-        logo_x = half_x + 12
+        logo_x = half_x + 5
         if has_ball:
-            self._draw_possession_dot(half_x + 7)
-        logo = self._get_team_logo(abbrev, 14)
+            self._draw_possession_dot(half_x + 1)
+        logo = self._get_team_logo(abbrev, 20)
         if logo is not None:
             self.manager.set_image(logo, logo_x, 13)
-            self.manager.draw_text('small_bold', logo_x + 17, 24,
+            self.manager.draw_text('medium_bold', logo_x + 22, 29,
                                    self.TEXT_WHITE, score)
         else:
-            self.manager.draw_text('small_bold', logo_x, 24,
+            self.manager.draw_text('small_bold', logo_x, 27,
                                    self.TEXT_WHITE, f'{abbrev} {score}')
 
     def _draw_possession_dot(self, x):
         """Draw a 3x3 orange football dot at the given x, beside the score row"""
         for px in range(x, x + 3):
-            for py in range(18, 21):
+            for py in range(21, 24):
                 self.manager.draw_pixel(px, py, *self.ACCENT)
 
     def _maybe_play_win_celebration(self, score_data, already_played):
