@@ -333,6 +333,59 @@ NFL_TEAMS: dict[str, NFLTeamPack] = {
 }
 
 
+DEFAULT_NCAAB_TEAM_SLUG = 'illini'
+
+
+@dataclass(frozen=True)
+class NCAABTeamPack:
+    """Everything the college basketball screens need for one program"""
+    slug: str
+    espn_team_id: str          # ESPN team id; also the logo filename
+    abbrev: str                # ESPN competitor abbreviation ('ILL')
+    name: str
+    short_name: str
+    header_name: str           # header text; <= 13 chars keeps the big font
+    primary_color: RGBColor    # screen background
+    accent_color: RGBColor     # header stripes, highlights
+    conference_id: str         # ESPN group id for the standings screen
+    conference_name: str       # standings header, e.g. 'BIG TEN'
+    logo_path: str             # 20x20 RGBA PNG in logos/ncaab/
+    facts_basename: str        # resolved via data_path_candidates()
+    news_keywords: tuple[str, ...]  # filter for the league-wide fallback feed
+    win_chant: tuple[str, ...]  # flashed in turn after a win
+
+
+NCAAB_TEAMS: dict[str, NCAABTeamPack] = {
+    'illini': NCAABTeamPack(
+        slug='illini',
+        espn_team_id='356',
+        abbrev='ILL',
+        name='Illinois Fighting Illini',
+        short_name='Illini',
+        header_name='ILLINI HOOPS',
+        primary_color=(19, 41, 75),
+        accent_color=(255, 95, 5),
+        conference_id='7',
+        conference_name='BIG TEN',
+        logo_path='./logos/ncaab/356.png',
+        facts_basename='illini_facts.json',
+        news_keywords=(
+            'ILLINI', 'ILLINOIS', 'UNDERWOOD', 'STATE FARM CENTER',
+            'CHAMPAIGN', 'ORANGE KRUSH',
+        ),
+        win_chant=('I-L-L', 'I-N-I'),
+    ),
+}
+
+
+def get_active_ncaab_team(config: dict | None = None) -> NCAABTeamPack:
+    """Resolve the active college basketball pack from config"""
+    if config is None:
+        config = load_user_config()
+    slug = config.get('ncaab_team', DEFAULT_NCAAB_TEAM_SLUG)
+    return NCAAB_TEAMS.get(slug, NCAAB_TEAMS[DEFAULT_NCAAB_TEAM_SLUG])
+
+
 def get_active_nfl_team(config: dict | None = None) -> NFLTeamPack:
     """Resolve the active NFL pack from config (or the user config file)"""
     if config is None:

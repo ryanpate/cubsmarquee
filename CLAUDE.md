@@ -26,13 +26,14 @@ sudo systemctl start cubs-scoreboard
 | `live_game_handler.py` | Live game display with scores, bases, innings, batter info |
 | `off_season_handler.py` | Off-season content rotation manager |
 | `scoreboard_config.py` | Configuration constants (colors, positions, fonts) |
-| `teams.py` | Team packs — MLB (Cubs, Cardinals) and NFL (Bears, Chiefs): identity, colors, assets, content sources incl. news keywords |
+| `teams.py` | Team packs — MLB (Cubs, Cardinals), NFL (Bears, Chiefs) and college basketball (Illini): identity, colors, assets, content sources incl. news keywords |
 
 ### Content Displays
 | File | Purpose |
 |------|---------|
 | `weather_display.py` | Open-Meteo weather with animated effects (rain, snow, clouds) |
 | `bears_display.py` | Chicago Bears NFL scores and game info |
+| `ncaab_display.py` | College basketball: next game / live score / final, team rank card + AP Top 25, conference standings, news, facts |
 | `pga_display.py` | PGA Tour leaderboard and golf facts |
 
 ### Services & Infrastructure
@@ -51,10 +52,12 @@ sudo systemctl start cubs-scoreboard
 |------|---------|
 | `cubs_facts.json` | 305+ Cubs trivia facts |
 | `pga_facts.json` | PGA Tour facts and records |
+| `illini_facts.json` | Illinois basketball facts |
 | `/home/pi/config.json` | User configuration (API keys, toggles) |
 
 ### Assets
 - `logos/` - MLB team logos (PNG format, sized for LED matrix)
+- `logos/ncaab/` - Every Division I men's basketball logo, 20x20, named by ESPN team id (`dev/fetch_ncaab_logos.py` regenerates them)
 - `fonts/` - Bitmap fonts (BDF format) for LED display
 - `*.png` - Weather icons (rain, snow, clouds, etc.)
 - `W.gif` - Cubs win celebration animation
@@ -79,11 +82,14 @@ main.py (CubsScoreboard)
 ### Off-Season Content Rotation
 1. Weather display with animations (2 min)
 2. Bears game info - if NFL season (3 min)
-3. Bears news - if available (2 min)
-4. PGA leaderboard - if golf season (3 min)
-5. PGA facts/news - if golf season (2 min)
-6. Cubs news - if available (2 min)
-7. Custom message + Cubs facts (4 min)
+3. College basketball game - if basketball season (2 min)
+4. Bears news - if available (2 min)
+5. College basketball rankings, then conference standings - if basketball season (1 min each)
+6. PGA leaderboard - if golf season (3 min)
+7. PGA facts/news - if golf season (2 min)
+8. Custom message + Cubs facts (4 min)
+9. Cubs news - if available (2 min)
+10. College basketball news, then facts - if basketball season (2 min each)
 
 ## Development
 
@@ -172,7 +178,7 @@ argument parser, which the bindings never call.
 The current condition is resolved in order of how local the evidence is: Open-Meteo model → nearest station → radar overhead → thunder within 40 mi → active warning. Each step only overrides when it has an opinion, and every source falls back cleanly, so an outage anywhere cannot take weather off the display. Radar is skipped when the nearest station reports a cloudless sky (`CLR`/`SKC`): Rochester is ~30 mi from the KILX radar, and on clear days the bloom of birds and insects around it is coherent and above 20 dBZ, so no pixel filter can tell it from drizzle (2026-10-02).
 
 **Why this is layered:** a station is still miles away. On 2026-08-15 a storm sat over Rochester while KSPI (10 mi west) reported "Cloudy" — its `VCTS` never reaches the NWS structured `presentWeather` field, so only radar (orange pixel overhead) and the 40-mile thunder scan (KIJX, KAAA) caught it. Do not "simplify" this back to a single source.
-- **ESPN API** - Bears NFL scores and PGA Tour leaderboards
+- **ESPN API** - Bears NFL scores, PGA Tour leaderboards, and college basketball (team schedule, single-game scoreboard, rankings, conference standings, team news). Three things about the college endpoints that are easy to get wrong: the NCAA tournament is a separate season type (`?seasontype=3`), so `_fetch_schedule()` merges two requests or the schedule ends on Selection Sunday; the league scoreboard lists only ranked/featured games by default, so a live game is fetched by id (`scoreboard/{event_id}`); and standings entries arrive unordered with every seed `0` until league play, so `parse_standings()` sorts them (conference record, then overall)
 - **RSS Feeds** - Cubs and Bears breaking news
 
 ## Configuration
@@ -184,6 +190,8 @@ User configuration stored at `/home/pi/config.json`:
 - Weather location
 - `team` — active team pack slug (`cubs` default, `cardinals`)
 - `nfl_team` — active NFL team pack slug (`bears` default, `chiefs`)
+- `ncaab_team` — active college basketball pack slug (`illini` default)
+- `enable_ncaab`, `enable_ncaab_rankings`, `enable_ncaab_standings`, `enable_ncaab_news`, `enable_ncaab_facts` — the five college basketball screens, all default on. Basketball season is read from the team's ESPN schedule (game within -3/+14 days; Nov–Apr month gate if ESPN is unreachable). A live game takes the whole screen in `display_mode: auto` after the MLB season, and during the MLB season whenever no MLB game is on (`OffSeasonHandler.ncaab_fills_idle_screen()` — the NCAA tournament overlaps spring training and Opening Day). When an NFL game and a basketball game are live together they alternate every 90 s rather than one hiding the other. There is no basketball equivalent of `nfl_preempt_mlb`: a live MLB game always wins
 - `nfl_preempt_mlb` — when `true`, a live NFL game takes over the display the way a live MLB game does: the run loop skips `process_game_cycle()` entirely, so no MLB content is shown until the NFL game leaves ESPN's `state: 'in'` (default `false`). The demotion to a scheduled NFL card is the *other* direction — it is what the NFL rotation slot does when this key is off and an MLB game is in progress. Independent of this key, during the MLB season a live NFL game takes the screen whenever no MLB game is on (pre-game through the last out, delays included) — see `OffSeasonHandler.nfl_fills_idle_screen()`; it hands back as soon as an MLB game reaches pre-game. After the MLB season ends, `display_mode: auto` likewise gives a live NFL game the whole screen until it ends, instead of one rotation slot (`no_games` does not, since it can be forced mid-season). Football season is detected from the ESPN schedule (game within -3/+14 days), not from a month range, so preseason counts like the regular season; when that schedule is unreachable the code falls back to `extended_month_gate()` (Aug–Feb) so a network blip cannot silently hide all NFL content
 - `panel_version` — panel hardware revision (`v1` default, `v2`); set by `install_panel_v2.sh`
 - `hardware_mapping` — matrix wiring revision (`regular` default = direct to GPIO; `adafruit-hat` / `adafruit-hat-pwm` for the Adafruit bonnet). Per-Pi, since the units are not wired alike; omit to keep `DisplayConfig.HARDWARE_MAPPING`
@@ -232,6 +240,9 @@ Test coverage includes:
 - Score calculations and win/loss detection
 - Time formatting and timezone handling
 - Bears ESPN API parsing
+- College basketball ESPN parsing (recorded payloads in `tests/data/ncaab_*.json`), season window, live takeover
+
+Render every college basketball screen to PNG without a Pi: `python3 tools/render_ncaab_previews.py` (output in `ncaab_previews/`).
 - Configuration validation
 - Off-season detection logic
 

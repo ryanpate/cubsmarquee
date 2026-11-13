@@ -1,0 +1,687 @@
+{
+ "uid": "s:40~l:41~g:7",
+ "id": "7",
+ "name": "Big Ten Conference",
+ "abbreviation": "big10",
+ "shortName": "Big Ten",
+ "parent": {
+  "uid": "s:40~l:41~g:50",
+  "id": "50",
+  "name": "NCAA Division I",
+  "abbreviation": "NCAA",
+  "shortName": "Division I",
+  "slug": "ncaa-division-i"
+ },
+ "isConference": true,
+ "standings": {
+  "id": "0",
+  "name": "overall",
+  "displayName": "Standings",
+  "season": 2027,
+  "seasonType": 2,
+  "seasonDisplayName": "2026-27",
+  "entries": [
+   {
+    "team": {
+     "id": "84",
+     "uid": "s:40~l:41~t:84",
+     "location": "Indiana",
+     "name": "Hoosiers",
+     "abbreviation": "IU",
+     "displayName": "Indiana Hoosiers",
+     "shortDisplayName": "Indiana",
+     "isActive": true
+    },
+    "stats": [
+     {
+      "id": "0",
+      "name": "overall",
+      "abbreviation": "Season",
+      "displayName": "Team Season Record",
+      "shortDisplayName": "Season",
+      "description": "Overall Record",
+      "type": "total",
+      "summary": "3-0",
+      "displayValue": "3-0"
+     },
+     {
+      "id": "9",
+      "name": "vs. Conf.",
+      "abbreviation": "VS CONF",
+      "displayName": "CONF",
+      "shortDisplayName": "CONF",
+      "description": "Conference Record",
+      "type": "vsconf",
+      "summary": "0-0",
+      "displayValue": "0-0"
+     }
+    ]
+   },
+   {
+    "team": {
+     "id": "127",
+     "uid": "s:40~l:41~t:127",
+     "location": "Michigan State",
+     "name": "Spartans",
+     "abbreviation": "MSU",
+     "displayName": "Michigan State Spartans",
+     "shortDisplayName": "Michigan St",
+     "isActive": true,
+     "rank": 5
+    },
+    "stats": [
+     {
+      "id": "0",
+      "name": "overall",
+      "abbreviation": "Season",
+      "displayName": "Team Season Record",
+      "shortDisplayName": "Season",
+      "description": "Overall Record",
+      "type": "total",
+      "summary": "3-0",
+      "displayValue": "3-0"
+     },
+     {
+      "id": "9",
+      "name": "vs. Conf.",
+      "abbreviation": "VS CONF",
+      "displayName": "CONF",
+      "shortDisplayName": "CONF",
+      "description": "Conference Record",
+      "type": "vsconf",
+      "summary": "0-0",
+      "displayValue": "0-0"
+     }
+    ]
+   },
+   {
+    "team": {
+     "id": "135",
+     "uid": "s:40~l:41~t:135",
+     "location": "Minnesota",
+     "name": "Golden Gophers",
+     "abbreviation": "MINN",
+     "displayName": "Minnesota Golden Gophers",
+     "shortDisplayName": "Minnesota",
+     "isActive": true
+    },
+    "stats": [
+     {
+      "id": "0",
+      "name": "overall",
+      "abbreviation": "Season",
+      "displayName": "Team Season Record",
+      "shortDisplayName": "Season",
+      "description": "Overall Record",
+      "type": "total",
+      "summary": "3-0",
+      "displayValue": "3-0"
+     },
+     {
+      "id": "9",
+      "name": "vs. Conf.",
+      "abbreviation": "VS CONF",
+      "displayName": "CONF",
+      "shortDisplayName": "CONF",
+      "description": "Conference Record",
+      "type": "vsconf",
+      "summary": "0-0",
+      "displayValue": "0-0"
+     }
+    ]
+   },
+   {
+    "team": {
+     "id": "158",
+     "uid": "s:40~l:41~t:158",
+     "location": "Nebraska",
+     "name": "Cornhuskers",
+     "abbreviation": "NEB",
+     "displayName": "Nebraska Cornhuskers",
+     "shortDisplayName": "Nebraska",
+     "isActive": true,
+     "rank": 25
+    },
+    "stats": [
+     {
+      "id": "0",
+      "name": "overall",
+      "abbreviation": "Season",
+      "displayName": "Team Season Record",
+      "shortDisplayName": "Season",
+      "description": "Overall Record",
+      "type": "total",
+      "summary": "3-0",
+      "displayValue": "3-0"
+     },
+     {
+      "id": "9",
+      "name": "vs. Conf.",
+      "abbreviation": "VS CONF",
+      "displayName": "CONF",
+      "shortDisplayName": "CONF",
+      "description": "Conference Record",
+      "type": "vsconf",
+      "summary": "0-0",
+      "displayValue": "0-0"
+     }
+    ]
+   },
+   {
+    "team": {
+     "id": "77",
+     "uid": "s:40~l:41~t:77",
+     "location": "Northwestern",
+     "name": "Wildcats",
+     "abbreviation": "NU",
+     "displayName": "Northwestern Wildcats",
+     "shortDisplayName": "Northwestern",
+     "isActive": true
+    },
+    "stats": [
+     {
+      "id": "0",
+      "name": "overall",
+      "abbreviation": "Season",
+      "displayName": "Team Season Record",
+      "shortDisplayName": "Season",
+      "description": "Overall Record",
+      "type": "total",
+      "summary": "3-0",
+      "displayValue": "3-0"
+     },
+     {
+      "id": "9",
+      "name": "vs. Conf.",
+      "abbreviation": "VS CONF",
+      "displayName": "CONF",
+      "shortDisplayName": "CONF",
+      "description": "Conference Record",
+      "type": "vsconf",
+      "summary": "0-0",
+      "displayValue": "0-0"
+     }
+    ]
+   },
+   {
+    "team": {
+     "id": "2483",
+     "uid": "s:40~l:41~t:2483",
+     "location": "Oregon",
+     "name": "Ducks",
+     "abbreviation": "ORE",
+     "displayName": "Oregon Ducks",
+     "shortDisplayName": "Oregon",
+     "isActive": true
+    },
+    "stats": [
+     {
+      "id": "0",
+      "name": "overall",
+      "abbreviation": "Season",
+      "displayName": "Team Season Record",
+      "shortDisplayName": "Season",
+      "description": "Overall Record",
+      "type": "total",
+      "summary": "3-0",
+      "displayValue": "3-0"
+     },
+     {
+      "id": "9",
+      "name": "vs. Conf.",
+      "abbreviation": "VS CONF",
+      "displayName": "CONF",
+      "shortDisplayName": "CONF",
+      "description": "Conference Record",
+      "type": "vsconf",
+      "summary": "0-0",
+      "displayValue": "0-0"
+     }
+    ]
+   },
+   {
+    "team": {
+     "id": "26",
+     "uid": "s:40~l:41~t:26",
+     "location": "UCLA",
+     "name": "Bruins",
+     "abbreviation": "UCLA",
+     "displayName": "UCLA Bruins",
+     "shortDisplayName": "UCLA",
+     "isActive": true,
+     "rank": 9
+    },
+    "stats": [
+     {
+      "id": "0",
+      "name": "overall",
+      "abbreviation": "Season",
+      "displayName": "Team Season Record",
+      "shortDisplayName": "Season",
+      "description": "Overall Record",
+      "type": "total",
+      "summary": "3-0",
+      "displayValue": "3-0"
+     },
+     {
+      "id": "9",
+      "name": "vs. Conf.",
+      "abbreviation": "VS CONF",
+      "displayName": "CONF",
+      "shortDisplayName": "CONF",
+      "description": "Conference Record",
+      "type": "vsconf",
+      "summary": "0-0",
+      "displayValue": "0-0"
+     }
+    ]
+   },
+   {
+    "team": {
+     "id": "30",
+     "uid": "s:40~l:41~t:30",
+     "location": "USC",
+     "name": "Trojans",
+     "abbreviation": "USC",
+     "displayName": "USC Trojans",
+     "shortDisplayName": "USC",
+     "isActive": true,
+     "rank": 21
+    },
+    "stats": [
+     {
+      "id": "0",
+      "name": "overall",
+      "abbreviation": "Season",
+      "displayName": "Team Season Record",
+      "shortDisplayName": "Season",
+      "description": "Overall Record",
+      "type": "total",
+      "summary": "3-0",
+      "displayValue": "3-0"
+     },
+     {
+      "id": "9",
+      "name": "vs. Conf.",
+      "abbreviation": "VS CONF",
+      "displayName": "CONF",
+      "shortDisplayName": "CONF",
+      "description": "Conference Record",
+      "type": "vsconf",
+      "summary": "0-0",
+      "displayValue": "0-0"
+     }
+    ]
+   },
+   {
+    "team": {
+     "id": "275",
+     "uid": "s:40~l:41~t:275",
+     "location": "Wisconsin",
+     "name": "Badgers",
+     "abbreviation": "WIS",
+     "displayName": "Wisconsin Badgers",
+     "shortDisplayName": "Wisconsin",
+     "isActive": true
+    },
+    "stats": [
+     {
+      "id": "0",
+      "name": "overall",
+      "abbreviation": "Season",
+      "displayName": "Team Season Record",
+      "shortDisplayName": "Season",
+      "description": "Overall Record",
+      "type": "total",
+      "summary": "3-0",
+      "displayValue": "3-0"
+     },
+     {
+      "id": "9",
+      "name": "vs. Conf.",
+      "abbreviation": "VS CONF",
+      "displayName": "CONF",
+      "shortDisplayName": "CONF",
+      "description": "Conference Record",
+      "type": "vsconf",
+      "summary": "0-0",
+      "displayValue": "0-0"
+     }
+    ]
+   },
+   {
+    "team": {
+     "id": "164",
+     "uid": "s:40~l:41~t:164",
+     "location": "Rutgers",
+     "name": "Scarlet Knights",
+     "abbreviation": "RUTG",
+     "displayName": "Rutgers Scarlet Knights",
+     "shortDisplayName": "Rutgers",
+     "isActive": true
+    },
+    "stats": [
+     {
+      "id": "0",
+      "name": "overall",
+      "abbreviation": "Season",
+      "displayName": "Team Season Record",
+      "shortDisplayName": "Season",
+      "description": "Overall Record",
+      "type": "total",
+      "summary": "2-0",
+      "displayValue": "2-0"
+     },
+     {
+      "id": "9",
+      "name": "vs. Conf.",
+      "abbreviation": "VS CONF",
+      "displayName": "CONF",
+      "shortDisplayName": "CONF",
+      "description": "Conference Record",
+      "type": "vsconf",
+      "summary": "0-0",
+      "displayValue": "0-0"
+     }
+    ]
+   },
+   {
+    "team": {
+     "id": "264",
+     "uid": "s:40~l:41~t:264",
+     "location": "Washington",
+     "name": "Huskies",
+     "abbreviation": "WASH",
+     "displayName": "Washington Huskies",
+     "shortDisplayName": "Washington",
+     "isActive": true
+    },
+    "stats": [
+     {
+      "id": "0",
+      "name": "overall",
+      "abbreviation": "Season",
+      "displayName": "Team Season Record",
+      "shortDisplayName": "Season",
+      "description": "Overall Record",
+      "type": "total",
+      "summary": "2-0",
+      "displayValue": "2-0"
+     },
+     {
+      "id": "9",
+      "name": "vs. Conf.",
+      "abbreviation": "VS CONF",
+      "displayName": "CONF",
+      "shortDisplayName": "CONF",
+      "description": "Conference Record",
+      "type": "vsconf",
+      "summary": "0-0",
+      "displayValue": "0-0"
+     }
+    ]
+   },
+   {
+    "team": {
+     "id": "213",
+     "uid": "s:40~l:41~t:213",
+     "location": "Penn State",
+     "name": "Nittany Lions",
+     "abbreviation": "PSU",
+     "displayName": "Penn State Nittany Lions",
+     "shortDisplayName": "Penn State",
+     "isActive": true
+    },
+    "stats": [
+     {
+      "id": "0",
+      "name": "overall",
+      "abbreviation": "Season",
+      "displayName": "Team Season Record",
+      "shortDisplayName": "Season",
+      "description": "Overall Record",
+      "type": "total",
+      "summary": "3-1",
+      "displayValue": "3-1"
+     },
+     {
+      "id": "9",
+      "name": "vs. Conf.",
+      "abbreviation": "VS CONF",
+      "displayName": "CONF",
+      "shortDisplayName": "CONF",
+      "description": "Conference Record",
+      "type": "vsconf",
+      "summary": "0-0",
+      "displayValue": "0-0"
+     }
+    ]
+   },
+   {
+    "team": {
+     "id": "356",
+     "uid": "s:40~l:41~t:356",
+     "location": "Illinois",
+     "name": "Fighting Illini",
+     "abbreviation": "ILL",
+     "displayName": "Illinois Fighting Illini",
+     "shortDisplayName": "Illinois",
+     "isActive": true,
+     "rank": 3
+    },
+    "stats": [
+     {
+      "id": "0",
+      "name": "overall",
+      "abbreviation": "Season",
+      "displayName": "Team Season Record",
+      "shortDisplayName": "Season",
+      "description": "Overall Record",
+      "type": "total",
+      "summary": "2-1",
+      "displayValue": "2-1"
+     },
+     {
+      "id": "9",
+      "name": "vs. Conf.",
+      "abbreviation": "VS CONF",
+      "displayName": "CONF",
+      "shortDisplayName": "CONF",
+      "description": "Conference Record",
+      "type": "vsconf",
+      "summary": "0-0",
+      "displayValue": "0-0"
+     }
+    ]
+   },
+   {
+    "team": {
+     "id": "2294",
+     "uid": "s:40~l:41~t:2294",
+     "location": "Iowa",
+     "name": "Hawkeyes",
+     "abbreviation": "IOWA",
+     "displayName": "Iowa Hawkeyes",
+     "shortDisplayName": "Iowa",
+     "isActive": true
+    },
+    "stats": [
+     {
+      "id": "0",
+      "name": "overall",
+      "abbreviation": "Season",
+      "displayName": "Team Season Record",
+      "shortDisplayName": "Season",
+      "description": "Overall Record",
+      "type": "total",
+      "summary": "2-1",
+      "displayValue": "2-1"
+     },
+     {
+      "id": "9",
+      "name": "vs. Conf.",
+      "abbreviation": "VS CONF",
+      "displayName": "CONF",
+      "shortDisplayName": "CONF",
+      "description": "Conference Record",
+      "type": "vsconf",
+      "summary": "0-0",
+      "displayValue": "0-0"
+     }
+    ]
+   },
+   {
+    "team": {
+     "id": "130",
+     "uid": "s:40~l:41~t:130",
+     "location": "Michigan",
+     "name": "Wolverines",
+     "abbreviation": "MICH",
+     "displayName": "Michigan Wolverines",
+     "shortDisplayName": "Michigan",
+     "isActive": true,
+     "rank": 20
+    },
+    "stats": [
+     {
+      "id": "0",
+      "name": "overall",
+      "abbreviation": "Season",
+      "displayName": "Team Season Record",
+      "shortDisplayName": "Season",
+      "description": "Overall Record",
+      "type": "total",
+      "summary": "2-1",
+      "displayValue": "2-1"
+     },
+     {
+      "id": "9",
+      "name": "vs. Conf.",
+      "abbreviation": "VS CONF",
+      "displayName": "CONF",
+      "shortDisplayName": "CONF",
+      "description": "Conference Record",
+      "type": "vsconf",
+      "summary": "0-0",
+      "displayValue": "0-0"
+     }
+    ]
+   },
+   {
+    "team": {
+     "id": "194",
+     "uid": "s:40~l:41~t:194",
+     "location": "Ohio State",
+     "name": "Buckeyes",
+     "abbreviation": "OSU",
+     "displayName": "Ohio State Buckeyes",
+     "shortDisplayName": "Ohio State",
+     "isActive": true
+    },
+    "stats": [
+     {
+      "id": "0",
+      "name": "overall",
+      "abbreviation": "Season",
+      "displayName": "Team Season Record",
+      "shortDisplayName": "Season",
+      "description": "Overall Record",
+      "type": "total",
+      "summary": "2-1",
+      "displayValue": "2-1"
+     },
+     {
+      "id": "9",
+      "name": "vs. Conf.",
+      "abbreviation": "VS CONF",
+      "displayName": "CONF",
+      "shortDisplayName": "CONF",
+      "description": "Conference Record",
+      "type": "vsconf",
+      "summary": "0-0",
+      "displayValue": "0-0"
+     }
+    ]
+   },
+   {
+    "team": {
+     "id": "120",
+     "uid": "s:40~l:41~t:120",
+     "location": "Maryland",
+     "name": "Terrapins",
+     "abbreviation": "MD",
+     "displayName": "Maryland Terrapins",
+     "shortDisplayName": "Maryland",
+     "isActive": true
+    },
+    "stats": [
+     {
+      "id": "0",
+      "name": "overall",
+      "abbreviation": "Season",
+      "displayName": "Team Season Record",
+      "shortDisplayName": "Season",
+      "description": "Overall Record",
+      "type": "total",
+      "summary": "1-1",
+      "displayValue": "1-1"
+     },
+     {
+      "id": "9",
+      "name": "vs. Conf.",
+      "abbreviation": "VS CONF",
+      "displayName": "CONF",
+      "shortDisplayName": "CONF",
+      "description": "Conference Record",
+      "type": "vsconf",
+      "summary": "0-0",
+      "displayValue": "0-0"
+     }
+    ]
+   },
+   {
+    "team": {
+     "id": "2509",
+     "uid": "s:40~l:41~t:2509",
+     "location": "Purdue",
+     "name": "Boilermakers",
+     "abbreviation": "PUR",
+     "displayName": "Purdue Boilermakers",
+     "shortDisplayName": "Purdue",
+     "isActive": true
+    },
+    "stats": [
+     {
+      "id": "0",
+      "name": "overall",
+      "abbreviation": "Season",
+      "displayName": "Team Season Record",
+      "shortDisplayName": "Season",
+      "description": "Overall Record",
+      "type": "total",
+      "summary": "1-2",
+      "displayValue": "1-2"
+     },
+     {
+      "id": "9",
+      "name": "vs. Conf.",
+      "abbreviation": "VS CONF",
+      "displayName": "CONF",
+      "shortDisplayName": "CONF",
+      "description": "Conference Record",
+      "type": "vsconf",
+      "summary": "0-0",
+      "displayValue": "0-0"
+     }
+    ]
+   }
+  ]
+ },
+ "children": [],
+ "season": {
+  "year": 2027,
+  "startDate": "2026-07-13T07:00Z",
+  "endDate": "2027-04-07T06:59Z",
+  "displayName": "2026-27"
+ }
+}

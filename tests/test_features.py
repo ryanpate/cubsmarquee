@@ -1153,6 +1153,7 @@ class TestGameOverInterleave:
         }
         handler.off_season_handler = Mock()
         handler.off_season_handler.nfl_fills_idle_screen.return_value = False
+        handler.off_season_handler.ncaab_fills_idle_screen.return_value = False
         return handler
 
     def _run_one_cycle(self, monkeypatch):

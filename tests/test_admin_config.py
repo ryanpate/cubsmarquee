@@ -250,3 +250,38 @@ def test_nm_connect_success_leaves_the_hotspot_down(client, monkeypatch):
     with wcs.app.test_request_context():
         wcs._connect_wifi_nm('Home', 'rightpass')
     assert not any(c[-2:] == ['up', 'marquee-hotspot'] for c in calls)
+
+
+def test_admin_page_offers_college_basketball_controls(client):
+    html = client.get('/admin').get_data(as_text=True)
+    assert 'name="ncaab_team"' in html
+    assert 'value="illini"' in html
+    assert '/ncaab_logo/illini' in html
+    for key in ('enable_ncaab', 'enable_ncaab_rankings',
+                'enable_ncaab_standings', 'enable_ncaab_news',
+                'enable_ncaab_facts', 'scroll_speed_ncaab_news',
+                'scroll_speed_ncaab_facts'):
+        assert f'id="{key}"' in html, key
+
+
+def test_ncaab_logo_route(client):
+    resp = client.get('/ncaab_logo/illini')
+    assert resp.status_code == 200
+    assert resp.mimetype == 'image/png'
+    assert client.get('/ncaab_logo/duke').status_code == 404
+
+
+def test_college_basketball_settings_default_on_and_round_trip(client):
+    import wifi_config_server as wcs
+    cfg = wcs.load_config()
+    assert cfg['ncaab_team'] == 'illini'
+    assert cfg['enable_ncaab'] is True
+    assert cfg['enable_ncaab_rankings'] is True
+
+    resp = client.post('/save_config', json={
+        'enable_ncaab_facts': False, 'scroll_speed_ncaab_news': 8})
+    assert resp.get_json()['success'] is True
+    saved = wcs.load_config()
+    assert saved['enable_ncaab_facts'] is False
+    assert saved['scroll_speed_ncaab_news'] == 8
+    assert saved['enable_ncaab'] is True  # untouched keys keep their value

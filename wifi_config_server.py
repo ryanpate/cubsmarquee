@@ -14,7 +14,8 @@ import re
 from scoreboard_config import DisplayConfig, PREVIEW_FILE_PATH
 from teams import (
     TEAMS, DEFAULT_TEAM_SLUG, NON_DEFAULT_OFF_KEYS, DEFAULT_CUSTOM_MESSAGES,
-    apply_team_defaults, get_active_team, NFL_TEAMS, DEFAULT_NFL_TEAM_SLUG)
+    apply_team_defaults, get_active_team, NFL_TEAMS, DEFAULT_NFL_TEAM_SLUG,
+    NCAAB_TEAMS, DEFAULT_NCAAB_TEAM_SLUG)
 
 app = Flask(__name__)
 
@@ -155,6 +156,7 @@ def get_ip_address():
 REBOOT_REQUIRED_KEYS = {
     'team',
     'nfl_team',
+    'ncaab_team',
     'panel_version',
     'hardware_mapping',
     'gpio_slowdown',
@@ -168,6 +170,9 @@ APPLIES_LIVE_KEYS = {
     'zip_code', 'weather_api_key', 'custom_message', 'display_mode',
     'enable_weather', 'enable_allstar', 'enable_bears', 'enable_bears_news',
     'nfl_preempt_mlb', 'enable_pga', 'enable_pga_news', 'enable_pga_facts',
+    'enable_ncaab', 'enable_ncaab_rankings', 'enable_ncaab_standings',
+    'enable_ncaab_news', 'enable_ncaab_facts',
+    'scroll_speed_ncaab_news', 'scroll_speed_ncaab_facts',
     'enable_cubs_news', 'enable_cubs_facts', 'enable_bible',
     'enable_bible_facts', 'enable_newsmax', 'enable_usatoday',
     'enable_stocks', 'enable_spring_training', 'enable_playoff_race',
@@ -201,6 +206,7 @@ SCHEDULED_REBOOT_TIME = '04:00'
 DEFAULT_CONFIG = {
         'team': DEFAULT_TEAM_SLUG,
         'nfl_team': DEFAULT_NFL_TEAM_SLUG,
+        'ncaab_team': DEFAULT_NCAAB_TEAM_SLUG,
         'zip_code': '',
         'weather_api_key': '',
         'custom_message': 'GO CUBS GO! SEE YOU NEXT SEASON!',
@@ -210,6 +216,11 @@ DEFAULT_CONFIG = {
         'enable_bears': True,
         'enable_bears_news': True,
         'nfl_preempt_mlb': False,
+        'enable_ncaab': True,
+        'enable_ncaab_rankings': True,
+        'enable_ncaab_standings': True,
+        'enable_ncaab_news': True,
+        'enable_ncaab_facts': True,
         'enable_pga': True,
         'enable_pga_news': True,
         'enable_pga_facts': True,
@@ -232,6 +243,8 @@ DEFAULT_CONFIG = {
         'flights_between_displays': False,
         'scroll_speed_bears': 5,
         'scroll_speed_bears_news': 5,
+        'scroll_speed_ncaab_news': 5,
+        'scroll_speed_ncaab_facts': 5,
         'scroll_speed_pga': 5,
         'scroll_speed_pga_news': 5,
         'scroll_speed_pga_facts': 5,
@@ -766,6 +779,16 @@ HTML_TEMPLATE = """
                         <span class="team-swatch" style="background: rgb({{ t.primary_color[0] }},{{ t.primary_color[1] }},{{ t.primary_color[2] }})"></span>
                     </label>
                     {% endfor %}
+                    <hr style="border: none; border-top: 1px solid #444; margin: 12px 0;">
+                    <p class="help-text">Pick the college basketball team for the basketball screens (games, rankings, standings, news and facts). Reboot required after changing.</p>
+                    {% for slug, t in ncaab_teams.items() %}
+                    <label class="team-option">
+                        <input type="radio" name="ncaab_team" value="{{ slug }}">
+                        <img src="/ncaab_logo/{{ slug }}" alt="{{ t.name }}">
+                        <span>{{ t.name }}</span>
+                        <span class="team-swatch" style="background: rgb({{ t.primary_color[0] }},{{ t.primary_color[1] }},{{ t.primary_color[2] }})"></span>
+                    </label>
+                    {% endfor %}
                 </div>
             </details>
 
@@ -892,6 +915,42 @@ HTML_TEMPLATE = """
                                 NFL preempts MLB
                             </label>
                             <div class="help-text">A live football game takes over the display, the way a baseball game normally does. Off by default, so baseball wins.</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_ncaab">
+                                Enable college basketball game display (basketball season)
+                            </label>
+                            <div class="help-text">Next game, game-day countdown, live score and final. A live game takes the screen whenever no baseball game is on.</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_ncaab_rankings">
+                                Enable college basketball rankings (team rank and AP Top 25)
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_ncaab_standings">
+                                Enable college basketball conference standings
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_ncaab_news">
+                                Enable college basketball news display
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable_ncaab_facts">
+                                Enable college basketball facts display
+                            </label>
                         </div>
 
                         <div class="form-group">
@@ -1027,6 +1086,18 @@ HTML_TEMPLATE = """
                             <label>NFL News:</label>
                             <input type="range" class="speed-slider" id="scroll_speed_bears_news" min="1" max="10" value="5">
                             <span class="speed-value" id="scroll_speed_bears_news_val">5</span>
+                        </div>
+
+                        <div class="speed-control">
+                            <label>College Basketball News:</label>
+                            <input type="range" class="speed-slider" id="scroll_speed_ncaab_news" min="1" max="10" value="5">
+                            <span class="speed-value" id="scroll_speed_ncaab_news_val">5</span>
+                        </div>
+
+                        <div class="speed-control">
+                            <label>College Basketball Facts:</label>
+                            <input type="range" class="speed-slider" id="scroll_speed_ncaab_facts" min="1" max="10" value="5">
+                            <span class="speed-value" id="scroll_speed_ncaab_facts_val">5</span>
                         </div>
 
                         <div class="speed-control">
@@ -1322,6 +1393,11 @@ HTML_TEMPLATE = """
             if (nflRadio) nflRadio.checked = true;
             window._loadedNflTeam = nflSlug;
 
+            const ncaabSlug = config.ncaab_team || 'illini';
+            const ncaabRadio = document.querySelector(
+                `input[name="ncaab_team"][value="${ncaabSlug}"]`);
+            if (ncaabRadio) ncaabRadio.checked = true;
+
             // Track the currently-selected team separately from
             // window._loadedTeam (which reflects what's saved on the
             // server and drives the "reboot required" notice) so the
@@ -1361,6 +1437,10 @@ HTML_TEMPLATE = """
             document.getElementById('enable_bears').checked = config.enable_bears !== false;
             document.getElementById('enable_bears_news').checked = config.enable_bears_news !== false;
             document.getElementById('nfl_preempt_mlb').checked = config.nfl_preempt_mlb === true;
+            ['enable_ncaab', 'enable_ncaab_rankings', 'enable_ncaab_standings',
+             'enable_ncaab_news', 'enable_ncaab_facts'].forEach(function(key) {
+                document.getElementById(key).checked = config[key] !== false;
+            });
             document.getElementById('enable_pga').checked = config.enable_pga !== false;
             document.getElementById('enable_pga_news').checked = config.enable_pga_news !== false;
             document.getElementById('enable_pga_facts').checked = config.enable_pga_facts !== false;
@@ -1437,6 +1517,7 @@ HTML_TEMPLATE = """
             // Load scroll speed settings
             const speedFields = [
                 'scroll_speed_bears', 'scroll_speed_bears_news',
+                'scroll_speed_ncaab_news', 'scroll_speed_ncaab_facts',
                 'scroll_speed_pga', 'scroll_speed_pga_news', 'scroll_speed_pga_facts',
                 'scroll_speed_cubs_facts', 'scroll_speed_cubs_news',
                 'scroll_speed_bible', 'scroll_speed_bible_facts',
@@ -1616,9 +1697,11 @@ HTML_TEMPLATE = """
 
             const checkedTeamRadio = document.querySelector('input[name="team"]:checked');
             const checkedNflRadio = document.querySelector('input[name="nfl_team"]:checked');
+            const checkedNcaabRadio = document.querySelector('input[name="ncaab_team"]:checked');
             const config = {
                 team: checkedTeamRadio ? checkedTeamRadio.value : 'cubs',
                 nfl_team: checkedNflRadio ? checkedNflRadio.value : 'bears',
+                ncaab_team: checkedNcaabRadio ? checkedNcaabRadio.value : 'illini',
                 zip_code: document.getElementById('zip_code').value,
                 weather_api_key: document.getElementById('weather_api_key').value,
                 custom_message: document.getElementById('custom_message').value,
@@ -1628,6 +1711,11 @@ HTML_TEMPLATE = """
                 enable_bears: document.getElementById('enable_bears').checked,
                 enable_bears_news: document.getElementById('enable_bears_news').checked,
                 nfl_preempt_mlb: document.getElementById('nfl_preempt_mlb').checked,
+                enable_ncaab: document.getElementById('enable_ncaab').checked,
+                enable_ncaab_rankings: document.getElementById('enable_ncaab_rankings').checked,
+                enable_ncaab_standings: document.getElementById('enable_ncaab_standings').checked,
+                enable_ncaab_news: document.getElementById('enable_ncaab_news').checked,
+                enable_ncaab_facts: document.getElementById('enable_ncaab_facts').checked,
                 enable_pga: document.getElementById('enable_pga').checked,
                 enable_pga_news: document.getElementById('enable_pga_news').checked,
                 enable_pga_facts: document.getElementById('enable_pga_facts').checked,
@@ -1650,6 +1738,8 @@ HTML_TEMPLATE = """
                 flights_between_displays: document.getElementById('flights_between_displays').checked,
                 scroll_speed_bears: parseInt(document.getElementById('scroll_speed_bears').value),
                 scroll_speed_bears_news: parseInt(document.getElementById('scroll_speed_bears_news').value),
+                scroll_speed_ncaab_news: parseInt(document.getElementById('scroll_speed_ncaab_news').value),
+                scroll_speed_ncaab_facts: parseInt(document.getElementById('scroll_speed_ncaab_facts').value),
                 scroll_speed_pga: parseInt(document.getElementById('scroll_speed_pga').value),
                 scroll_speed_pga_news: parseInt(document.getElementById('scroll_speed_pga_news').value),
                 scroll_speed_pga_facts: parseInt(document.getElementById('scroll_speed_pga_facts').value),
@@ -1967,6 +2057,7 @@ def admin():
         config=config,
         teams=TEAMS,
         nfl_teams=NFL_TEAMS,
+        ncaab_teams=NCAAB_TEAMS,
         active_team=get_active_team(config),
         team_default_messages=DEFAULT_CUSTOM_MESSAGES,
         non_default_off_keys=NON_DEFAULT_OFF_KEYS
@@ -1984,6 +2075,14 @@ def team_logo(slug):
 @app.route('/nfl_logo/<slug>')
 def nfl_logo(slug):
     pack = NFL_TEAMS.get(slug)
+    if pack is None:
+        return ('Not found', 404)
+    return send_file(pack.logo_path, mimetype='image/png')
+
+
+@app.route('/ncaab_logo/<slug>')
+def ncaab_logo(slug):
+    pack = NCAAB_TEAMS.get(slug)
     if pack is None:
         return ('Not found', 404)
     return send_file(pack.logo_path, mimetype='image/png')

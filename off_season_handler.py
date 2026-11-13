@@ -14,6 +14,7 @@ from teams import get_active_team, get_active_nfl_team, apply_team_defaults, dat
 from rss_fetch import fetch_feed, is_probably_english
 from weather_display import WeatherDisplay
 from bears_display import BearsDisplay
+from ncaab_display import CollegeBasketballDisplay
 from pga_display import PGADisplay
 from bible_display import BibleDisplay
 from newsmax_display import NewsmaxDisplay
@@ -45,12 +46,17 @@ class OffSeasonHandler:
     # the loop would spin on the ESPN liveness check with a frozen panel.
     NFL_LIVE_MIN_SECONDS = 30
 
+    # How long each game holds the screen when an NFL game and a college
+    # basketball game are live at once and the two take turns.
+    SHARED_LIVE_SECONDS = 90
+
     def __init__(self, scoreboard_manager: ScoreboardManager) -> None:
         """Initialize with reference to main scoreboard manager"""
         self.manager = scoreboard_manager
         self.team = get_active_team()
         self.weather_display: WeatherDisplay = WeatherDisplay(scoreboard_manager)
         self.bears_display: BearsDisplay = BearsDisplay(scoreboard_manager)
+        self.ncaab_display: CollegeBasketballDisplay = CollegeBasketballDisplay(scoreboard_manager)
         self.pga_display: PGADisplay = PGADisplay(scoreboard_manager)
         self.bible_display: BibleDisplay = BibleDisplay(scoreboard_manager)
         self.newsmax_display: NewsmaxDisplay = NewsmaxDisplay(scoreboard_manager)
@@ -100,6 +106,11 @@ class OffSeasonHandler:
             'weather': GameConfig.WEATHER_DISPLAY_DURATION,
             'bears': GameConfig.BEARS_DISPLAY_DURATION,
             'bears_news': GameConfig.BEARS_NEWS_DURATION,
+            'ncaab': GameConfig.NCAAB_DISPLAY_DURATION,
+            'ncaab_rankings': GameConfig.NCAAB_RANKINGS_DURATION,
+            'ncaab_standings': GameConfig.NCAAB_STANDINGS_DURATION,
+            'ncaab_news': GameConfig.NCAAB_NEWS_DURATION,
+            'ncaab_facts': GameConfig.NCAAB_FACTS_DURATION,
             'pga': GameConfig.PGA_DISPLAY_DURATION,
             'pga_news': GameConfig.PGA_NEWS_DURATION if hasattr(GameConfig, 'PGA_NEWS_DURATION') else 2,
             'pga_facts': GameConfig.PGA_FACTS_DURATION,
@@ -175,6 +186,11 @@ class OffSeasonHandler:
             'enable_weather': True,  # Enable/disable Weather display
             'enable_bears': True,    # Enable/disable Bears display
             'enable_bears_news': True,  # Enable/disable Bears breaking news
+            'enable_ncaab': True,  # College basketball game screens
+            'enable_ncaab_rankings': True,  # Team poll card + AP Top 25
+            'enable_ncaab_standings': True,  # Conference standings
+            'enable_ncaab_news': True,  # College basketball team news
+            'enable_ncaab_facts': True,  # College basketball program facts
             'enable_pga': True,      # Enable/disable PGA Tour leaderboard
             'enable_pga_news': True,  # Enable/disable PGA Tour news
             'enable_pga_facts': True,  # Enable/disable PGA Tour facts
@@ -524,6 +540,39 @@ class OffSeasonHandler:
             return False
         return self.bears_display.live_game() is not None
 
+    def _is_basketball_season(self) -> bool:
+        """College basketball season is whatever the team's schedule says,
+        so exhibitions and the NCAA tournament count without a date range."""
+        return self.ncaab_display.has_game_within()
+
+    def _ncaab_live(self) -> bool:
+        """True when the basketball game screen is enabled and the team
+        is playing right now. Any failure reads as not live."""
+        if not self.config.get('enable_ncaab', True):
+            return False
+        try:
+            return self.ncaab_display.live_game() is not None
+        except Exception as e:
+            print(f"College basketball live check failed: {e}")
+            return False
+
+    def _ncaab_plays_today(self) -> bool:
+        """True when the basketball game screen is enabled and the cached
+        schedule has a game today. No network call."""
+        if not self.config.get('enable_ncaab', True):
+            return False
+        try:
+            return self.ncaab_display._get_todays_game() is not None
+        except Exception:
+            return False
+
+    def ncaab_fills_idle_screen(self) -> bool:
+        """True during the MLB season when the college basketball team is
+        playing and no MLB game is on - the NCAA tournament overlaps spring
+        training and Opening Day. Basketball is checked first: without a
+        game today that is a cached-schedule lookup."""
+        return self._ncaab_live() and not self.mlb_game_active()
+
     def _is_golf_season(self):
         """
         Determine if it's currently golf season
@@ -574,13 +623,49 @@ class OffSeasonHandler:
                     # screen until it ends rather than one rotation slot.
                     # no_games is left out: it can be forced mid-season,
                     # where MLB keeps its priority.
-                    if display_mode == 'auto' and self._off_season_nfl_live():
-                        print("Live NFL game - showing it until final")
+                    nfl_live = (display_mode == 'auto'
+                                and self._off_season_nfl_live())
+                    ncaab_live = display_mode == 'auto' and self._ncaab_live()
+                    if nfl_live and ncaab_live:
+                        # Both teams playing at once: neither is hidden
+                        # behind the other, they take turns.
+                        print("Live NFL and college basketball games - "
+                              "alternating")
                         started = time.time()
                         self.bears_display.display_bears_info(
-                            loop_until_final=True)
+                            duration=self.SHARED_LIVE_SECONDS)
+                        self.ncaab_display.display_game_info(
+                            duration=self.SHARED_LIVE_SECONDS)
                         time.sleep(max(0, self.NFL_LIVE_MIN_SECONDS
                                        - (time.time() - started)))
+                        continue
+                    if nfl_live:
+                        print("Live NFL game - showing it until final")
+                        started = time.time()
+                        # Only on a basketball game day is there a tip-off
+                        # to hand half the screen time to
+                        if self._ncaab_plays_today():
+                            self.bears_display.display_bears_info(
+                                loop_until_final=True,
+                                yield_to=self._ncaab_live)
+                        else:
+                            self.bears_display.display_bears_info(
+                                loop_until_final=True)
+                        time.sleep(max(0, self.NFL_LIVE_MIN_SECONDS
+                                       - (time.time() - started)))
+                        continue
+                    if ncaab_live:
+                        print("Live college basketball game - showing it "
+                              "until final")
+                        started = time.time()
+                        self.ncaab_display.display_game_info(
+                            loop_until_final=True,
+                            yield_to=lambda: (self._off_season_nfl_live()
+                                              or self._nfl_takeover_pending()))
+                        time.sleep(max(0, self.NFL_LIVE_MIN_SECONDS
+                                       - (time.time() - started)))
+                        if self._nfl_takeover_pending():
+                            return
                         continue
 
                     # Abort the rotation between segments when a live NFL
@@ -598,7 +683,8 @@ class OffSeasonHandler:
                         # the check above picks the game up next pass.
                         return takeover['pending'] or (
                             display_mode == 'auto'
-                            and self._off_season_nfl_live())
+                            and (self._off_season_nfl_live()
+                                 or self._ncaab_live()))
 
                     self._display_rotation_cycle(
                         between_callback=_takeover_wanted)
@@ -730,6 +816,42 @@ class OffSeasonHandler:
             else:
                 print("Skipping Bears display (disabled in config)")
 
+        def _basketball_segment(name, config_key, show):
+            """Run one college basketball segment when it is enabled and
+            in season. `show` returns False when it drew nothing, which
+            skips the interstitial. Returns True to abort the rotation."""
+            if not self.config.get(config_key, True):
+                print(f"Skipping basketball {name} (disabled in config)")
+                return False
+            if not basketball_season:
+                print(f"Skipping basketball {name} (not basketball season)")
+                return False
+            print(f"Displaying college basketball {name}...")
+            try:
+                drew = show()
+            except Exception as e:
+                print(f"Error in basketball {name} display: {e}")
+                import traceback
+                traceback.print_exc()
+                drew = False
+            return drew is not False and _tick()
+
+        # One schedule lookup covers all five basketball segments
+        try:
+            basketball_season = self._is_basketball_season()
+        except Exception as e:
+            print(f"Basketball season check failed: {e}")
+            basketball_season = False
+
+        # College basketball game: next-game card, or game day. Another
+        # sport's live game owns the day, so this drops to the upcoming
+        # card rather than competing live scores.
+        if _basketball_segment('game', 'enable_ncaab', lambda: (
+                self.ncaab_display.display_game_info(
+                    duration=self.rotation_schedule['ncaab'] * 60,
+                    force_scheduled=self._mlb_in_progress()))):
+            return
+
         # Display weather (between Bears schedule and Bears news)
         weather_enabled = self.config.get('enable_weather', True)
         if weather_enabled:
@@ -782,6 +904,17 @@ class OffSeasonHandler:
                 return
         else:
             print("Skipping Bears news (disabled in config)")
+
+        # College basketball rankings (team poll card + AP Top 25) and
+        # conference standings
+        if _basketball_segment('rankings', 'enable_ncaab_rankings', lambda: (
+                self.ncaab_display.display_rankings(
+                    duration=self.rotation_schedule['ncaab_rankings'] * 60))):
+            return
+        if _basketball_segment('standings', 'enable_ncaab_standings', lambda: (
+                self.ncaab_display.display_standings(
+                    duration=self.rotation_schedule['ncaab_standings'] * 60))):
+            return
 
         # Display PGA Tour info if it's golf season and enabled
         pga_enabled = self.config.get('enable_pga', True)
@@ -977,6 +1110,16 @@ class OffSeasonHandler:
                 traceback.print_exc()
         else:
             print("Skipping Cubs history (disabled in config)")
+
+        # College basketball news and program facts
+        if _basketball_segment('news', 'enable_ncaab_news', lambda: (
+                self.ncaab_display.display_news(
+                    duration=self.rotation_schedule['ncaab_news'] * 60))):
+            return
+        if _basketball_segment('facts', 'enable_ncaab_facts', lambda: (
+                self.ncaab_display.display_facts(
+                    duration=self.rotation_schedule['ncaab_facts'] * 60))):
+            return
 
         # Display Bible Verse of the Day if enabled
         bible_enabled = self.config.get('enable_bible', True)

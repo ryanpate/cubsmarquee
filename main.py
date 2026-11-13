@@ -300,6 +300,20 @@ class CubsScoreboard:
                     NFL_PREEMPT_MIN_SECONDS - (time.time() - started))
                 return
 
+            # Likewise a live college basketball game: the NCAA tournament
+            # overlaps spring training and the first weeks of the season.
+            if self.off_season_handler.ncaab_fills_idle_screen():
+                logger.info("College basketball game live and no MLB game "
+                            "on - showing basketball game")
+                self.manager.set_status('College basketball game')
+                started = time.time()
+                self.off_season_handler.ncaab_display.display_game_info(
+                    loop_until_final=True,
+                    yield_to=self.off_season_handler.mlb_game_active)
+                self._sleep_interruptibly(
+                    NFL_PREEMPT_MIN_SECONDS - (time.time() - started))
+                return
+
             # Get current schedule
             game_data: list[dict[str, Any]] = self.manager.get_schedule()
 
@@ -476,7 +490,8 @@ class CubsScoreboard:
                 game_data, self.current_game_index, cycle_content=True)
             if not is_shutdown_requested():
                 # Abort the rotation between segments if the All-Star
-                # Game, Home Run Derby or an NFL game goes live, or this
+                # Game, Home Run Derby, an NFL game or a college
+                # basketball game goes live, or this
                 # game reaches pre-game, so that display kicks in promptly
                 # instead of after the full ~30 minute rotation. A failed
                 # MLB check keeps rotating so an outage can't cut every
@@ -486,6 +501,7 @@ class CubsScoreboard:
                         self.allstar_display.asg_is_live()
                         or self.allstar_display.derby_is_live()
                         or self.off_season_handler.nfl_fills_idle_screen()
+                        or self.off_season_handler.ncaab_fills_idle_screen()
                         or self.off_season_handler.mlb_game_active(
                             on_error=False)))
             return

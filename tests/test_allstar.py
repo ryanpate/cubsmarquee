@@ -702,6 +702,7 @@ class TestLiveTakeover:
         board.allstar_display = Mock()
         board.off_season_handler = Mock()
         board.off_season_handler.nfl_fills_idle_screen.return_value = False
+        board.off_season_handler.ncaab_fills_idle_screen.return_value = False
         board.state_handler = Mock()
         return board
 

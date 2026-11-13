@@ -843,6 +843,9 @@ class TestIdleScreenTakeover:
             def nfl_fills_idle_screen(self_inner):
                 return fills
 
+            def ncaab_fills_idle_screen(self_inner):
+                return False
+
             def mlb_game_active(self_inner):
                 return False
 
