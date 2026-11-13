@@ -276,6 +276,8 @@ def test_save_config_round_trips_ncaab_team(client):
     import wifi_config_server as wcs
     html = client.get('/admin').get_data(as_text=True)
     assert 'name="ncaab_team" value="kentucky"' in html
+    assert 'name="ncaab_team" value="indiana"' in html
+    assert client.get('/ncaab_logo/indiana').status_code == 200
     resp = client.post('/save_config', json={'ncaab_team': 'kentucky'})
     body = resp.get_json()
     assert body['success'] is True

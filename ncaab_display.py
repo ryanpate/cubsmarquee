@@ -284,7 +284,11 @@ class CollegeBasketballDisplay:
         self.ACCENT: RGBColor = self.team.accent_color
         self.TEXT_WHITE: RGBColor = Colors.WHITE
         self.TEXT_GRAY: RGBColor = (170, 170, 170)
-        self.LOSS_RED: RGBColor = (220, 60, 60)
+        # Red text sinks into a red background (Indiana), so a loss and
+        # a drop in the poll are drawn in amber there instead
+        r, g, b = self.PRIMARY
+        self.LOSS_RED: RGBColor = (
+            (255, 170, 40) if r > max(g, b) + 60 else (220, 60, 60))
         self.UP_GREEN: RGBColor = (60, 210, 90)
 
         self.schedule: dict[str, Any] | None = None

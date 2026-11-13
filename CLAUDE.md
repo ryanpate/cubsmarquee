@@ -26,7 +26,7 @@ sudo systemctl start cubs-scoreboard
 | `live_game_handler.py` | Live game display with scores, bases, innings, batter info |
 | `off_season_handler.py` | Off-season content rotation manager |
 | `scoreboard_config.py` | Configuration constants (colors, positions, fonts) |
-| `teams.py` | Team packs — MLB (Cubs, Cardinals), NFL (Bears, Chiefs) and college basketball (Illini, Kentucky): identity, colors, assets, content sources incl. news keywords |
+| `teams.py` | Team packs — MLB (Cubs, Cardinals), NFL (Bears, Chiefs) and college basketball (Illini, Kentucky, Indiana): identity, colors, assets, content sources incl. news keywords |
 
 ### Content Displays
 | File | Purpose |
@@ -52,7 +52,7 @@ sudo systemctl start cubs-scoreboard
 |------|---------|
 | `cubs_facts.json` | 305+ Cubs trivia facts |
 | `pga_facts.json` | PGA Tour facts and records |
-| `illini_facts.json`, `kentucky_facts.json` | College basketball program facts, one file per pack |
+| `illini_facts.json`, `kentucky_facts.json`, `indiana_facts.json` | College basketball program facts, one file per pack |
 | `/home/pi/config.json` | User configuration (API keys, toggles) |
 
 ### Assets
@@ -190,7 +190,7 @@ User configuration stored at `/home/pi/config.json`:
 - Weather location
 - `team` — active team pack slug (`cubs` default, `cardinals`)
 - `nfl_team` — active NFL team pack slug (`bears` default, `chiefs`)
-- `ncaab_team` — active college basketball pack slug (`illini` default, `kentucky`). Adding a school is one `NCAABTeamPack` in `teams.py` plus a facts JSON; the logo is already in `logos/ncaab/`
+- `ncaab_team` — active college basketball pack slug (`illini` default, `kentucky`, `indiana`). Adding a school is one `NCAABTeamPack` in `teams.py` plus a facts JSON; the logo is already in `logos/ncaab/`
 - `enable_ncaab`, `enable_ncaab_rankings`, `enable_ncaab_standings`, `enable_ncaab_news`, `enable_ncaab_facts` — the five college basketball screens, all default on. Basketball season is read from the team's ESPN schedule (game within -3/+14 days; Nov–Apr month gate if ESPN is unreachable). A live game takes the whole screen in `display_mode: auto` after the MLB season, and during the MLB season whenever no MLB game is on (`OffSeasonHandler.ncaab_fills_idle_screen()` — the NCAA tournament overlaps spring training and Opening Day). When an NFL game and a basketball game are live together they alternate every 90 s rather than one hiding the other. There is no basketball equivalent of `nfl_preempt_mlb`: a live MLB game always wins
 - `nfl_preempt_mlb` — when `true`, a live NFL game takes over the display the way a live MLB game does: the run loop skips `process_game_cycle()` entirely, so no MLB content is shown until the NFL game leaves ESPN's `state: 'in'` (default `false`). The demotion to a scheduled NFL card is the *other* direction — it is what the NFL rotation slot does when this key is off and an MLB game is in progress. Independent of this key, during the MLB season a live NFL game takes the screen whenever no MLB game is on (pre-game through the last out, delays included) — see `OffSeasonHandler.nfl_fills_idle_screen()`; it hands back as soon as an MLB game reaches pre-game. After the MLB season ends, `display_mode: auto` likewise gives a live NFL game the whole screen until it ends, instead of one rotation slot (`no_games` does not, since it can be forced mid-season). Football season is detected from the ESPN schedule (game within -3/+14 days), not from a month range, so preseason counts like the regular season; when that schedule is unreachable the code falls back to `extended_month_gate()` (Aug–Feb) so a network blip cannot silently hide all NFL content
 - `panel_version` — panel hardware revision (`v1` default, `v2`); set by `install_panel_v2.sh`

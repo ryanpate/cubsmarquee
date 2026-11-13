@@ -396,6 +396,26 @@ NCAAB_TEAMS: dict[str, NCAABTeamPack] = {
         ),
         win_chant=('C-A-T-S', 'CATS!'),
     ),
+    'indiana': NCAABTeamPack(
+        slug='indiana',
+        espn_team_id='84',
+        abbrev='IU',
+        name='Indiana Hoosiers',
+        short_name='Hoosiers',
+        header_name='INDIANA HOOPS',
+        primary_color=(151, 3, 16),
+        # Cream, pushed warmer than the official shade so highlighted
+        # rows read apart from the white body text.
+        accent_color=(255, 226, 150),
+        conference_id='7',
+        conference_name='BIG TEN',
+        logo_path='./logos/ncaab/84.png',
+        facts_basename='indiana_facts.json',
+        news_keywords=(
+            'INDIANA', 'HOOSIERS', 'ASSEMBLY HALL', 'BLOOMINGTON',
+        ),
+        win_chant=('HOO-HOO-HOO', 'HOOSIERS!'),
+    ),
 }
 
 

@@ -426,6 +426,25 @@ class TestPack:
         # White is the body text, so it cannot also be the highlight
         assert pack.accent_color != (255, 255, 255)
 
+    def test_indiana_is_selectable(self):
+        from teams import get_active_ncaab_team
+        pack = get_active_ncaab_team({'ncaab_team': 'indiana'})
+        assert pack.espn_team_id == '84'
+        assert pack.conference_id == '7'
+        assert pack.accent_color != (255, 255, 255)
+
+    def test_loss_colour_is_not_red_on_a_red_background(self, monkeypatch):
+        from teams import NCAAB_TEAMS
+
+        def loss_colour(slug):
+            monkeypatch.setattr(nd, 'get_active_ncaab_team',
+                                lambda: NCAAB_TEAMS[slug])
+            return nd.CollegeBasketballDisplay(Mock()).LOSS_RED
+
+        red, green, blue = loss_colour('indiana')
+        assert green > 120  # amber, not red-on-crimson
+        assert loss_colour('illini') == (220, 60, 60)
+
     def test_win_banner_fits_the_panel_for_every_pack(self):
         from scoreboard_config import Fonts
         from teams import NCAAB_TEAMS
