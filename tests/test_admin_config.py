@@ -268,7 +268,19 @@ def test_ncaab_logo_route(client):
     resp = client.get('/ncaab_logo/illini')
     assert resp.status_code == 200
     assert resp.mimetype == 'image/png'
+    assert client.get('/ncaab_logo/kentucky').status_code == 200
     assert client.get('/ncaab_logo/duke').status_code == 404
+
+
+def test_save_config_round_trips_ncaab_team(client):
+    import wifi_config_server as wcs
+    html = client.get('/admin').get_data(as_text=True)
+    assert 'name="ncaab_team" value="kentucky"' in html
+    resp = client.post('/save_config', json={'ncaab_team': 'kentucky'})
+    body = resp.get_json()
+    assert body['success'] is True
+    assert body['reboot_required'] is True
+    assert wcs.load_config()['ncaab_team'] == 'kentucky'
 
 
 def test_college_basketball_settings_default_on_and_round_trip(client):

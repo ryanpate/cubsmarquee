@@ -418,6 +418,21 @@ class TestPack:
         assert get_active_ncaab_team({'ncaab_team': 'nope'}).slug == 'illini'
         assert NCAAB_TEAMS['illini'].espn_team_id == ILLINI
 
+    def test_kentucky_is_selectable(self):
+        from teams import get_active_ncaab_team
+        pack = get_active_ncaab_team({'ncaab_team': 'kentucky'})
+        assert pack.espn_team_id == '96'
+        assert pack.conference_id == '23'
+        # White is the body text, so it cannot also be the highlight
+        assert pack.accent_color != (255, 255, 255)
+
+    def test_win_banner_fits_the_panel_for_every_pack(self):
+        from scoreboard_config import Fonts
+        from teams import NCAAB_TEAMS
+        for pack in NCAAB_TEAMS.values():
+            banner = f'{pack.short_name.upper()} WIN!'
+            assert len(banner) * Fonts.CHAR_WIDTH_STANDARD - 1 <= 96, banner
+
     def test_every_pack_has_its_assets(self):
         from teams import NCAAB_TEAMS
         for pack in NCAAB_TEAMS.values():

@@ -375,6 +375,27 @@ NCAAB_TEAMS: dict[str, NCAABTeamPack] = {
         ),
         win_chant=('I-L-L', 'I-N-I'),
     ),
+    'kentucky': NCAABTeamPack(
+        slug='kentucky',
+        espn_team_id='96',
+        abbrev='UK',
+        name='Kentucky Wildcats',
+        short_name='Wildcats',
+        header_name='KENTUCKY',
+        primary_color=(0, 51, 160),
+        # Kentucky's second color is white, which is also the body text;
+        # a pale blue keeps the highlighted rows and stripes distinct.
+        accent_color=(150, 200, 255),
+        conference_id='23',
+        conference_name='SEC',
+        logo_path='./logos/ncaab/96.png',
+        facts_basename='kentucky_facts.json',
+        # No bare 'WILDCATS': Arizona, Villanova and Kansas State share it
+        news_keywords=(
+            'KENTUCKY', 'MARK POPE', 'RUPP ARENA', 'BIG BLUE NATION',
+        ),
+        win_chant=('C-A-T-S', 'CATS!'),
+    ),
 }
 
 

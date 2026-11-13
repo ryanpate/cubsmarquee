@@ -966,10 +966,14 @@ class CollegeBasketballDisplay:
             color = self.ACCENT if index % 2 == 0 else self.TEXT_WHITE
             self.manager.clear_canvas()
             self._draw_header()
-            if len(text) * Fonts.CHAR_WIDTH_LARGE <= 96:
-                font, width, baseline = 'large_bold', Fonts.CHAR_WIDTH_LARGE, 38
-            else:
-                font, width, baseline = 'medium_bold', Fonts.CHAR_WIDTH_MEDIUM, 37
+            # Largest font the text fits in; 'WILDCATS WIN!' needs the
+            # smallest of the three
+            for font, width, baseline in (
+                    ('large_bold', Fonts.CHAR_WIDTH_LARGE, 38),
+                    ('medium_bold', Fonts.CHAR_WIDTH_MEDIUM, 37),
+                    ('standard_bold', Fonts.CHAR_WIDTH_STANDARD, 35)):
+                if len(text) * width - 1 <= 96:
+                    break
             self.manager.draw_text(font, _centred_x(text, width), baseline,
                                    color, text)
             self.manager.swap_canvas()
