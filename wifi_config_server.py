@@ -315,239 +315,356 @@ HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>{{ active_team.short_name }} Scoreboard Admin</title>
+    <title>{{ active_team.short_name }} Scoreboard Settings</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% set pc = active_team.primary_color %}
     <style>
+        :root {
+            --accent: rgb({{ pc[0] }}, {{ pc[1] }}, {{ pc[2] }});
+            --bg: #f3f4f7;
+            --card: #ffffff;
+            --text: #1d2433;
+            --muted: #5f6b7d;
+            --line: #e2e6ec;
+            --good: #1f8a4c;
+            --bad: #c62f2f;
+            --warn-bg: #fff6e0;
+            --warn-text: #7a5300;
+        }
+        * { box-sizing: border-box; }
         body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 20px auto;
-            padding: 20px;
-            background: #0C2340;
-            color: white;
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            font-size: 16px;
+            line-height: 1.45;
+            padding-bottom: 90px;
         }
-        .container {
-            background: white;
-            color: #0C2340;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 0 20px rgba(0,0,0,0.3);
+        .page { max-width: 760px; margin: 0 auto; padding: 0 16px; }
+        header.top {
+            background: var(--accent);
+            color: #fff;
+            padding: 18px 0 0;
         }
-        h1 {
-            color: #CC3433;
+        header.top h1 { margin: 0; font-size: 1.35em; }
+        header.top .sub { opacity: 0.85; font-size: 0.9em; margin-bottom: 14px; }
+
+        /* Live preview of the LED panel */
+        .preview-card {
+            background: #000;
+            border-radius: 12px;
+            padding: 10px;
             text-align: center;
-            margin-bottom: 10px;
         }
-        h2 {
-            color: #0C2340;
-            border-bottom: 2px solid #CC3433;
-            padding-bottom: 5px;
-            margin: 30px 0 15px 0;
+        #matrix-preview {
+            image-rendering: pixelated;
+            width: 100%;
+            max-width: 480px;
+            aspect-ratio: 2 / 1;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+            background: #000;
         }
-        .subtitle {
-            text-align: center;
-            color: #666;
-            margin-bottom: 20px;
-            font-size: 14px;
-        }
-        .nav-tabs {
+        .now-showing {
             display: flex;
-            border-bottom: 2px solid #0C2340;
-            margin-bottom: 20px;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: #ddd;
+            font-size: 0.9em;
+            padding-top: 8px;
         }
-        .nav-tab {
-            padding: 10px 20px;
-            cursor: pointer;
-            background: #6c757d;
+        .dot { width: 9px; height: 9px; border-radius: 50%; background: #888; flex: none; }
+        .dot.on { background: #3ad07a; }
+        .dot.off { background: #e05050; }
+
+        /* Tabs */
+        nav.tabs {
+            display: flex;
+            gap: 4px;
+            margin-top: 16px;
+            overflow-x: auto;
+        }
+        nav.tabs button {
+            flex: 1;
+            background: transparent;
+            color: rgba(255,255,255,0.8);
             border: none;
-            font-size: 16px;
-            font-weight: bold;
-            margin-right: 5px;
-            border-radius: 5px 5px 0 0;
-        }
-        .nav-tab.active {
-            background: #0C2340;
-            color: white;
-        }
-        .tab-content {
-            display: none;
-        }
-        .tab-content.active {
-            display: block;
-        }
-        .info-box {
-            background: #f8f9fa;
-            border-left: 4px solid #0C2340;
-            padding: 15px;
-            margin-bottom: 20px;
-            border-radius: 4px;
-        }
-        .info-box strong {
-            color: #CC3433;
-        }
-        .info-row {
-            margin: 8px 0;
-        }
-        .form-group {
-            margin-bottom: 20px;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-        }
-        input, select, textarea {
-            width: 100%;
-            padding: 10px;
-            border: 2px solid #0C2340;
-            border-radius: 5px;
-            box-sizing: border-box;
-            font-size: 16px;
-        }
-        textarea {
-            resize: vertical;
-            min-height: 60px;
-        }
-        input[type="checkbox"] {
-            width: auto;
-            display: inline-block;
-            margin-right: 8px;
-        }
-        button {
-            width: 100%;
-            padding: 12px;
-            background: #CC3433;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-size: 16px;
-            font-weight: bold;
+            padding: 12px 10px;
+            font-size: 0.95em;
+            font-weight: 600;
+            border-radius: 10px 10px 0 0;
             cursor: pointer;
+            white-space: nowrap;
         }
-        button:hover {
-            background: #A62C2B;
+        nav.tabs button.active { background: var(--bg); color: var(--accent); }
+        .tab-content { display: none; padding-top: 18px; }
+        .tab-content.active { display: block; }
+        .tab-intro { color: var(--muted); margin: 0 0 14px; }
+
+        /* Cards */
+        .card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            margin-bottom: 14px;
+            overflow: hidden;
         }
-        button:disabled {
-            background: #ccc;
-            cursor: not-allowed;
+        .card > h2, details.card > summary {
+            font-size: 1.05em;
+            margin: 0;
+            padding: 14px 16px;
         }
-        .button-secondary {
-            background: #0C2340;
-            margin-top: 10px;
-        }
-        .button-secondary:hover {
-            background: #081828;
-        }
-        .status {
-            margin-top: 20px;
-            padding: 10px;
-            border-radius: 5px;
-            display: none;
-        }
-        .status.success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        .status.error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        .network-list {
-            max-height: 200px;
-            overflow-y: auto;
-            border: 2px solid #0C2340;
-            border-radius: 5px;
-            margin-bottom: 20px;
-        }
-        .network-item {
-            padding: 10px;
-            border-bottom: 1px solid #eee;
+        details.card > summary {
             cursor: pointer;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            font-weight: 700;
         }
-        .network-item:hover {
-            background: #f0f0f0;
+        details.card > summary::-webkit-details-marker { display: none; }
+        details.card > summary::after {
+            content: "";
+            margin-left: auto;
+            width: 9px; height: 9px;
+            border-right: 2px solid var(--muted);
+            border-bottom: 2px solid var(--muted);
+            transform: rotate(45deg);
+            transition: transform 0.15s;
         }
-        .network-item:last-child {
-            border-bottom: none;
+        details.card[open] > summary::after { transform: rotate(-135deg); }
+        details.card[open] > summary { border-bottom: 1px solid var(--line); }
+        .summary-note { font-weight: 400; color: var(--muted); font-size: 0.85em; margin-left: 8px; }
+        @media (max-width: 480px) { .summary-note { display: none; } }
+        .card-body { padding: 4px 16px 16px; }
+        .card-body > p.hint:first-child { margin-top: 12px; }
+        h3.group {
+            font-size: 0.78em;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--muted);
+            margin: 18px 0 2px;
         }
-        .signal {
-            float: right;
-            color: #0C2340;
+
+        /* A labelled row: text + help icon on the left, control on the right */
+        .row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 11px 0;
+            border-bottom: 1px solid var(--line);
         }
-        .warning {
-            background: #fff3cd;
-            border-left: 4px solid #ffc107;
-            padding: 15px;
-            margin-bottom: 20px;
-            border-radius: 4px;
-            color: #856404;
+        .row:last-child { border-bottom: none; }
+        .row > label { flex: 1; cursor: pointer; }
+        .row .control { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+        .field { padding: 12px 0; }
+        .field > label { display: block; font-weight: 600; margin-bottom: 6px; }
+        .label-line { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+        .label-line label { font-weight: 600; }
+        .hint { color: var(--muted); font-size: 0.88em; margin: 6px 0 0; }
+
+        input[type=text], input[type=password], input[type=time], select, textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #c8cfd9;
+            border-radius: 8px;
+            font-size: 16px;
+            font-family: inherit;
+            background: #fff;
+            color: var(--text);
         }
-        .help-text {
-            font-size: 13px;
-            color: #666;
-            margin-top: 5px;
+        input[type=time] { width: auto; }
+        textarea { min-height: 70px; resize: vertical; }
+        input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+        /* On/off switches */
+        input.switch {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 46px; height: 26px;
+            border-radius: 13px;
+            background: #c4cad3;
+            position: relative;
+            cursor: pointer;
+            flex: none;
+            margin: 0;
+            transition: background 0.15s;
         }
-        .log-viewer {
-            background: #1e1e1e;
-            color: #d4d4d4;
-            padding: 15px;
-            border-radius: 5px;
-            font-family: 'Courier New', monospace;
+        input.switch::after {
+            content: "";
+            position: absolute;
+            top: 3px; left: 3px;
+            width: 20px; height: 20px;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            transition: left 0.15s;
+        }
+        input.switch:checked { background: var(--good); }
+        input.switch:checked::after { left: 23px; }
+        input.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+        /* Sliders */
+        input[type=range] { flex: 1; accent-color: var(--accent); min-width: 120px; }
+        .slider-row { display: flex; align-items: center; gap: 10px; }
+        .slider-row .end { font-size: 0.8em; color: var(--muted); }
+        .value-pill {
+            min-width: 52px;
+            text-align: center;
+            font-weight: 700;
+            font-size: 0.9em;
+            color: var(--accent);
+        }
+
+        /* Help "?" icons and their pop-up */
+        button.help {
+            width: 20px; height: 20px;
+            border-radius: 50%;
+            border: 1px solid #b6bec9;
+            background: #fff;
+            color: var(--muted);
             font-size: 12px;
-            height: 400px;
+            font-weight: 700;
+            line-height: 1;
+            padding: 0;
+            cursor: help;
+            flex: none;
+        }
+        button.help:hover, button.help:focus-visible { background: var(--accent); color: #fff; border-color: var(--accent); }
+        #help-popup {
+            position: fixed;
+            z-index: 2000;
+            max-width: 280px;
+            background: #1d2433;
+            color: #fff;
+            font-size: 0.86em;
+            line-height: 1.4;
+            padding: 10px 12px;
+            border-radius: 8px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.12s;
+        }
+        #help-popup.visible { opacity: 1; }
+
+        /* Team pickers */
+        .team-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+        .team-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border: 2px solid var(--line);
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .team-option input { position: absolute; opacity: 0; pointer-events: none; }
+        .team-option:has(input:checked) { border-color: var(--accent); background: #f5f7fb; }
+        .team-option:has(input:focus-visible) { outline: 2px solid var(--accent); }
+        .team-option img { width: 32px; height: 32px; object-fit: contain; background: #111; border-radius: 6px; padding: 3px; box-sizing: border-box; }
+
+        /* Choice list (radio options) */
+        .choice {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+            padding: 10px 12px;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            margin-top: 8px;
+            cursor: pointer;
+        }
+        .choice:has(input:checked) { border-color: var(--accent); background: #f5f7fb; }
+        .choice input { margin-top: 4px; accent-color: var(--accent); }
+        .choice strong { display: block; }
+        .choice span { color: var(--muted); font-size: 0.88em; }
+
+        /* Buttons */
+        button.btn {
+            display: inline-block;
+            padding: 11px 18px;
+            border: none;
+            border-radius: 9px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            background: var(--accent);
+            color: #fff;
+        }
+        button.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        button.btn.light { background: #e7eaf0; color: var(--text); }
+        button.btn.danger { background: var(--bad); }
+        button.btn.wide { width: 100%; }
+        .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+        .btn-row .btn { flex: 1 1 140px; }
+
+        .notice {
+            background: var(--warn-bg);
+            color: var(--warn-text);
+            border-radius: 10px;
+            padding: 12px 14px;
+            font-size: 0.92em;
+            margin: 12px 0;
+        }
+        .facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 0.93em; margin: 12px 0; }
+        .facts dt { color: var(--muted); }
+        .facts dd { margin: 0; font-weight: 600; word-break: break-all; }
+
+        .status {
+            margin-top: 12px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            display: none;
+            font-size: 0.92em;
+        }
+        .status.success { background: #e3f5ea; color: #155a32; }
+        .status.error { background: #fde8e8; color: #8a1c1c; }
+
+        .network-list { border: 1px solid var(--line); border-radius: 10px; margin: 10px 0; max-height: 240px; overflow-y: auto; }
+        .network-item { padding: 11px 12px; border-bottom: 1px solid var(--line); cursor: pointer; display: flex; }
+        .network-item:last-child { border-bottom: none; }
+        .network-item:hover { background: #f5f7fb; }
+        .signal { margin-left: auto; color: var(--muted); font-size: 0.9em; }
+
+        .service-status { font-weight: 700; }
+        .service-status.running { color: var(--good); }
+        .service-status.stopped { color: var(--bad); }
+
+        .log-viewer {
+            background: #16191f;
+            color: #d4d4d4;
+            padding: 12px;
+            border-radius: 8px;
+            font-family: Menlo, Consolas, monospace;
+            font-size: 12px;
+            height: 360px;
             overflow-y: auto;
             white-space: pre-wrap;
             word-wrap: break-word;
+            margin-top: 10px;
         }
-        .service-status {
-            display: inline-block;
-            padding: 5px 10px;
-            border-radius: 3px;
-            font-weight: bold;
-            margin-left: 10px;
+
+        /* Sticky save bar for the settings tabs */
+        .save-bar {
+            position: fixed;
+            left: 0; right: 0; bottom: 0;
+            background: #fff;
+            border-top: 1px solid var(--line);
+            box-shadow: 0 -4px 16px rgba(0,0,0,0.06);
+            padding: 12px 0;
+            z-index: 500;
         }
-        .service-status.running {
-            background: #d4edda;
-            color: #155724;
-        }
-        .service-status.stopped {
-            background: #f8d7da;
-            color: #721c24;
-        }
-        .button-group {
-            display: flex;
-            gap: 10px;
-        }
-        .button-group button {
-            flex: 1;
-        }
-        .button-start {
-            background: #28a745;
-        }
-        .button-start:hover {
-            background: #218838;
-        }
-        .button-stop {
-            background: #dc3545;
-        }
-        .button-stop:hover {
-            background: #c82333;
-        }
-        .button-restart {
-            background: #fd7e14;
-        }
-        .button-restart:hover {
-            background: #e96b02;
-        }
-        .button-reboot {
-            background: #6c757d;
-            margin-top: 20px;
-        }
-        .button-reboot:hover {
-            background: #5a6268;
-        }
+        .save-bar.hidden { display: none; }
+        .save-bar .page { display: flex; align-items: center; gap: 12px; }
+        .save-bar .save-msg { flex: 1; color: var(--muted); font-size: 0.9em; }
+        .save-bar.dirty .save-msg { color: var(--warn-text); font-weight: 600; }
+        .save-bar .status { margin: 0; }
+
+        /* Reboot pop-up */
         .reboot-prompt-backdrop {
             display: none;
             position: fixed;
@@ -556,787 +673,507 @@ HTML_TEMPLATE = """
             z-index: 1000;
             align-items: center;
             justify-content: center;
-            padding: 20px;
+            padding: 16px;
         }
         .reboot-prompt-backdrop.visible { display: flex; }
         .reboot-prompt-box {
             background: #fff;
-            border-radius: 8px;
-            padding: 24px;
-            max-width: 460px;
+            border-radius: 14px;
+            padding: 22px;
+            max-width: 440px;
             width: 100%;
             box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
         }
         .reboot-prompt-box h3 { margin: 0 0 10px; }
         .reboot-prompt-box p { margin: 0 0 8px; }
-        .reboot-prompt-keys {
-            font-family: monospace;
-            background: #f2f2f2;
-            padding: 6px 8px;
-            border-radius: 4px;
-            display: inline-block;
-        }
-        .reboot-prompt-actions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-top: 18px;
-        }
-        .reboot-prompt-actions button { width: auto; flex: 1 1 auto; }
-        .speed-control {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-top: 5px;
-            padding: 8px;
-            background: #f8f9fa;
-            border-radius: 4px;
-        }
-        .speed-control label {
-            min-width: 80px;
-            margin-bottom: 0;
-            font-size: 13px;
-        }
-        .speed-slider {
-            flex: 1;
-            height: 6px;
-            -webkit-appearance: none;
-            appearance: none;
-            background: #ddd;
-            border-radius: 3px;
-            outline: none;
-        }
-        .speed-slider::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 18px;
-            height: 18px;
-            background: #0C2340;
-            border-radius: 50%;
-            cursor: pointer;
-        }
-        .speed-slider::-moz-range-thumb {
-            width: 18px;
-            height: 18px;
-            background: #0C2340;
-            border-radius: 50%;
-            cursor: pointer;
-            border: none;
-        }
-        .speed-value {
-            min-width: 60px;
-            text-align: center;
-            font-weight: bold;
-            font-size: 12px;
-            color: #0C2340;
-        }
-        .scroll-speeds-section {
-            background: #e9ecef;
-            padding: 15px;
-            border-radius: 8px;
-            margin-top: 20px;
-        }
-        .scroll-speeds-section h4 {
-            margin-top: 0;
-            margin-bottom: 15px;
-            color: #0C2340;
-        }
-        details.config-section {
-            border: 1px solid #d0d7e2;
-            border-radius: 8px;
-            margin-bottom: 12px;
-            background: #fafbfd;
-        }
-        details.config-section > summary {
-            cursor: pointer;
-            padding: 12px 15px;
-            font-weight: bold;
-            color: #0C2340;
-            font-size: 1.05em;
-            list-style-position: inside;
-        }
-        details.config-section[open] > summary {
-            border-bottom: 1px solid #d0d7e2;
-        }
-        details.config-section > .section-body {
-            padding: 15px;
-        }
-        .team-option {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 10px;
-            border: 2px solid #d0d7e2;
-            border-radius: 8px;
-            margin-bottom: 8px;
-            cursor: pointer;
-        }
-        .team-option:has(input:checked) {
-            border-color: #CC3433;
-            background: #fff5f5;
-        }
-        .team-option img { width: 28px; height: 28px; object-fit: contain; }
-        .team-swatch {
-            width: 18px; height: 18px; border-radius: 4px;
-            border: 1px solid #999; margin-left: auto;
-        }
-        .checkbox-columns {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-            gap: 4px 16px;
-        }
+        .reboot-prompt-keys { font-weight: 700; }
     </style>
 </head>
 <body>
+    {% macro help(text) -%}
+        <button type="button" class="help" data-help="{{ text }}" aria-label="Help: {{ text }}">?</button>
+    {%- endmacro %}
+
+    {% macro toggle(id, title, text) -%}
+        <div class="row">
+            <label for="{{ id }}">{{ title }}</label>
+            {{ help(text) }}
+            <input type="checkbox" class="switch" id="{{ id }}">
+        </div>
+    {%- endmacro %}
+
+    {% macro speed(id, title) -%}
+        <div class="row">
+            <label for="{{ id }}" style="flex: 0 0 120px;">{{ title }}</label>
+            <div class="slider-row" style="flex: 1;">
+                <span class="end">Slow</span>
+                <input type="range" id="{{ id }}" min="1" max="10" value="5">
+                <span class="end">Fast</span>
+                <span class="value-pill" id="{{ id }}_val">5</span>
+            </div>
+        </div>
+    {%- endmacro %}
+
+    <div id="help-popup" role="tooltip"></div>
+
     <div class="reboot-prompt-backdrop" id="reboot-prompt">
         <div class="reboot-prompt-box">
-            <h3>Reboot needed</h3>
-            <p>Your settings were saved, but this change only takes effect
-               after the Pi restarts:</p>
+            <h3>Restart needed</h3>
+            <p>Your settings were saved. This change only shows up after the
+               scoreboard restarts:</p>
             <p><span class="reboot-prompt-keys" id="reboot-prompt-keys"></span></p>
-            <p>Rebooting takes about two minutes, and the display is blank
-               until it finishes.</p>
-            <div class="reboot-prompt-actions">
-                <button onclick="rebootFromPrompt(this)" class="button-reboot">Reboot now</button>
-                <button onclick="scheduleRebootFromPrompt(this)" class="button-restart">Tonight at 4 AM</button>
-                <button onclick="dismissRebootPrompt()">Not now</button>
+            <p class="hint">A restart takes about two minutes, and the screen
+               is blank while it happens.</p>
+            <div class="btn-row">
+                <button onclick="rebootFromPrompt(this)" class="btn">Restart now</button>
+                <button onclick="scheduleRebootFromPrompt(this)" class="btn light">Tonight at 4 AM</button>
+                <button onclick="dismissRebootPrompt()" class="btn light">Not now</button>
             </div>
-            <div id="reboot-prompt-status"></div>
+            <div id="reboot-prompt-status" class="status"></div>
         </div>
     </div>
-    <div class="container">
-        <h1>⚾ {{ active_team.short_name }} Scoreboard Admin</h1>
-        <div class="subtitle">Configuration & Management Panel</div>
 
-        <div class="info-box">
-            <div class="info-row"><strong>Hostname:</strong> {{ hostname }}</div>
-            <div class="info-row"><strong>Access URL:</strong> http://{{ hostname }}.local/admin</div>
-            <div class="info-row"><strong>IP Address:</strong> {{ ip_address }}</div>
-            <div class="info-row"><strong>Connection:</strong> {{ connection_mode }}</div>
-            <div class="info-row"><strong>Current Network:</strong> {{ current_network }}</div>
-            <div class="info-row"><strong>Scoreboard:</strong> <span id="scoreboard-status">checking...</span></div>
-            <div class="info-row" style="text-align: center; margin-top: 8px;">
-                <img id="matrix-preview" width="384" height="192" alt="Preview not available yet"
-                     style="image-rendering: pixelated; background: #000; border-radius: 4px; max-width: 100%;">
+    <header class="top">
+        <div class="page">
+            <h1>{{ active_team.short_name }} Scoreboard</h1>
+            <div class="sub">Settings for {{ hostname }}</div>
+
+            <div class="preview-card">
+                <img id="matrix-preview" alt="" onload="this.style.visibility='visible'" onerror="this.style.visibility='hidden'">
+                <div class="now-showing">
+                    <span class="dot" id="status-dot"></span>
+                    <span>Now showing: <span id="scoreboard-status">checking...</span></span>
+                </div>
             </div>
+
+            <nav class="tabs">
+                <button class="active" data-tab="config" onclick="switchTab('config')">Display</button>
+                <button data-tab="location" onclick="switchTab('location')">Location</button>
+                <button data-tab="wifi" onclick="switchTab('wifi')">Wi-Fi</button>
+                <button data-tab="device" onclick="switchTab('device')">Device</button>
+            </nav>
         </div>
+    </header>
 
-        <div class="nav-tabs">
-            <button class="nav-tab active" onclick="switchTab('wifi')">WiFi Setup</button>
-            <button class="nav-tab" onclick="switchTab('config')">Display Config</button>
-            <button class="nav-tab" onclick="switchTab('system')">System</button>
-            <button class="nav-tab" onclick="switchTab('service')">Service Control</button>
-            <button class="nav-tab" onclick="switchTab('logs')">Logs</button>
-        </div>
+    <main class="page">
 
-        <div id="wifi-tab" class="tab-content active">
-            <h2>WiFi Configuration</h2>
-            <div class="warning">
-                <strong>⚠️ Important:</strong> After connecting to WiFi, the IP address will change and this page will reload.
-                You'll need to reconnect to this page using your new network at: <strong>http://{{ hostname }}.local/admin</strong>
-            </div>
-            
-            <button onclick="scanNetworks()" class="button-secondary">Scan for Networks</button>
-            <div id="network-list" class="network-list" style="display:none;"></div>
+        <!-- ============ DISPLAY ============ -->
+        <div id="config-tab" class="tab-content active">
+            <p class="tab-intro">Choose your teams and what appears on the scoreboard. Tap
+                <strong>?</strong> next to anything for an explanation, then press
+                <strong>Save changes</strong> at the bottom.</p>
 
-            <div class="form-group">
-                <label for="ssid">Network Name (SSID):</label>
-                <input type="text" id="ssid" placeholder="Enter WiFi network name">
-            </div>
-
-            <div class="form-group">
-                <label for="password">Password:</label>
-                <input type="password" id="password" placeholder="Enter WiFi password">
-                <div class="help-text">Your WiFi password will be securely stored on the device</div>
-            </div>
-
-            <button onclick="connectWifi()">Connect to WiFi</button>
-            <div id="wifi-status" class="status"></div>
-        </div>
-
-        <div id="config-tab" class="tab-content">
-            <h2>Display Configuration</h2>
-
-            <details class="config-section" open>
-                <summary>Team</summary>
-                <div class="section-body">
-                    <p class="help-text">Pick the MLB team this board follows. The whole display re-themes to the team. Reboot required after changing.</p>
+            <details class="card" open>
+                <summary>Your teams</summary>
+                <div class="card-body">
+                    <div class="label-line" style="margin-top: 12px;">
+                        <strong>Baseball team</strong>
+                        {{ help("The baseball team the scoreboard follows. Its games, colors and logo are used throughout the display. The scoreboard needs a restart after you change this.") }}
+                    </div>
+                    <div class="team-grid">
                     {% for slug, t in teams.items() %}
-                    <label class="team-option">
-                        <input type="radio" name="team" value="{{ slug }}">
-                        <img src="/team_logo/{{ slug }}" alt="{{ t.name }}">
-                        <span>{{ t.name }}</span>
-                        <span class="team-swatch" style="background: rgb({{ t.primary_color[0] }},{{ t.primary_color[1] }},{{ t.primary_color[2] }})"></span>
-                    </label>
+                        <label class="team-option">
+                            <input type="radio" name="team" value="{{ slug }}">
+                            <img src="/team_logo/{{ slug }}" alt="">
+                            <span>{{ t.name }}</span>
+                        </label>
                     {% endfor %}
-                    <hr style="border: none; border-top: 1px solid #444; margin: 12px 0;">
-                    <p class="help-text">Pick the NFL team for the football screens (game info and breaking news). Reboot required after changing.</p>
+                    </div>
+
+                    <div class="label-line" style="margin-top: 18px;">
+                        <strong>Football team</strong>
+                        {{ help("The NFL team used for the football game and football news screens. The scoreboard needs a restart after you change this.") }}
+                    </div>
+                    <div class="team-grid">
                     {% for slug, t in nfl_teams.items() %}
-                    <label class="team-option">
-                        <input type="radio" name="nfl_team" value="{{ slug }}">
-                        <img src="/nfl_logo/{{ slug }}" alt="{{ t.name }}">
-                        <span>{{ t.name }}</span>
-                        <span class="team-swatch" style="background: rgb({{ t.primary_color[0] }},{{ t.primary_color[1] }},{{ t.primary_color[2] }})"></span>
-                    </label>
+                        <label class="team-option">
+                            <input type="radio" name="nfl_team" value="{{ slug }}">
+                            <img src="/nfl_logo/{{ slug }}" alt="">
+                            <span>{{ t.name }}</span>
+                        </label>
                     {% endfor %}
-                    <hr style="border: none; border-top: 1px solid #444; margin: 12px 0;">
-                    <p class="help-text">Pick the college basketball team for the basketball screens (games, rankings, standings, news and facts). Reboot required after changing.</p>
+                    </div>
+
+                    <div class="label-line" style="margin-top: 18px;">
+                        <strong>College basketball team</strong>
+                        {{ help("The college team used for the basketball screens: games, rankings, conference standings, news and trivia. The scoreboard needs a restart after you change this.") }}
+                    </div>
+                    <div class="team-grid">
                     {% for slug, t in ncaab_teams.items() %}
-                    <label class="team-option">
-                        <input type="radio" name="ncaab_team" value="{{ slug }}">
-                        <img src="/ncaab_logo/{{ slug }}" alt="{{ t.name }}">
-                        <span>{{ t.name }}</span>
-                        <span class="team-swatch" style="background: rgb({{ t.primary_color[0] }},{{ t.primary_color[1] }},{{ t.primary_color[2] }})"></span>
-                    </label>
+                        <label class="team-option">
+                            <input type="radio" name="ncaab_team" value="{{ slug }}">
+                            <img src="/ncaab_logo/{{ slug }}" alt="">
+                            <span>{{ t.name }}</span>
+                        </label>
                     {% endfor %}
-                </div>
-            </details>
-
-            <details class="config-section">
-                <summary>Brightness &amp; Auto-Dim</summary>
-                <div class="section-body">
-                    <div class="scroll-speeds-section">
-                        <div class="speed-control">
-                            <label>Brightness:</label>
-                            <input type="range" class="speed-slider" id="brightness" min="10" max="100" value="100">
-                            <span class="speed-value" id="brightness_val">100%</span>
-                        </div>
-                        <p class="help-text" style="margin-top: 8px;">Controls LED matrix brightness (10% = dim, 100% = full). Changes apply within ~10 seconds.</p>
-
-                        <div class="speed-control" style="margin-top: 12px;">
-                            <label><input type="checkbox" id="dim_enabled"> Auto-dim at night</label>
-                        </div>
-                        <div class="speed-control">
-                            <label>Dim from:</label>
-                            <input type="time" id="dim_start" value="22:00">
-                            <label>until:</label>
-                            <input type="time" id="dim_end" value="07:00">
-                        </div>
-                        <div class="speed-control">
-                            <label>Night brightness:</label>
-                            <input type="range" class="speed-slider" id="dim_brightness" min="10" max="100" value="30">
-                            <span class="speed-value" id="dim_brightness_val">30%</span>
-                        </div>
-                        <p class="help-text" style="margin-top: 8px;">Automatically lowers brightness during the set hours (handles windows past midnight, e.g. 22:00 to 07:00).</p>
                     </div>
                 </div>
             </details>
 
-            <details class="config-section">
-                <summary>Display Mode</summary>
-                <div class="section-body">
-                    <div class="form-group">
-                        <label for="display_mode">Display Mode:</label>
+            <details class="card" open>
+                <summary>Brightness</summary>
+                <div class="card-body">
+                    <div class="field">
+                        <div class="label-line">
+                            <label for="brightness">Screen brightness</label>
+                            {{ help("How bright the lights are. Lower it if the scoreboard feels too bright for the room. Takes effect within about 10 seconds of saving.") }}
+                        </div>
+                        <div class="slider-row">
+                            <span class="end">Dim</span>
+                            <input type="range" id="brightness" min="10" max="100" value="100">
+                            <span class="end">Bright</span>
+                            <span class="value-pill" id="brightness_val">100%</span>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <label for="dim_enabled">Dim automatically at night</label>
+                        {{ help("Turns the brightness down during the hours you pick below, then back up in the morning. Overnight times like 10:00 PM to 7:00 AM work fine.") }}
+                        <input type="checkbox" class="switch" id="dim_enabled">
+                    </div>
+                    <div id="dim-options">
+                        <div class="row">
+                            <label for="dim_start">Dim from</label>
+                            <div class="control">
+                                <input type="time" id="dim_start" value="22:00">
+                                <span>to</span>
+                                <input type="time" id="dim_end" value="07:00" aria-label="Dim until">
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label for="dim_brightness">Night-time brightness</label>
+                            <div class="slider-row">
+                                <span class="end">Dim</span>
+                                <input type="range" id="dim_brightness" min="10" max="100" value="30">
+                                <span class="end">Bright</span>
+                                <span class="value-pill" id="dim_brightness_val">30%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </details>
+
+            <details class="card" open>
+                <summary>When to show baseball games</summary>
+                <div class="card-body">
+                    <div class="field">
+                        <div class="label-line">
+                            <label for="display_mode">Game mode</label>
+                            {{ help("Decides how game-day information and the other screens (weather, news, trivia and so on) share the scoreboard. Most people should leave this on Automatic.") }}
+                        </div>
                         <select id="display_mode">
-                            <option value="auto">Automatic (Games during season, off-season content otherwise)</option>
-                            <option value="game">Always show game (if available)</option>
-                            <option value="offseason">Game schedule + off-season content rotation</option>
-                            <option value="no_games">Off-season content only (never interrupt with game info)</option>
+                            <option value="auto">Automatic (recommended): games during the season, other screens the rest of the year</option>
+                            <option value="game">Games first: always show the game when there is one</option>
+                            <option value="offseason">Mix: show the next game and standings, then the other screens</option>
+                            <option value="no_games">No games: only show the other screens</option>
                         </select>
+                        <p class="hint">Live games always take over the screen unless you choose “No games”.</p>
                     </div>
                 </div>
             </details>
 
-            <details class="config-section">
-                <summary>Content Displays</summary>
-                <div class="section-body">
-                    <p class="help-text">Select which content to show in the rotation:</p>
-                    <h4>Baseball</h4>
-                    <div class="checkbox-columns">
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_cubs_facts">
-                                Team facts & custom message
-                            </label>
-                        </div>
+            <details class="card" open>
+                <summary>What to show <span class="summary-note">Turn screens on or off</span></summary>
+                <div class="card-body">
+                    <h3 class="group">Baseball</h3>
+                    {{ toggle('enable_cubs_facts', 'Team trivia & your message', 'Fun facts about your baseball team, shown together with the custom message you write in the “Your message” section below.') }}
+                    {{ toggle('enable_cubs_news', 'Team news headlines', 'Scrolls the latest news headlines about your baseball team.') }}
+                    {{ toggle('enable_cubs_history', 'This day in team history', 'Shows something that happened to your team on today’s date in years past.') }}
+                    {{ toggle('enable_spring_training', 'Spring Training countdown', 'During the winter, counts down the days until Spring Training begins.') }}
+                    {{ toggle('enable_playoff_race', 'Playoff race', 'From July through September, shows where your team stands in the race for the playoffs.') }}
+                    {{ toggle('enable_allstar', 'All-Star Game', 'Shows the All-Star Game in July.') }}
+                    {{ toggle('enable_clock', 'Wrigley-style clock', 'A clock styled after the classic Wrigley Field scoreboard.') }}
 
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_cubs_news">
-                                Team breaking news
-                            </label>
-                        </div>
+                    <h3 class="group">Football, basketball &amp; golf</h3>
+                    {{ toggle('enable_bears', 'NFL team games', 'During football season, shows your football team’s next game or the live score.') }}
+                    {{ toggle('enable_bears_news', 'NFL team news', 'Scrolls the latest news headlines about your football team.') }}
+                    {{ toggle('nfl_preempt_mlb', 'Football beats baseball', 'When ON, a live football game takes over the whole screen, even during a baseball game. When OFF (the usual setting), baseball comes first.') }}
+                    {{ toggle('enable_ncaab', 'College basketball games', 'During basketball season, shows your college team’s next game, a game-day countdown, the live score and the final. A live game takes the screen whenever no baseball game is on.') }}
+                    {{ toggle('enable_ncaab_rankings', 'College basketball rankings', 'Shows your team’s national rank and the AP Top 25.') }}
+                    {{ toggle('enable_ncaab_standings', 'Conference standings', 'Shows where your college team stands in its conference.') }}
+                    {{ toggle('enable_ncaab_news', 'College basketball news', 'Scrolls the latest news headlines about your college team.') }}
+                    {{ toggle('enable_ncaab_facts', 'College basketball trivia', 'Shows fun facts about your college team.') }}
+                    {{ toggle('enable_pga', 'Golf leaderboard', 'During golf season, shows the current PGA Tour tournament leaderboard.') }}
+                    {{ toggle('enable_pga_news', 'Golf news', 'Scrolls the latest PGA Tour news headlines.') }}
+                    {{ toggle('enable_pga_facts', 'Golf trivia', 'Shows fun facts and records from the PGA Tour.') }}
 
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_cubs_history">
-                                Today in team history
-                            </label>
-                        </div>
+                    <h3 class="group">News &amp; weather</h3>
+                    {{ toggle('enable_weather', 'Weather', 'Current conditions and forecast for your ZIP code, with animated rain, snow and clouds. Set your ZIP code on the Location tab.') }}
+                    {{ toggle('enable_newsmax', 'Newsmax headlines', 'Scrolls top national news headlines from Newsmax.') }}
+                    {{ toggle('enable_usatoday', 'USA Today headlines', 'Scrolls top national news headlines from USA Today.') }}
+                    {{ toggle('enable_stocks', 'Stock market ticker', 'Shows how the major stock market indexes are doing.') }}
 
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_spring_training">
-                                Enable Spring Training countdown display
-                            </label>
-                        </div>
+                    <h3 class="group">Sky &amp; planes</h3>
+                    {{ toggle('enable_sky', 'Sun & moon', 'Shows sunrise and sunset times and tonight’s moon phase.') }}
+                    {{ toggle('enable_iss', 'Space Station tracker', 'Shows where the International Space Station is right now.') }}
+                    {{ toggle('enable_flights', 'Planes overhead', 'Shows airplanes currently flying near you: airline, where they are going, and how high they are. Set your location on the Location tab.') }}
+                    {{ toggle('enable_flight_radar', 'Radar view', 'A full-screen radar picture showing nearby planes as dots.') }}
+                    {{ toggle('flights_between_displays', 'Planes between every screen', 'Shows nearby planes for about 45 seconds between each of the other screens. Leave this off if you want planes to appear only in their normal turn.') }}
 
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_playoff_race">
-                                Enable playoff race display (July-September)
-                            </label>
-                        </div>
+                    <h3 class="group">Faith &amp; fun</h3>
+                    {{ toggle('enable_bible', 'Bible verse of the day', 'Shows a daily Bible verse.') }}
+                    {{ toggle('enable_bible_facts', 'Bible facts', 'Shows interesting facts about the Bible.') }}
+                    {{ toggle('enable_celebrations', 'Holidays & birthdays', 'Celebrates holidays and special days with a themed screen.') }}
+                </div>
+            </details>
 
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_clock">
-                                Wrigley scoreboard clock
-                            </label>
+            <details class="card" open>
+                <summary>Your message</summary>
+                <div class="card-body">
+                    <div class="field">
+                        <div class="label-line">
+                            <label for="custom_message">Message to scroll across the screen</label>
+                            {{ help("Your own words, scrolled across the scoreboard together with the team trivia. Make sure “Team trivia & your message” is turned on above.") }}
                         </div>
-
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_allstar">
-                                Enable All-Star Game display
-                            </label>
-                        </div>
-                    </div>
-
-                    <h4>Other Sports</h4>
-                    <div class="checkbox-columns">
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_bears">
-                                Enable NFL team game display (football season)
-                            </label>
-                        </div>
-
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_bears_news">
-                                Enable NFL breaking news display
-                            </label>
-                        </div>
-
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="nfl_preempt_mlb">
-                                NFL preempts MLB
-                            </label>
-                            <div class="help-text">A live football game takes over the display, the way a baseball game normally does. Off by default, so baseball wins.</div>
-                        </div>
-
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_ncaab">
-                                Enable college basketball game display (basketball season)
-                            </label>
-                            <div class="help-text">Next game, game-day countdown, live score and final. A live game takes the screen whenever no baseball game is on.</div>
-                        </div>
-
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_ncaab_rankings">
-                                Enable college basketball rankings (team rank and AP Top 25)
-                            </label>
-                        </div>
-
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_ncaab_standings">
-                                Enable college basketball conference standings
-                            </label>
-                        </div>
-
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_ncaab_news">
-                                Enable college basketball news display
-                            </label>
-                        </div>
-
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_ncaab_facts">
-                                Enable college basketball facts display
-                            </label>
-                        </div>
-
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_pga">
-                                Enable PGA Tour leaderboard display (golf season)
-                            </label>
-                        </div>
-
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_pga_news">
-                                Enable PGA Tour news display (golf season)
-                            </label>
-                        </div>
-
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_pga_facts">
-                                Enable PGA Tour facts display (golf season)
-                            </label>
-                        </div>
-                    </div>
-
-                    <h4>News &amp; Info</h4>
-                    <div class="checkbox-columns">
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_weather">
-                                Enable Weather display
-                            </label>
-                        </div>
-
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_newsmax">
-                                Enable Newsmax news display
-                            </label>
-                        </div>
-
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_usatoday">
-                                Enable USA Today news display
-                            </label>
-                        </div>
-
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_stocks">
-                                Enable Stock Exchange ticker display
-                            </label>
-                        </div>
-                    </div>
-
-                    <h4>Sky &amp; Flight</h4>
-                    <div class="checkbox-columns">
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_sky">
-                                Enable Sun &amp; Sky display (sunrise arc, moon phase)
-                            </label>
-                        </div>
-
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_iss">
-                                Enable ISS tracker display
-                            </label>
-                        </div>
-
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_flights">
-                                Enable Flight Tracking display
-                            </label>
-                        </div>
-
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_flight_radar">
-                                Enable Flight Radar View (full-screen radar scope)
-                            </label>
-                        </div>
-
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="flights_between_displays">
-                                Show flight display between every screen (~45s interstitial)
-                            </label>
-                        </div>
-                    </div>
-
-                    <h4>Faith &amp; Fun</h4>
-                    <div class="checkbox-columns">
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_bible">
-                                Enable Bible Verse of the Day display
-                            </label>
-                        </div>
-
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_bible_facts">
-                                Enable Bible Facts display
-                            </label>
-                        </div>
-
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enable_celebrations">
-                                Enable celebration days display (birthdays &amp; holidays)
-                            </label>
-                        </div>
+                        <textarea id="custom_message">{{ config.custom_message }}</textarea>
                     </div>
                 </div>
             </details>
 
-            <details class="config-section">
-                <summary>Scroll Speeds</summary>
-                <div class="section-body">
-                    <div class="scroll-speeds-section">
-                        <p class="help-text" style="margin-bottom: 15px;">Adjust scrolling text speed for each display (1 = slowest, 10 = fastest):</p>
+            <details class="card">
+                <summary>Scrolling speed <span class="summary-note">Optional</span></summary>
+                <div class="card-body">
+                    <p class="hint">How fast the moving text travels across each screen. 5 is the normal speed.</p>
+                    {{ speed('scroll_speed_cubs_facts', 'Team trivia') }}
+                    {{ speed('scroll_speed_cubs_news', 'Team news') }}
+                    {{ speed('scroll_speed_spring_training', 'Spring Training') }}
+                    {{ speed('scroll_speed_bears', 'NFL games') }}
+                    {{ speed('scroll_speed_bears_news', 'NFL news') }}
+                    {{ speed('scroll_speed_ncaab_news', 'College basketball news') }}
+                    {{ speed('scroll_speed_ncaab_facts', 'College basketball trivia') }}
+                    {{ speed('scroll_speed_pga', 'Golf leaderboard') }}
+                    {{ speed('scroll_speed_pga_news', 'Golf news') }}
+                    {{ speed('scroll_speed_pga_facts', 'Golf trivia') }}
+                    {{ speed('scroll_speed_newsmax', 'Newsmax') }}
+                    {{ speed('scroll_speed_usatoday', 'USA Today') }}
+                    {{ speed('scroll_speed_stocks', 'Stocks') }}
+                    {{ speed('scroll_speed_flights', 'Planes') }}
+                    {{ speed('scroll_speed_bible', 'Bible verse') }}
+                    {{ speed('scroll_speed_bible_facts', 'Bible facts') }}
+                </div>
+            </details>
+        </div>
 
-                        <div class="speed-control">
-                            <label>NFL Game:</label>
-                            <input type="range" class="speed-slider" id="scroll_speed_bears" min="1" max="10" value="5">
-                            <span class="speed-value" id="scroll_speed_bears_val">5</span>
+        <!-- ============ LOCATION ============ -->
+        <div id="location-tab" class="tab-content">
+            <p class="tab-intro">Tell the scoreboard where it is, so it can show your local weather and the planes flying over you.</p>
+
+            <section class="card">
+                <h2>Weather</h2>
+                <div class="card-body">
+                    <div class="field">
+                        <div class="label-line">
+                            <label for="zip_code">ZIP code</label>
+                            {{ help("The 5-digit ZIP code used for the weather screen.") }}
                         </div>
+                        <input type="text" id="zip_code" inputmode="numeric" placeholder="e.g. 60613" value="{{ config.zip_code }}">
+                    </div>
+                </div>
+            </section>
 
-                        <div class="speed-control">
-                            <label>NFL News:</label>
-                            <input type="range" class="speed-slider" id="scroll_speed_bears_news" min="1" max="10" value="5">
-                            <span class="speed-value" id="scroll_speed_bears_news_val">5</span>
+            <section class="card">
+                <h2>Planes overhead</h2>
+                <div class="card-body">
+                    <div class="field">
+                        <div class="label-line">
+                            <label for="flight_tracking_address">Your town or address</label>
+                            {{ help("Type a city and state or a street address, then press Find. This fills in the exact map position below. Looking up an address needs an OpenWeather key (see More options).") }}
                         </div>
-
-                        <div class="speed-control">
-                            <label>College Basketball News:</label>
-                            <input type="range" class="speed-slider" id="scroll_speed_ncaab_news" min="1" max="10" value="5">
-                            <span class="speed-value" id="scroll_speed_ncaab_news_val">5</span>
+                        <input type="text" id="flight_tracking_address" placeholder="e.g. Rochester, IL">
+                        <div class="btn-row">
+                            <button type="button" onclick="geocodeAddress()" class="btn light">Find this location</button>
                         </div>
+                        <p class="hint" id="coords-text"></p>
+                    </div>
 
-                        <div class="speed-control">
-                            <label>College Basketball Facts:</label>
-                            <input type="range" class="speed-slider" id="scroll_speed_ncaab_facts" min="1" max="10" value="5">
-                            <span class="speed-value" id="scroll_speed_ncaab_facts_val">5</span>
+                    <div class="row">
+                        <label for="flight_tracking_latitude">Latitude</label>
+                        {{ help("The north–south map position. Filled in for you when you use Find. You can also copy it from Google Maps by right-clicking your home.") }}
+                        <div class="control"><input type="text" id="flight_tracking_latitude" placeholder="e.g. 39.7500" style="width: 150px;"></div>
+                    </div>
+                    <div class="row">
+                        <label for="flight_tracking_longitude">Longitude</label>
+                        {{ help("The east–west map position. In the United States this is a negative number.") }}
+                        <div class="control"><input type="text" id="flight_tracking_longitude" placeholder="e.g. -89.6653" style="width: 150px;"></div>
+                    </div>
+
+                    <div class="field">
+                        <div class="label-line">
+                            <label for="flight_max_range_nm">How far away to look</label>
+                            {{ help("Only planes within this distance are shown. A smaller number means only planes almost directly overhead. Distance is in nautical miles (1 nautical mile ≈ 1.15 regular miles).") }}
                         </div>
-
-                        <div class="speed-control">
-                            <label>PGA:</label>
-                            <input type="range" class="speed-slider" id="scroll_speed_pga" min="1" max="10" value="5">
-                            <span class="speed-value" id="scroll_speed_pga_val">5</span>
-                        </div>
-
-                        <div class="speed-control">
-                            <label>PGA News:</label>
-                            <input type="range" class="speed-slider" id="scroll_speed_pga_news" min="1" max="10" value="5">
-                            <span class="speed-value" id="scroll_speed_pga_news_val">5</span>
-                        </div>
-
-                        <div class="speed-control">
-                            <label>PGA Facts:</label>
-                            <input type="range" class="speed-slider" id="scroll_speed_pga_facts" min="1" max="10" value="5">
-                            <span class="speed-value" id="scroll_speed_pga_facts_val">5</span>
-                        </div>
-
-                        <div class="speed-control">
-                            <label>Team Facts:</label>
-                            <input type="range" class="speed-slider" id="scroll_speed_cubs_facts" min="1" max="10" value="5">
-                            <span class="speed-value" id="scroll_speed_cubs_facts_val">5</span>
-                        </div>
-
-                        <div class="speed-control">
-                            <label>Team News:</label>
-                            <input type="range" class="speed-slider" id="scroll_speed_cubs_news" min="1" max="10" value="5">
-                            <span class="speed-value" id="scroll_speed_cubs_news_val">5</span>
-                        </div>
-
-                        <div class="speed-control">
-                            <label>Bible Verse:</label>
-                            <input type="range" class="speed-slider" id="scroll_speed_bible" min="1" max="10" value="5">
-                            <span class="speed-value" id="scroll_speed_bible_val">5</span>
-                        </div>
-
-                        <div class="speed-control">
-                            <label>Bible Facts:</label>
-                            <input type="range" class="speed-slider" id="scroll_speed_bible_facts" min="1" max="10" value="5">
-                            <span class="speed-value" id="scroll_speed_bible_facts_val">5</span>
-                        </div>
-
-                        <div class="speed-control">
-                            <label>Newsmax:</label>
-                            <input type="range" class="speed-slider" id="scroll_speed_newsmax" min="1" max="10" value="5">
-                            <span class="speed-value" id="scroll_speed_newsmax_val">5</span>
-                        </div>
-
-                        <div class="speed-control">
-                            <label>USA Today:</label>
-                            <input type="range" class="speed-slider" id="scroll_speed_usatoday" min="1" max="10" value="5">
-                            <span class="speed-value" id="scroll_speed_usatoday_val">5</span>
-                        </div>
-
-                        <div class="speed-control">
-                            <label>Stocks:</label>
-                            <input type="range" class="speed-slider" id="scroll_speed_stocks" min="1" max="10" value="5">
-                            <span class="speed-value" id="scroll_speed_stocks_val">5</span>
-                        </div>
-
-                        <div class="speed-control">
-                            <label>Spring Training:</label>
-                            <input type="range" class="speed-slider" id="scroll_speed_spring_training" min="1" max="10" value="5">
-                            <span class="speed-value" id="scroll_speed_spring_training_val">5</span>
-                        </div>
-
-                        <div class="speed-control">
-                            <label>Flights:</label>
-                            <input type="range" class="speed-slider" id="scroll_speed_flights" min="1" max="10" value="5">
-                            <span class="speed-value" id="scroll_speed_flights_val">5</span>
+                        <div class="slider-row">
+                            <span class="end">Near</span>
+                            <input type="range" id="flight_max_range_nm" min="10" max="100" value="{{ config.flight_max_range_nm or 50 }}">
+                            <span class="end">Far</span>
+                            <span class="value-pill"><span id="flight_range_val">{{ config.flight_max_range_nm or 50 }}</span> NM</span>
                         </div>
                     </div>
                 </div>
-            </details>
+            </section>
 
-            <details class="config-section">
-                <summary>Flight Tracking</summary>
-                <div class="section-body">
-                    <p class="help-text" style="margin-bottom: 15px;">Set your location to track flights overhead. Enter coordinates directly or use address lookup:</p>
-
-                    <div class="form-group">
-                        <label for="flight_tracking_latitude">Latitude:</label>
-                        <input type="text" id="flight_tracking_latitude" placeholder="e.g., 39.7500" style="width: 200px;">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="flight_tracking_longitude">Longitude:</label>
-                        <input type="text" id="flight_tracking_longitude" placeholder="e.g., -89.6653" style="width: 200px;">
-                        <div class="help-text">Enter decimal coordinates directly, or use address lookup below to auto-fill</div>
-                    </div>
-
-                    <div class="form-group" style="margin-top: 10px; padding: 10px; background: #f0f4f8; border-radius: 8px;">
-                        <label for="flight_tracking_address">Address Lookup (optional):</label>
-                        <input type="text" id="flight_tracking_address" placeholder="e.g., Rochester, IL">
-                        <div class="help-text">Enter a city/state or full address, then click Calculate to auto-fill lat/lon above</div>
-                        <button type="button" onclick="geocodeAddress()" class="button-secondary" style="margin-top: 8px;">Calculate Coordinates</button>
-                        <div id="coordinates-display" style="margin-top: 5px;">
-                            <span id="coords-text" class="help-text"></span>
+            <details class="card">
+                <summary>More options <span class="summary-note">Most people can skip this</span></summary>
+                <div class="card-body">
+                    <div class="field">
+                        <div class="label-line">
+                            <strong>Where plane information comes from</strong>
+                            {{ help("Where the scoreboard gets its list of nearby planes. The free internet service works with no extra equipment.") }}
                         </div>
-                    </div>
-
-                    <div class="form-group" style="margin-top: 15px; padding: 10px; background: #f5f5f5; border-radius: 5px;">
-                        <label style="font-weight: bold; color: #0C2340;">Flight Data Source:</label>
-                        <div style="margin-top: 8px;">
-                            <label style="display: block; font-weight: normal; margin-bottom: 6px;">
-                                <input type="radio" name="flight_source" id="flight_source_adsb_lol" value="adsb_lol">
-                                adsb.lol (recommended &mdash; no setup)
-                            </label>
-                            <label style="display: block; font-weight: normal;">
-                                <input type="radio" name="flight_source" id="flight_source_local" value="local">
-                                Local ADS-B receiver
-                            </label>
-                        </div>
-                        <div id="local_receiver_url_wrapper" style="margin-top: 10px; padding-left: 22px; display: none;">
-                            <label for="adsb_receiver_url" style="font-weight: normal;">Local Receiver URL:</label>
+                        <label class="choice">
+                            <input type="radio" name="flight_source" id="flight_source_adsb_lol" value="adsb_lol">
+                            <div><strong>Internet (recommended)</strong><span>Free service from adsb.lol, no setup needed.</span></div>
+                        </label>
+                        <label class="choice">
+                            <input type="radio" name="flight_source" id="flight_source_local" value="local">
+                            <div><strong>My own antenna</strong><span>Only if you have a plane-tracking receiver (like PiAware) on your network.</span></div>
+                        </label>
+                        <div id="local_receiver_url_wrapper" class="field" style="display: none;">
+                            <label for="adsb_receiver_url">Receiver address</label>
                             <input type="text" id="adsb_receiver_url"
                                    placeholder="http://piaware.local/skyaware/data/aircraft.json"
                                    value="{{ config.adsb_receiver_url }}">
-                            <small style="display: block; margin-top: 5px; color: #666;">
-                                Enter the URL of your PiAware / readsb aircraft.json endpoint.
-                                Example: <code>http://piaware.local/skyaware/data/aircraft.json</code>
-                            </small>
                         </div>
                     </div>
 
-                    <div class="form-group">
-                        <label for="flight_max_range_nm">Max Range (NM): <span id="flight_range_val">{{ config.flight_max_range_nm or 50 }}</span></label>
-                        <input type="range" id="flight_max_range_nm" min="10" max="100" value="{{ config.flight_max_range_nm or 50 }}" oninput="document.getElementById('flight_range_val').textContent=this.value">
-                        <div class="help-text">Maximum range in nautical miles for flight tracking (10-100 NM)</div>
+                    <div class="field">
+                        <div class="label-line">
+                            <label for="weather_api_key">OpenWeather key</label>
+                            {{ help("Only needed for the “Find this location” button. Weather works without it. Get a free key at openweathermap.org.") }}
+                        </div>
+                        <input type="text" id="weather_api_key" placeholder="Optional" value="{{ config.weather_api_key }}">
                     </div>
 
-                    <div class="form-group">
-                        <label for="airlabs_api_key">AirLabs API Key (optional, for flight destinations):</label>
-                        <input type="text" id="airlabs_api_key" placeholder="Optional - destinations auto-lookup via airplanes.live" value="{{ config.airlabs_api_key }}">
-                        <div class="help-text">Optional. Destinations are now looked up free via airplanes.live. AirLabs is a secondary fallback.</div>
-                    </div>
-                </div>
-            </details>
-
-            <details class="config-section">
-                <summary>Weather &amp; Location</summary>
-                <div class="section-body">
-                    <div class="form-group">
-                        <label for="zip_code">ZIP Code (for weather):</label>
-                        <input type="text" id="zip_code" placeholder="e.g., 60613" value="{{ config.zip_code }}">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="weather_api_key">OpenWeather API Key (optional - weather now uses Open-Meteo; only the flight address lookup below uses this):</label>
-                        <input type="text" id="weather_api_key" placeholder="Get free API key from openweathermap.org" value="{{ config.weather_api_key }}">
-                        <div class="help-text">Free tier API key from <a href="https://openweathermap.org/api" target="_blank">openweathermap.org</a></div>
+                    <div class="field">
+                        <div class="label-line">
+                            <label for="airlabs_api_key">AirLabs key</label>
+                            {{ help("Optional backup for looking up where planes are flying to. Destinations already work without it.") }}
+                        </div>
+                        <input type="text" id="airlabs_api_key" placeholder="Optional" value="{{ config.airlabs_api_key }}">
                     </div>
                 </div>
             </details>
+        </div>
 
-            <details class="config-section">
-                <summary>Custom Message</summary>
-                <div class="section-body">
-                    <div class="form-group">
-                        <label for="custom_message">Custom Message:</label>
-                        <textarea id="custom_message">{{ config.custom_message }}</textarea>
-                        <div class="help-text">This message displays during the off-season rotation</div>
+        <!-- ============ WI-FI ============ -->
+        <div id="wifi-tab" class="tab-content">
+            <p class="tab-intro">Connect the scoreboard to your home Wi-Fi.</p>
+
+            <section class="card">
+                <h2>Current connection</h2>
+                <div class="card-body">
+                    <dl class="facts">
+                        <dt>Status</dt><dd>{{ connection_mode }}</dd>
+                        <dt>Network</dt><dd>{{ current_network }}</dd>
+                    </dl>
+                </div>
+            </section>
+
+            <section class="card">
+                <h2>Join a network</h2>
+                <div class="card-body">
+                    <div class="btn-row">
+                        <button onclick="scanNetworks()" class="btn light">Find nearby networks</button>
                     </div>
+                    <div id="network-list" class="network-list" style="display:none;"></div>
+
+                    <div class="field">
+                        <div class="label-line">
+                            <label for="ssid">Network name</label>
+                            {{ help("The name of your Wi-Fi network. Tap one from the list above, or type it exactly, including capital letters.") }}
+                        </div>
+                        <input type="text" id="ssid" placeholder="Your Wi-Fi name" autocapitalize="off" autocorrect="off">
+                    </div>
+
+                    <div class="field">
+                        <div class="label-line">
+                            <label for="password">Wi-Fi password</label>
+                            {{ help("The password you use to join this Wi-Fi network on your phone. It is saved only on the scoreboard.") }}
+                        </div>
+                        <input type="password" id="password" placeholder="Wi-Fi password">
+                    </div>
+
+                    <div class="notice">After connecting, this page will stop responding. Join your phone or
+                        computer to the same Wi-Fi, then open
+                        <strong>http://{{ hostname }}.local/admin</strong> to come back.</div>
+
+                    <button onclick="connectWifi()" class="btn wide">Connect</button>
+                    <div id="wifi-status" class="status"></div>
+                </div>
+            </section>
+        </div>
+
+        <!-- ============ DEVICE ============ -->
+        <div id="device-tab" class="tab-content">
+            <p class="tab-intro">Restart the scoreboard, rename it, or look at troubleshooting details.</p>
+
+            <section class="card">
+                <h2>Restart</h2>
+                <div class="card-body">
+                    <p class="hint">If the screen looks stuck or blank, try <strong>Restart display</strong> first.
+                        If that doesn't fix it, use <strong>Restart everything</strong>.</p>
+                    <div class="row">
+                        <span style="flex: 1;">Display program</span>
+                        {{ help("The program that draws on the scoreboard. Running means it is working normally.") }}
+                        <span id="service-status-badge" class="service-status">Checking...</span>
+                    </div>
+                    <div class="btn-row">
+                        <button onclick="controlService(this, 'restart')" class="btn">Restart display</button>
+                        <button onclick="rebootDevice(this)" class="btn light">Restart everything</button>
+                    </div>
+                    <details style="margin-top: 12px;">
+                        <summary class="hint" style="cursor: pointer;">Turn the display off or on</summary>
+                        <div class="btn-row">
+                            <button onclick="controlService(this, 'stop')" class="btn danger">Turn display off</button>
+                            <button onclick="controlService(this, 'start')" class="btn light">Turn display on</button>
+                        </div>
+                    </details>
+                    <div id="service-control-status" class="status"></div>
+                </div>
+            </section>
+
+            <section class="card">
+                <h2>Scoreboard name</h2>
+                <div class="card-body">
+                    <dl class="facts">
+                        <dt>Settings page</dt><dd>http://{{ hostname }}.local/admin</dd>
+                        <dt>IP address</dt><dd>{{ ip_address }}</dd>
+                    </dl>
+                    <div class="field">
+                        <div class="label-line">
+                            <label for="new_hostname">Name</label>
+                            {{ help("The name is part of this page’s web address. If you have more than one scoreboard on the same Wi-Fi, give each one a different name. Use lowercase letters, numbers and dashes only.") }}
+                        </div>
+                        <input type="text" id="new_hostname" placeholder="e.g. cubsmarquee-1" pattern="[a-z0-9\-]+" value="{{ hostname }}" autocapitalize="off" autocorrect="off">
+                        <p class="hint">After renaming, open this page at http://<em>new-name</em>.local/admin</p>
+                    </div>
+                    <button onclick="changeHostname()" class="btn light wide">Rename scoreboard</button>
+                    <div id="hostname-status" class="status"></div>
+                </div>
+            </section>
+
+            <details class="card">
+                <summary>Troubleshooting logs <span class="summary-note">For technical help</span></summary>
+                <div class="card-body">
+                    <p class="hint">Logs are a record of what the scoreboard has been doing. Someone helping you fix a problem may ask you for these.</p>
+                    <div class="btn-row">
+                        <button onclick="loadLogs('application')" class="btn light">Activity</button>
+                        <button onclick="loadLogs('error')" class="btn light">Errors</button>
+                        <button onclick="loadLogs('wifi')" class="btn light">Wi-Fi</button>
+                    </div>
+                    <p class="hint"><strong id="log-filename">Choose a log above</strong>
+                        &middot; <a href="#" onclick="refreshCurrentLog(); return false;">Refresh</a></p>
+                    <div id="log-content" class="log-viewer">Choose a log above to view it.</div>
                 </div>
             </details>
+        </div>
+    </main>
 
-            <button onclick="saveConfig()">Save Configuration</button>
+    <div class="save-bar" id="save-bar">
+        <div class="page">
+            <div class="save-msg" id="save-msg">All changes saved</div>
             <div id="config-status" class="status"></div>
-        </div>
-
-        <div id="system-tab" class="tab-content">
-            <h2>System Settings</h2>
-
-            <div class="info-box">
-                <strong>Current Hostname:</strong> {{ hostname }}
-                <div class="help-text" style="margin-top: 10px;">
-                    This is how you access the scoreboard on your local network: <strong>http://{{ hostname }}.local/admin</strong>
-                </div>
-            </div>
-
-            <div class="warning">
-                <strong>⚠️ Important:</strong> If multiple scoreboards are on the same WiFi network, each must have a unique hostname.
-                After changing the hostname, you'll need to access the admin page at the new address: <strong>http://new-hostname.local/admin</strong>
-            </div>
-
-            <div class="form-group">
-                <label for="new_hostname">New Hostname:</label>
-                <input type="text" id="new_hostname" placeholder="e.g., cubsmarquee-1" pattern="[a-z0-9\-]+" value="{{ hostname }}">
-                <div class="help-text">
-                    Use lowercase letters, numbers, and hyphens only (1-63 characters).
-                    Examples: cubsmarquee-1, scoreboard-wrigley, cubs-display-01
-                </div>
-            </div>
-
-            <button onclick="changeHostname()">Change Hostname</button>
-            <div id="hostname-status" class="status"></div>
-        </div>
-
-        <div id="service-tab" class="tab-content">
-            <h2>Service Control</h2>
-            
-            <div class="info-box">
-                <div class="info-row">
-                    <strong>Scoreboard Service Status:</strong>
-                    <span id="service-status-badge" class="service-status">Loading...</span>
-                </div>
-            </div>
-
-            <div class="button-group">
-                <button onclick="controlService(this, 'start')" class="button-start">Start Service</button>
-                <button onclick="controlService(this, 'stop')" class="button-stop">Stop Service</button>
-                <button onclick="controlService(this, 'restart')" class="button-restart">Restart Service</button>
-            </div>
-
-            <button onclick="rebootDevice(this)" class="button-reboot">Reboot Pi</button>
-            
-            <div id="service-control-status" class="status"></div>
-        </div>
-
-        <div id="logs-tab" class="tab-content">
-            <h2>System Logs</h2>
-            
-            <div class="button-group" style="margin-bottom: 15px;">
-                <button onclick="loadLogs('application')" class="button-secondary">Application Logs</button>
-                <button onclick="loadLogs('error')" class="button-secondary">Error Logs</button>
-                <button onclick="loadLogs('wifi')" class="button-secondary">WiFi Manager Logs</button>
-            </div>
-
-            <div class="info-box">
-                <strong id="log-filename">Select a log type above</strong>
-            </div>
-
-            <div id="log-content" class="log-viewer">
-                Select a log type to view...
-            </div>
-
-            <button onclick="refreshCurrentLog()" style="margin-top: 10px;" class="button-secondary">Refresh Current Log</button>
+            <button onclick="saveConfig()" class="btn" id="save-button">Save changes</button>
         </div>
     </div>
 
@@ -1350,21 +1187,68 @@ HTML_TEMPLATE = """
         // teams.NON_DEFAULT_OFF_KEYS); these double as the checkbox ids.
         const NON_DEFAULT_OFF_KEYS = {{ non_default_off_keys | tojson }};
 
+        // Plain-English names for the settings that need a restart
+        // (REBOOT_REQUIRED_KEYS on the server).
+        const REBOOT_KEY_NAMES = {
+            team: 'Baseball team',
+            nfl_team: 'Football team',
+            ncaab_team: 'College basketball team',
+        };
+
+        // ---- Help pop-ups: hover, focus or tap any "?" button ----
+        const helpPopup = document.getElementById('help-popup');
+        let helpOwner = null;
+        function showHelp(btn) {
+            helpOwner = btn;
+            helpPopup.textContent = btn.dataset.help;
+            helpPopup.classList.add('visible');
+            const r = btn.getBoundingClientRect();
+            const w = helpPopup.offsetWidth, h = helpPopup.offsetHeight;
+            let left = r.left + r.width / 2 - w / 2;
+            left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
+            let top = r.top - h - 8;
+            if (top < 8) top = r.bottom + 8;
+            helpPopup.style.left = left + 'px';
+            helpPopup.style.top = top + 'px';
+        }
+        function hideHelp() {
+            helpOwner = null;
+            helpPopup.classList.remove('visible');
+        }
+        document.querySelectorAll('button.help').forEach(function(btn) {
+            btn.addEventListener('mouseenter', () => showHelp(btn));
+            btn.addEventListener('mouseleave', hideHelp);
+            btn.addEventListener('focus', () => showHelp(btn));
+            btn.addEventListener('blur', hideHelp);
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                if (helpOwner === btn) { hideHelp(); } else { showHelp(btn); }
+            });
+        });
+        window.addEventListener('scroll', function() {
+            if (helpOwner) showHelp(helpOwner);
+        }, { passive: true });
+
         // Poll the scoreboard heartbeat for the status row
         async function refreshScoreboardStatus() {
             const el = document.getElementById('scoreboard-status');
+            const dot = document.getElementById('status-dot');
             try {
                 const resp = await fetch('/scoreboard_status');
                 const data = await resp.json();
                 if (!data.available) {
-                    el.textContent = 'No status reported yet';
+                    el.textContent = 'waiting for the scoreboard to start';
+                    dot.className = 'dot';
                 } else if (data.stale) {
-                    el.textContent = data.state + ' (stale - last update ' + data.age_seconds + 's ago)';
+                    el.textContent = data.state + ' (not updated for ' + Math.round(data.age_seconds / 60) + ' min)';
+                    dot.className = 'dot off';
                 } else {
                     el.textContent = data.state + (data.detail ? ' - ' + data.detail : '');
+                    dot.className = 'dot on';
                 }
             } catch (e) {
                 el.textContent = 'unavailable';
+                dot.className = 'dot off';
             }
         }
         refreshScoreboardStatus();
@@ -1377,6 +1261,23 @@ HTML_TEMPLATE = """
         }
         refreshPreview();
         setInterval(refreshPreview, 2000);
+
+        // ---- Unsaved-changes indicator on the save bar ----
+        let isDirty = false;
+        function setDirty(dirty) {
+            isDirty = dirty;
+            document.getElementById('save-bar').classList.toggle('dirty', dirty);
+            document.getElementById('save-msg').textContent =
+                dirty ? 'You have unsaved changes' : 'All changes saved';
+        }
+        window.addEventListener('beforeunload', function(e) {
+            if (isDirty) { e.preventDefault(); e.returnValue = ''; }
+        });
+
+        function updateDimOptions() {
+            document.getElementById('dim-options').style.opacity =
+                document.getElementById('dim_enabled').checked ? '1' : '0.45';
+        }
 
         // Auto-load config values on page load
         window.onload = function() {
@@ -1484,6 +1385,8 @@ HTML_TEMPLATE = """
             dimSlider.addEventListener('input', function() {
                 dimVal.textContent = this.value + '%';
             });
+            document.getElementById('dim_enabled').addEventListener('change', updateDimOptions);
+            updateDimOptions();
 
             // Load flight tracking location
             document.getElementById('flight_tracking_address').value = config.flight_tracking_address || '';
@@ -1508,8 +1411,12 @@ HTML_TEMPLATE = """
             document.getElementById('flight_source_local').addEventListener('change', function() {
                 document.getElementById('local_receiver_url_wrapper').style.display = 'block';
             });
-            document.getElementById('flight_max_range_nm').value = config.flight_max_range_nm || 50;
+            const rangeSlider = document.getElementById('flight_max_range_nm');
+            rangeSlider.value = config.flight_max_range_nm || 50;
             document.getElementById('flight_range_val').textContent = config.flight_max_range_nm || 50;
+            rangeSlider.addEventListener('input', function() {
+                document.getElementById('flight_range_val').textContent = this.value;
+            });
 
             // Load AirLabs API key
             document.getElementById('airlabs_api_key').value = config.airlabs_api_key || '';
@@ -1538,26 +1445,27 @@ HTML_TEMPLATE = """
                 });
             });
 
+            // Any edit on the two settings tabs marks the page unsaved
+            ['config-tab', 'location-tab'].forEach(function(id) {
+                const tab = document.getElementById(id);
+                tab.addEventListener('input', () => setDirty(true));
+                tab.addEventListener('change', () => setDirty(true));
+            });
+
             updateServiceStatus();
         };
 
         function switchTab(tabName) {
-            // Hide all tabs
-            const tabs = document.querySelectorAll('.tab-content');
-            tabs.forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(
+                tab => tab.classList.toggle('active', tab.id === tabName + '-tab'));
+            document.querySelectorAll('nav.tabs button').forEach(
+                btn => btn.classList.toggle('active', btn.dataset.tab === tabName));
 
-            // Remove active from all tab buttons
-            const buttons = document.querySelectorAll('.nav-tab');
-            buttons.forEach(btn => btn.classList.remove('active'));
+            // The save bar belongs to the two settings tabs only
+            document.getElementById('save-bar').classList.toggle(
+                'hidden', tabName !== 'config' && tabName !== 'location');
 
-            // Show selected tab
-            document.getElementById(tabName + '-tab').classList.add('active');
-
-            // Activate button
-            event.target.classList.add('active');
-
-            // Update service status when switching to service tab
-            if (tabName === 'service') {
+            if (tabName === 'device') {
                 updateServiceStatus();
             }
         }
@@ -1574,7 +1482,7 @@ HTML_TEMPLATE = """
 
         async function scanNetworks() {
             const networkList = document.getElementById('network-list');
-            networkList.innerHTML = '<div style="padding: 10px; text-align: center;">Scanning...</div>';
+            networkList.innerHTML = '<div style="padding: 10px; text-align: center;">Looking for networks...</div>';
             networkList.style.display = 'block';
 
             try {
@@ -1587,8 +1495,8 @@ HTML_TEMPLATE = """
                     networkList.innerHTML = '';
                     if (data.cached) {
                         const note = document.createElement('div');
-                        note.style.cssText = 'padding: 6px 10px; font-size: 12px; color: #888;';
-                        note.textContent = 'Networks seen before the hotspot started';
+                        note.style.cssText = 'padding: 6px 12px; font-size: 12px; color: #888;';
+                        note.textContent = 'Networks seen before the setup hotspot started';
                         networkList.appendChild(note);
                     }
                     data.networks.forEach(network => {
@@ -1606,12 +1514,13 @@ HTML_TEMPLATE = """
                     networkList.innerHTML = '<div style="padding: 10px; text-align: center;">No networks found</div>';
                 }
             } catch (error) {
-                networkList.innerHTML = '<div style="padding: 10px; text-align: center; color: red;">Error scanning networks</div>';
+                networkList.innerHTML = '<div style="padding: 10px; text-align: center; color: red;">Could not look for networks</div>';
             }
         }
 
         function selectNetwork(ssid) {
             document.getElementById('ssid').value = ssid;
+            document.getElementById('password').focus();
         }
 
         async function connectWifi() {
@@ -1619,7 +1528,7 @@ HTML_TEMPLATE = """
             const password = document.getElementById('password').value;
 
             if (!ssid || !password) {
-                showStatus('wifi-status', 'Please enter both SSID and password', false);
+                showStatus('wifi-status', 'Please enter both the network name and the password', false);
                 return;
             }
 
@@ -1645,29 +1554,31 @@ HTML_TEMPLATE = """
                 } else {
                     showStatus('wifi-status', 'Error: ' + data.message, false);
                     button.disabled = false;
-                    button.textContent = 'Connect to WiFi';
+                    button.textContent = 'Connect';
                 }
             } catch (error) {
                 showStatus('wifi-status', 'Connection error: ' + error.message, false);
                 button.disabled = false;
-                button.textContent = 'Connect to WiFi';
+                button.textContent = 'Connect';
             }
         }
 
         async function geocodeAddress() {
             const address = document.getElementById('flight_tracking_address').value;
             const apiKey = document.getElementById('weather_api_key').value;
+            const coordsText = document.getElementById('coords-text');
 
             if (!address) {
-                showStatus('config-status', 'Please enter a location address', false);
+                coordsText.textContent = 'Type your town or address first.';
                 return;
             }
 
             if (!apiKey) {
-                showStatus('config-status', 'OpenWeather API key is required for geocoding', false);
+                coordsText.textContent = 'Finding an address needs an OpenWeather key. Add one under More options below, or type the latitude and longitude yourself.';
                 return;
             }
 
+            coordsText.textContent = 'Looking up...';
             try {
                 const response = await fetch('/geocode_address', {
                     method: 'POST',
@@ -1680,14 +1591,14 @@ HTML_TEMPLATE = """
                 if (data.success) {
                     document.getElementById('flight_tracking_latitude').value = data.latitude;
                     document.getElementById('flight_tracking_longitude').value = data.longitude;
-                    document.getElementById('coords-text').textContent =
-                        `Found: ${data.latitude.toFixed(4)}, ${data.longitude.toFixed(4)} — verify these are correct, then Save`;
-                    showStatus('config-status', 'Coordinates filled in above. Verify they look right, then click Save Configuration.', true);
+                    coordsText.textContent =
+                        `Found ${data.latitude.toFixed(4)}, ${data.longitude.toFixed(4)}. Check it looks right, then press Save changes.`;
+                    setDirty(true);
                 } else {
-                    showStatus('config-status', 'Geocoding error: ' + data.message, false);
+                    coordsText.textContent = 'Could not find that place: ' + data.message;
                 }
             } catch (error) {
-                showStatus('config-status', 'Geocoding error: ' + error.message, false);
+                coordsText.textContent = 'Could not find that place: ' + error.message;
             }
         }
 
@@ -1766,7 +1677,7 @@ HTML_TEMPLATE = """
                 dim_brightness: parseInt(document.getElementById('dim_brightness').value)
             };
 
-            const button = event.target;
+            const button = document.getElementById('save-button');
             button.disabled = true;
             button.textContent = 'Saving...';
 
@@ -1782,26 +1693,26 @@ HTML_TEMPLATE = """
                 if (data.success) {
                     window._loadedTeam = config.team;
                     window._loadedNflTeam = config.nfl_team;
+                    setDirty(false);
                     // The server decides: it compares the saved values
                     // against the previous ones, so we only prompt when a
                     // reboot would actually change something. Everything
                     // else the running display picks up on its own.
                     if (data.reboot_required) {
                         showRebootPrompt(data.reboot_keys);
-                        showStatus('config-status', 'Configuration saved.', true);
+                        document.getElementById('save-msg').textContent = 'Saved. Restart needed.';
                     } else {
-                        showStatus('config-status',
-                            'Configuration saved. Changes apply within a few minutes.',
-                            true);
+                        document.getElementById('save-msg').textContent =
+                            'Saved! The scoreboard will update within a few minutes.';
                     }
                 } else {
-                    showStatus('config-status', 'Error: ' + data.message, false);
+                    showStatus('config-status', 'Could not save: ' + data.message, false);
                 }
             } catch (error) {
-                showStatus('config-status', 'Save error: ' + error.message, false);
+                showStatus('config-status', 'Could not save: ' + error.message, false);
             } finally {
                 button.disabled = false;
-                button.textContent = 'Save Configuration';
+                button.textContent = 'Save changes';
             }
         }
 
@@ -1810,29 +1721,29 @@ HTML_TEMPLATE = """
             const currentHostname = '{{ hostname }}';
 
             if (!newHostname) {
-                showStatus('hostname-status', 'Please enter a hostname', false);
+                showStatus('hostname-status', 'Please enter a name', false);
                 return;
             }
 
             if (newHostname === currentHostname) {
-                showStatus('hostname-status', 'New hostname is the same as current hostname', false);
+                showStatus('hostname-status', 'That is already the scoreboard’s name', false);
                 return;
             }
 
             // Validate hostname format
             const hostnamePattern = /^[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?$/;
             if (!hostnamePattern.test(newHostname)) {
-                showStatus('hostname-status', 'Invalid hostname format. Use lowercase letters, numbers, and hyphens only (1-63 chars)', false);
+                showStatus('hostname-status', 'Use only lowercase letters, numbers and dashes, and don’t start or end with a dash', false);
                 return;
             }
 
-            if (!confirm(`Are you sure you want to change the hostname from "${currentHostname}" to "${newHostname}"?\n\nAfter the change, you'll need to access this page at:\nhttp://${newHostname}.local/admin`)) {
+            if (!confirm(`Rename the scoreboard from "${currentHostname}" to "${newHostname}"?\n\nAfterwards, open this page at:\nhttp://${newHostname}.local/admin`)) {
                 return;
             }
 
             const button = event.target;
             button.disabled = true;
-            button.textContent = 'Changing Hostname...';
+            button.textContent = 'Renaming...';
 
             try {
                 const response = await fetch('/change_hostname', {
@@ -1851,39 +1762,41 @@ HTML_TEMPLATE = """
                 } else {
                     showStatus('hostname-status', 'Error: ' + data.message, false);
                     button.disabled = false;
-                    button.textContent = 'Change Hostname';
+                    button.textContent = 'Rename scoreboard';
                 }
             } catch (error) {
-                showStatus('hostname-status', 'Error changing hostname: ' + error.message, false);
+                showStatus('hostname-status', 'Error renaming: ' + error.message, false);
                 button.disabled = false;
-                button.textContent = 'Change Hostname';
+                button.textContent = 'Rename scoreboard';
             }
         }
 
         async function updateServiceStatus() {
+            const badge = document.getElementById('service-status-badge');
             try {
                 const response = await fetch('/service_status');
                 const data = await response.json();
-                const badge = document.getElementById('service-status-badge');
-                
+
                 if (data.running) {
                     badge.textContent = 'Running';
                     badge.className = 'service-status running';
                 } else {
-                    badge.textContent = 'Stopped';
+                    badge.textContent = 'Off';
                     badge.className = 'service-status stopped';
                 }
             } catch (error) {
-                const badge = document.getElementById('service-status-badge');
                 badge.textContent = 'Unknown';
                 badge.className = 'service-status';
             }
         }
 
         async function controlService(button, action) {
+            if (action === 'stop' && !confirm('Turn the display off? The screen will stay dark until you turn it back on or restart.')) {
+                return;
+            }
             button.disabled = true;
             const originalText = button.textContent;
-            button.textContent = action.charAt(0).toUpperCase() + action.slice(1) + 'ing...';
+            button.textContent = 'Working...';
 
             try {
                 const response = await fetch('/control_service', {
@@ -1895,7 +1808,7 @@ HTML_TEMPLATE = """
                 const data = await response.json();
 
                 if (data.success) {
-                    showStatus('service-control-status', data.message + ' Refreshing status...', true);
+                    showStatus('service-control-status', data.message + ' Checking status...', true);
                     // Poll status multiple times to show when operation completes
                     setTimeout(updateServiceStatus, 2000);
                     setTimeout(updateServiceStatus, 5000);
@@ -1904,7 +1817,7 @@ HTML_TEMPLATE = """
                     showStatus('service-control-status', 'Error: ' + data.message, false);
                 }
             } catch (error) {
-                showStatus('service-control-status', 'Control error: ' + error.message, false);
+                showStatus('service-control-status', 'Error: ' + error.message, false);
             } finally {
                 button.disabled = false;
                 button.textContent = originalText;
@@ -1912,9 +1825,10 @@ HTML_TEMPLATE = """
         }
 
         function showRebootPrompt(keys) {
+            const names = (keys || []).map(k => REBOOT_KEY_NAMES[k] || 'Display hardware settings');
             document.getElementById('reboot-prompt-keys').textContent =
-                (keys && keys.length) ? keys.join(', ') : 'this setting';
-            document.getElementById('reboot-prompt-status').innerHTML = '';
+                names.length ? [...new Set(names)].join(', ') : 'this setting';
+            document.getElementById('reboot-prompt-status').style.display = 'none';
             document.getElementById('reboot-prompt').classList.add('visible');
         }
 
@@ -1924,24 +1838,24 @@ HTML_TEMPLATE = """
 
         async function rebootFromPrompt(button) {
             button.disabled = true;
-            button.textContent = 'Rebooting...';
+            button.textContent = 'Restarting...';
             try {
                 const response = await fetch('/reboot', { method: 'POST' });
                 const data = await response.json();
                 if (data.success) {
                     showStatus('reboot-prompt-status',
-                        'Rebooting... wait about 2 minutes before reconnecting.', true);
+                        'Restarting... wait about 2 minutes, then reload this page.', true);
                 } else {
                     showStatus('reboot-prompt-status',
-                        'Reboot error: ' + data.message, false);
+                        'Restart error: ' + data.message, false);
                     button.disabled = false;
-                    button.textContent = 'Reboot now';
+                    button.textContent = 'Restart now';
                 }
             } catch (error) {
                 showStatus('reboot-prompt-status',
-                    'Reboot error: ' + error.message, false);
+                    'Restart error: ' + error.message, false);
                 button.disabled = false;
-                button.textContent = 'Reboot now';
+                button.textContent = 'Restart now';
             }
         }
 
@@ -1959,7 +1873,7 @@ HTML_TEMPLATE = """
                     // booked will not come back to check.
                     showStatus('reboot-prompt-status',
                         'Could not schedule: ' + data.message +
-                        ' - reboot now or from the System tab instead.', false);
+                        ' - restart now, or from the Device tab later.', false);
                     button.disabled = false;
                     button.textContent = 'Tonight at 4 AM';
                 }
@@ -1972,12 +1886,12 @@ HTML_TEMPLATE = """
         }
 
         async function rebootDevice(button) {
-            if (!confirm('Are you sure you want to reboot the Raspberry Pi? The display will be unavailable for about 2 minutes.')) {
+            if (!confirm('Restart the whole scoreboard? The screen will be blank for about 2 minutes.')) {
                 return;
             }
 
             button.disabled = true;
-            button.textContent = 'Rebooting...';
+            button.textContent = 'Restarting...';
 
             try {
                 const response = await fetch('/reboot', {
@@ -1987,16 +1901,16 @@ HTML_TEMPLATE = """
                 const data = await response.json();
 
                 if (data.success) {
-                    showStatus('service-control-status', 'Rebooting... Please wait 2 minutes before reconnecting.', true);
+                    showStatus('service-control-status', 'Restarting... wait about 2 minutes, then reload this page.', true);
                 } else {
-                    showStatus('service-control-status', 'Reboot error: ' + data.message, false);
+                    showStatus('service-control-status', 'Restart error: ' + data.message, false);
                     button.disabled = false;
-                    button.textContent = 'Reboot Pi';
+                    button.textContent = 'Restart everything';
                 }
             } catch (error) {
-                showStatus('service-control-status', 'Reboot error: ' + error.message, false);
+                showStatus('service-control-status', 'Restart error: ' + error.message, false);
                 button.disabled = false;
-                button.textContent = 'Reboot Pi';
+                button.textContent = 'Restart everything';
             }
         }
 
@@ -2005,7 +1919,7 @@ HTML_TEMPLATE = """
             const logContent = document.getElementById('log-content');
             const logFilename = document.getElementById('log-filename');
 
-            logContent.textContent = 'Loading logs...';
+            logContent.textContent = 'Loading...';
             logFilename.textContent = 'Loading...';
 
             try {

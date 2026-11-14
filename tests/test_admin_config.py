@@ -114,8 +114,8 @@ def test_save_config_without_nfl_key_preserves_existing(client):
 
 def test_admin_page_relabels_bears_controls(client):
     html = client.get('/admin').data.decode()
-    assert 'Enable NFL team game display' in html
-    assert 'Enable NFL breaking news display' in html
+    assert 'NFL team games' in html
+    assert 'NFL team news' in html
     assert 'Enable Chicago Bears display' not in html
 
 
