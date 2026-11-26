@@ -68,3 +68,12 @@ class TestFacts:
         monkeypatch.setattr(hd, 'data_path_candidates',
                             lambda name: [str(tmp_path / name)])
         assert hd.load_holiday_facts() == {}
+
+
+class TestArt:
+    @pytest.mark.parametrize('slug', [h.slug for h in hd.HOLIDAYS])
+    def test_art_exists_at_exact_size(self, slug: str) -> None:
+        from PIL import Image
+        for suffix, size in (('card', (96, 48)), ('band', (96, 30))):
+            with Image.open(f'{hd.ART_DIR}/{slug}_{suffix}.png') as im:
+                assert im.size == size and im.mode == 'RGB'

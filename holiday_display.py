@@ -10,6 +10,8 @@ from typing import Callable
 from scoreboard_config import DisplayConfig, RGBColor
 from teams import data_path_candidates
 
+ART_DIR = 'holidays'
+
 EFFECTS: tuple[str, ...] = (
     'snow', 'leaves', 'hearts', 'confetti', 'fireworks', 'twinkle', 'none')
 
@@ -119,10 +121,10 @@ HOLIDAYS: tuple[Holiday, ...] = (
               (S, 41, WHITE, 'DAY')),
              ((T, 12, PINK, "VALENTINE'S"), (S, 24, WHITE, 'DAY'))),
     _holiday('st_patricks_day', _fixed(3, 17), 'confetti',
-             ((S, 15, WHITE, 'HAPPY'), (T, 27, GREEN, "ST. PATRICK'S"),
-              (S, 41, GOLD, 'DAY')),
+             ((S, 10, WHITE, 'HAPPY'), (S, 22, GREEN, 'ST.'),
+              (S, 34, GREEN, "PATRICK'S"), (S, 46, GOLD, 'DAY')),
              ((T, 12, GREEN, "ST. PATRICK'S"), (S, 24, GOLD, 'DAY')),
-             card_left=30, band_left=30,
+             band_left=30,
              effect_colors=((40, 170, 70), (90, 230, 110), GOLD)),
     _holiday('palm_sunday', _before_easter(7), 'none',
              ((M, 20, GREEN, 'PALM'), (M, 38, CREAM, 'SUNDAY')),
