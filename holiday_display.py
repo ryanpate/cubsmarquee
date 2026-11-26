@@ -370,7 +370,7 @@ class HolidayDisplay:
         """Today's holiday, or the one named by the holiday_preview key
         in config.json (for checking a screen on a Pi before its date)"""
         preview = load_user_config().get('holiday_preview')
-        if preview in HOLIDAYS_BY_SLUG:
+        if isinstance(preview, str) and preview in HOLIDAYS_BY_SLUG:
             return HOLIDAYS_BY_SLUG[preview]
         if today is None:
             now = pendulum.now('America/Chicago')

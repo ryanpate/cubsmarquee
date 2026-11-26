@@ -347,3 +347,37 @@ class TestPreGameLoop:
                             without_handler)
         handler = self._run(monkeypatch, 'R', cycle_content=False)
         handler._display_standings.assert_called_once()
+
+
+class TestReviewFixes:
+    """Findings from the whole-branch review"""
+
+    def test_admin_toggle_applies_without_a_reboot(self, monkeypatch) -> None:
+        # The handler's own config copy is only refreshed while the
+        # rotation runs, so in season it is as old as the last boot
+        import off_season_handler as osh
+        handler = TestRotationSlot()._handler(enable_holiday_facts=True)
+        monkeypatch.setattr(osh, 'load_user_config',
+                            lambda: {'enable_holiday_facts': False})
+        assert handler.display_holiday_facts() is False
+        handler.holiday_display.display_holiday.assert_not_called()
+
+    @pytest.mark.parametrize('preview', [['christmas'], {'a': 1}, 7])
+    def test_non_string_preview_falls_back_to_the_date(
+            self, display, monkeypatch, preview) -> None:
+        monkeypatch.setattr(hd, 'load_user_config',
+                            lambda: {'holiday_preview': preview})
+        assert display.current_holiday(date(2026, 12, 25)).slug == 'christmas'
+
+    def test_reviewed_fact_wording(self) -> None:
+        facts = hd.load_holiday_facts()
+        text = ' '.join(fact for deck in facts.values() for fact in deck)
+        # King James wording, not a modern translation
+        assert 'BLESSED IS HE THAT COMETH IN THE NAME OF THE LORD' in text
+        # Scotland moved to January 1 in 1600; this was England's change
+        assert 'ENGLAND AND ITS AMERICAN COLONIES' in text
+        assert 'BRITAIN AND ITS AMERICAN COLONIES' not in text
+        # looser claims the review flagged
+        assert "JULIUS CAESAR'S CALENDAR MADE" not in text
+        assert 'NICAEA SET THE RULE' not in text
+        assert "A MOTHERS' DAY FOR PEACE BACK IN 1870" not in text

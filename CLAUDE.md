@@ -60,7 +60,7 @@ sudo systemctl start cubs-scoreboard
 ### Assets
 - `logos/` - MLB team logos (PNG format, sized for LED matrix)
 - `logos/ncaab/` - Every Division I men's basketball logo, 20x20, named by ESPN team id (`dev/fetch_ncaab_logos.py` regenerates them)
-- `holidays/` - Holiday art, two PNGs per holiday with no lettering in them: `<slug>_card.png` (96x48) and `<slug>_band.png` (96x30). `dev/draw_holiday_art.py` drew the first drafts and **overwrites hand edits** when re-run (pass slugs to redraw only those)
+- `holidays/` - Holiday art, two PNGs per holiday with no lettering in them: `<slug>_card.png` (96x48) and `<slug>_band.png` (96x30). `dev/draw_holiday_art.py` drew the first drafts and **overwrites hand edits** when re-run (pass slugs to redraw only those). When touching up a picture, leave the right-hand column (x=95) as plain background: stars and fireworks are drawn only where a pixel matches that column's color in its row, which is how they stay behind the art
 - `fonts/` - Bitmap fonts (BDF format) for LED display
 - `*.png` - Weather icons (rain, snow, clouds, etc.)
 - `W.gif` - Cubs win celebration animation

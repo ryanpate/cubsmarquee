@@ -765,8 +765,15 @@ class OffSeasonHandler:
         Shared by the rotation and by the pre-game loop in
         GameStateHandler, which must keep running whatever happens here,
         so errors are logged rather than raised.
+
+        The toggle is read from the config file first: this handler's own
+        copy is only refreshed while the rotation runs, so before a game
+        in season it is as old as the last boot and an admin change would
+        not take effect.
         """
-        if not self.config.get('enable_holiday_facts', True):
+        if not load_user_config().get(
+                'enable_holiday_facts',
+                self.config.get('enable_holiday_facts', True)):
             return False
         try:
             return self.holiday_display.display_holiday(
