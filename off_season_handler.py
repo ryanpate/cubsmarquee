@@ -759,8 +759,8 @@ class OffSeasonHandler:
             return False
 
     def display_holiday_facts(self) -> bool:
-        """Show the holiday screen if today is a holiday and the screen
-        is enabled; False when nothing showed.
+        """Show one holiday pass (title card, then a fact) if today is a
+        holiday and the screen is enabled; False when nothing showed.
 
         Shared by the rotation and by the pre-game loop in
         GameStateHandler, which must keep running whatever happens here,
@@ -777,7 +777,8 @@ class OffSeasonHandler:
             return False
         try:
             return self.holiday_display.display_holiday(
-                duration=self.rotation_schedule['holiday_facts'] * 60)
+                duration=self.rotation_schedule['holiday_facts'] * 60,
+                facts=GameConfig.HOLIDAY_FACTS_PER_PASS)
         except Exception as e:
             print(f"Error in holiday facts display: {e}")
             import traceback
@@ -802,9 +803,14 @@ class OffSeasonHandler:
         flight_interstitial_sec = 45
 
         def _tick():
-            """Run the between-segment interstitial (if enabled) and
-            optionally invoke the external between_callback. Returns True
-            to abort the rotation."""
+            """Run the between-segment interstitials (the holiday pass
+            on a holiday, flights if enabled) and optionally invoke the
+            external between_callback. Returns True to abort the
+            rotation."""
+            # A once-per-rotation slot came round every 40-50 minutes,
+            # too rarely to be seen on the day, so the holiday follows
+            # every screen instead. Does nothing on any other day.
+            self.display_holiday_facts()
             if flights_between and flights_enabled:
                 try:
                     self.flight_display.display_flight_info(
@@ -1040,13 +1046,6 @@ class OffSeasonHandler:
                 print(f"Error in celebration display: {e}")
                 import traceback
                 traceback.print_exc()
-
-        # Holiday art and facts (only on the holiday itself; skips
-        # quietly on every other day)
-        if self.display_holiday_facts():
-            print("Holiday facts display finished")
-            if _tick():
-                return
 
         # Display milestone countdown (Spring Training, then Opening Day
         # once Spring Training is underway) if enabled

@@ -421,8 +421,14 @@ class HolidayDisplay:
         self.manager.draw_text(
             'medium_bold', scroll_x, FACT_BASELINE, CREAM, fact)
 
-    def display_holiday(self, duration: float = 120) -> bool:
-        """Show today's holiday; False when there is nothing to show"""
+    def display_holiday(self, duration: float = 120,
+                        facts: int | None = None) -> bool:
+        """Show today's holiday; False when there is nothing to show.
+
+        Runs for `duration` seconds, or until `facts` facts have scrolled
+        all the way off when that comes first, so a short pass never
+        cuts a fact off mid-sentence.
+        """
         holiday = self.current_holiday()
         if holiday is None:
             return False
@@ -446,11 +452,15 @@ class HolidayDisplay:
 
         fact = self._next_fact(holiday)
         scroll_x = COLS
+        finished = 0
         while time.time() - start < duration:
             self.draw_band(holiday, time.time() - start, fact, scroll_x)
             self.manager.swap_canvas()
             scroll_x -= 1
             if scroll_x + len(fact) * _CHAR_WIDTH['medium_bold'] < 0:
+                finished += 1
+                if facts is not None and finished >= facts:
+                    break
                 scroll_x = COLS
                 fact = self._next_fact(holiday)
             time.sleep(get_scroll_delay(
