@@ -340,7 +340,8 @@ class GameConfig:
     SKY_DISPLAY_DURATION: int = 2
     ISS_DISPLAY_DURATION: int = 1
     CELEBRATION_DURATION: int = 2
-    HOLIDAY_FACTS_DURATION: int = 2
+    HOLIDAY_FACTS_DURATION: int = 2  # longest one holiday pass may run
+    HOLIDAY_FACTS_PER_PASS: int = 1  # facts per pass; one follows every screen
     HOLIDAY_CARD_SECONDS: int = 8  # title card before the facts band
     SPRING_TRAINING_DISPLAY_DURATION: int = 2
     FLIGHT_DISPLAY_DURATION: int = 2

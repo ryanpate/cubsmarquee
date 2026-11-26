@@ -196,6 +196,26 @@ class TestDisplay:
             assert display.display_holiday(0.05) is True
             assert shown and set(shown) <= set(display.facts[slug]), slug
 
+    def test_pass_ends_after_its_facts(self, display, monkeypatch) -> None:
+        import time as real_time
+        monkeypatch.setattr(hd.GameConfig, 'HOLIDAY_CARD_SECONDS', 0)
+        monkeypatch.setattr(display, 'current_holiday',
+                            lambda: hd.HOLIDAYS_BY_SLUG['christmas'])
+        shown: list[tuple[str, int]] = []
+        monkeypatch.setattr(
+            display, 'draw_band',
+            lambda holiday, tick, fact, scroll_x: shown.append(
+                (fact, scroll_x)))
+        started = real_time.time()
+        assert display.display_holiday(duration=60, facts=1) is True
+        assert real_time.time() - started < 10  # not the full minute
+        facts = {fact for fact, _ in shown}
+        assert len(facts) == 1
+        fact = facts.pop()
+        # the one fact scrolled all the way off the left edge
+        assert shown[0][1] == 96
+        assert shown[-1][1] + len(fact) * 9 <= 0
+
     def test_deck_wraps_without_repeating_back_to_back(self, display) -> None:
         holiday = hd.HOLIDAYS_BY_SLUG['easter']
         count = len(display.facts['easter'])
@@ -231,53 +251,68 @@ class TestDisplay:
 
 
 class TestRotationSlot:
-    """The holiday slot in OffSeasonHandler._display_rotation_cycle"""
+    """On a holiday a short holiday pass follows every screen in
+    OffSeasonHandler._display_rotation_cycle"""
 
     def _handler(self, **config):
         from tests.test_bugfixes import TestRotationInterludeOnlyAfterContent
         helper = TestRotationInterludeOnlyAfterContent()
         return helper._make_handler({**helper._all_off(), **config})
 
-    def test_slot_runs_when_enabled(self) -> None:
-        handler = self._handler(enable_holiday_facts=True)
+    def test_holiday_pass_follows_every_screen(self) -> None:
+        # weather shows twice per pass and the Bible verse once
+        handler = self._handler(enable_holiday_facts=True,
+                                enable_weather=True, enable_bible=True)
         handler.holiday_display.display_holiday.return_value = True
+        handler._display_rotation_cycle()
+        assert handler.holiday_display.display_holiday.call_count == 3
+
+    def test_pass_is_a_card_and_one_fact(self) -> None:
+        handler = self._handler(enable_holiday_facts=True,
+                                enable_weather=True)
+        handler.rotation_schedule['holiday_facts'] = 2
+        handler._display_rotation_cycle()
+        handler.holiday_display.display_holiday.assert_called_with(
+            duration=120, facts=1)
+        assert hd.GameConfig.HOLIDAY_FACTS_PER_PASS == 1
+
+    def test_holiday_pass_comes_before_the_interlude(self) -> None:
+        handler = self._handler(enable_holiday_facts=True,
+                                enable_weather=True)
+        order: list[str] = []
+        handler.holiday_display.display_holiday.side_effect = (
+            lambda **kwargs: order.append('holiday') or True)
+        handler._display_rotation_cycle(
+            between_callback=lambda: order.append('interlude') or True)
+        assert order == ['holiday', 'interlude']
+
+    def test_no_pass_of_its_own_between_screens(self) -> None:
+        # nothing else showed, so there is nothing to follow
+        handler = self._handler(enable_holiday_facts=True)
         ticks: list[int] = []
         handler._display_rotation_cycle(
             between_callback=lambda: ticks.append(1) or False)
-        handler.holiday_display.display_holiday.assert_called_once_with(
-            duration=0)
-        assert ticks == [1]
+        handler.holiday_display.display_holiday.assert_not_called()
+        assert ticks == []
 
-    def test_slot_skipped_when_toggle_off(self) -> None:
-        handler = self._handler(enable_holiday_facts=False)
+    def test_skipped_when_toggle_off(self) -> None:
+        handler = self._handler(enable_holiday_facts=False,
+                                enable_weather=True)
         handler._display_rotation_cycle()
         handler.holiday_display.display_holiday.assert_not_called()
 
     def test_toggle_defaults_on(self) -> None:
-        handler = self._handler()
+        handler = self._handler(enable_weather=True)
         del handler.config['enable_holiday_facts']
-        handler.holiday_display.display_holiday.return_value = False
         handler._display_rotation_cycle()
-        handler.holiday_display.display_holiday.assert_called_once()
-
-    def test_tick_only_fires_when_the_holiday_showed(self) -> None:
-        handler = self._handler(enable_holiday_facts=True)
-        handler.holiday_display.display_holiday.return_value = False
-        ticks: list[int] = []
-        handler._display_rotation_cycle(
-            between_callback=lambda: ticks.append(1) or False)
-        assert ticks == []
+        assert handler.holiday_display.display_holiday.called
 
     def test_display_holiday_facts_swallows_errors(self) -> None:
         handler = self._handler(enable_holiday_facts=True)
         handler.holiday_display.display_holiday.side_effect = RuntimeError('x')
         assert handler.display_holiday_facts() is False
 
-    def test_slot_uses_the_configured_duration(self) -> None:
-        import off_season_handler as osh
-        import inspect
-        assert ("'holiday_facts': GameConfig.HOLIDAY_FACTS_DURATION"
-                in inspect.getsource(osh.OffSeasonHandler.__init__))
+    def test_durations(self) -> None:
         assert hd.GameConfig.HOLIDAY_FACTS_DURATION == 2
         assert hd.GameConfig.HOLIDAY_CARD_SECONDS == 8
 
