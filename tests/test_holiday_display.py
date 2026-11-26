@@ -46,3 +46,25 @@ class TestCalendar:
             assert holiday.card_text and holiday.band_text
         assert hd.HOLIDAYS_BY_SLUG['good_friday'].effect == 'none'
         assert hd.HOLIDAYS_BY_SLUG['palm_sunday'].effect == 'none'
+
+
+class TestFacts:
+    def test_every_holiday_has_facts(self) -> None:
+        facts = hd.load_holiday_facts()
+        assert set(facts) == {h.slug for h in hd.HOLIDAYS}
+        for holiday in hd.HOLIDAYS:
+            deck = facts[holiday.slug]
+            assert len(deck) >= 15, holiday.slug
+            assert len(set(deck)) == len(deck), holiday.slug
+            for fact in deck:
+                assert fact == fact.upper() and fact.isascii(), fact
+                assert 0 < len(fact) <= 100, f'{len(fact)}: {fact}'
+
+    def test_good_friday_facts_are_plain_statements(self) -> None:
+        assert not any('!' in f for f in hd.load_holiday_facts()['good_friday'])
+
+    def test_no_facts_file_gives_empty_decks(self, monkeypatch, tmp_path) -> None:
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(hd, 'data_path_candidates',
+                            lambda name: [str(tmp_path / name)])
+        assert hd.load_holiday_facts() == {}

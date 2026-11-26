@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Callable
 
 from scoreboard_config import DisplayConfig, RGBColor
+from teams import data_path_candidates
 
 EFFECTS: tuple[str, ...] = (
     'snow', 'leaves', 'hearts', 'confetti', 'fireworks', 'twinkle', 'none')
@@ -187,3 +189,15 @@ def holiday_on(day: date) -> Holiday | None:
         if holiday.slug in _WINS_CLASH:
             return holiday
     return matches[0] if matches else None
+
+
+def load_holiday_facts() -> dict[str, list[str]]:
+    """Facts keyed by holiday slug; empty when the file is unreadable"""
+    for path in data_path_candidates('holiday_facts.json'):
+        try:
+            with open(path, 'r') as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            continue
+    print('holiday_facts.json not found')
+    return {}
