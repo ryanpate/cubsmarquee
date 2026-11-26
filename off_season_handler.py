@@ -28,6 +28,7 @@ from cubs_history_display import TeamHistoryDisplay
 from sky_display import SkyDisplay
 from iss_display import ISSDisplay
 from celebration_display import CelebrationDisplay
+from holiday_display import HolidayDisplay
 
 if TYPE_CHECKING:
     from scoreboard_manager import ScoreboardManager
@@ -73,6 +74,7 @@ class OffSeasonHandler:
             scoreboard_manager, self.flight_display.latitude,
             self.flight_display.longitude)
         self.celebration_display: CelebrationDisplay = CelebrationDisplay(scoreboard_manager)
+        self.holiday_display: HolidayDisplay = HolidayDisplay(scoreboard_manager)
         self.scroll_position: int = DisplayConfig.MATRIX_COLS
 
         # Load configuration
@@ -129,7 +131,8 @@ class OffSeasonHandler:
             'cubs_history': GameConfig.CUBS_HISTORY_DURATION,
             'sky': GameConfig.SKY_DISPLAY_DURATION,
             'iss': GameConfig.ISS_DISPLAY_DURATION,
-            'celebration': GameConfig.CELEBRATION_DURATION
+            'celebration': GameConfig.CELEBRATION_DURATION,
+            'holiday_facts': GameConfig.HOLIDAY_FACTS_DURATION
         }
 
         # Track when we last checked for new season
@@ -211,6 +214,7 @@ class OffSeasonHandler:
             'enable_sky': True,  # Enable/disable Sun & Sky display
             'enable_iss': True,  # Enable/disable ISS tracker display
             'enable_celebrations': True,  # Enable/disable celebration days
+            'enable_holiday_facts': True,  # Holiday art and facts, on the day only
             'flights_between_displays': False,  # Show flight interstitial between every rotation segment
             'flight_tracking_latitude': None,  # Latitude for flight tracking center
             'flight_tracking_longitude': None,  # Longitude for flight tracking center
@@ -754,6 +758,25 @@ class OffSeasonHandler:
             self.last_season_check = time.time()
             return False
 
+    def display_holiday_facts(self) -> bool:
+        """Show the holiday screen if today is a holiday and the screen
+        is enabled; False when nothing showed.
+
+        Shared by the rotation and by the pre-game loop in
+        GameStateHandler, which must keep running whatever happens here,
+        so errors are logged rather than raised.
+        """
+        if not self.config.get('enable_holiday_facts', True):
+            return False
+        try:
+            return self.holiday_display.display_holiday(
+                duration=self.rotation_schedule['holiday_facts'] * 60)
+        except Exception as e:
+            print(f"Error in holiday facts display: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
     def _display_rotation_cycle(self, between_callback=None):
         """Rotate between different content types.
 
@@ -1010,6 +1033,13 @@ class OffSeasonHandler:
                 print(f"Error in celebration display: {e}")
                 import traceback
                 traceback.print_exc()
+
+        # Holiday art and facts (only on the holiday itself; skips
+        # quietly on every other day)
+        if self.display_holiday_facts():
+            print("Holiday facts display finished")
+            if _tick():
+                return
 
         # Display milestone countdown (Spring Training, then Opening Day
         # once Spring Training is underway) if enabled

@@ -228,3 +228,122 @@ class TestDisplay:
                 assert line.x >= left, line
                 assert line.x + len(line.text) * widths[line.font] <= 96, line
                 assert line.baseline < rows, line
+
+
+class TestRotationSlot:
+    """The holiday slot in OffSeasonHandler._display_rotation_cycle"""
+
+    def _handler(self, **config):
+        from tests.test_bugfixes import TestRotationInterludeOnlyAfterContent
+        helper = TestRotationInterludeOnlyAfterContent()
+        return helper._make_handler({**helper._all_off(), **config})
+
+    def test_slot_runs_when_enabled(self) -> None:
+        handler = self._handler(enable_holiday_facts=True)
+        handler.holiday_display.display_holiday.return_value = True
+        ticks: list[int] = []
+        handler._display_rotation_cycle(
+            between_callback=lambda: ticks.append(1) or False)
+        handler.holiday_display.display_holiday.assert_called_once_with(
+            duration=0)
+        assert ticks == [1]
+
+    def test_slot_skipped_when_toggle_off(self) -> None:
+        handler = self._handler(enable_holiday_facts=False)
+        handler._display_rotation_cycle()
+        handler.holiday_display.display_holiday.assert_not_called()
+
+    def test_toggle_defaults_on(self) -> None:
+        handler = self._handler()
+        del handler.config['enable_holiday_facts']
+        handler.holiday_display.display_holiday.return_value = False
+        handler._display_rotation_cycle()
+        handler.holiday_display.display_holiday.assert_called_once()
+
+    def test_tick_only_fires_when_the_holiday_showed(self) -> None:
+        handler = self._handler(enable_holiday_facts=True)
+        handler.holiday_display.display_holiday.return_value = False
+        ticks: list[int] = []
+        handler._display_rotation_cycle(
+            between_callback=lambda: ticks.append(1) or False)
+        assert ticks == []
+
+    def test_display_holiday_facts_swallows_errors(self) -> None:
+        handler = self._handler(enable_holiday_facts=True)
+        handler.holiday_display.display_holiday.side_effect = RuntimeError('x')
+        assert handler.display_holiday_facts() is False
+
+    def test_slot_uses_the_configured_duration(self) -> None:
+        import off_season_handler as osh
+        import inspect
+        assert ("'holiday_facts': GameConfig.HOLIDAY_FACTS_DURATION"
+                in inspect.getsource(osh.OffSeasonHandler.__init__))
+        assert hd.GameConfig.HOLIDAY_FACTS_DURATION == 2
+        assert hd.GameConfig.HOLIDAY_CARD_SECONDS == 8
+
+
+class TestPreGameLoop:
+    """On an in-season holiday the screen joins the next-game loop"""
+
+    def _run(self, monkeypatch, game_type: str, cycle_content: bool):
+        from unittest.mock import MagicMock
+        from PIL import Image
+        import game_state_handler as gsh
+        from game_state_handler import GameStateHandler
+
+        monkeypatch.setattr(gsh.time, 'sleep', lambda seconds: None)
+        monkeypatch.setattr(gsh, 'retry_api_call', lambda *a, **k: {
+            'gameData': {'teams': {
+                'home': {'abbreviation': 'CHC', 'name': 'Chicago Cubs'},
+                'away': {'abbreviation': 'STL', 'name': 'St. Louis Cardinals'},
+            }}})
+        handler = GameStateHandler.__new__(GameStateHandler)
+        handler.manager = MagicMock()
+        handler.manager.split_squad_indicator = None
+        handler.manager.format_game_time.return_value = '1:20 PM'
+        handler.manager.get_pitchers.return_value = 'PITCHERS'
+        handler.manager.game_images = {
+            'marquee': Image.new('RGB', (96, 30))}
+        handler.manager.get_schedule.return_value = [{'status': 'Warmup'}]
+        handler.team = MagicMock(abbrev='CHC', primary_color=(0, 51, 102),
+                                 marquee_scroll_baseline=45)
+        handler.scroll_position = -100000  # the scroll pass is already over
+        handler._display_standings = MagicMock()
+        handler._maybe_display_playoff_race = MagicMock()
+        handler._display_playoff_info = MagicMock()
+        handler.off_season_handler = MagicMock()
+        game = [{'game_id': 1, 'game_date': '2027-07-04',
+                 'game_type': game_type, 'status': 'Scheduled'}]
+        handler.display_no_game(game, 0, cycle_content=cycle_content)
+        return handler
+
+    def test_shows_holiday_after_standings(self, monkeypatch) -> None:
+        handler = self._run(monkeypatch, 'R', cycle_content=False)
+        handler._display_standings.assert_called_once()
+        handler.off_season_handler.display_holiday_facts.assert_called_once()
+
+    def test_shows_holiday_in_the_postseason_loop(self, monkeypatch) -> None:
+        handler = self._run(monkeypatch, 'D', cycle_content=False)
+        handler.off_season_handler.display_holiday_facts.assert_called_once()
+
+    def test_skipped_when_the_rotation_follows(self, monkeypatch) -> None:
+        handler = self._run(monkeypatch, 'R', cycle_content=True)
+        handler.off_season_handler.display_holiday_facts.assert_not_called()
+
+    def test_skipped_in_spring_training(self, monkeypatch) -> None:
+        handler = self._run(monkeypatch, 'S', cycle_content=False)
+        handler.off_season_handler.display_holiday_facts.assert_not_called()
+
+    def test_loop_survives_without_an_off_season_handler(
+            self, monkeypatch) -> None:
+        from game_state_handler import GameStateHandler
+        original = GameStateHandler.display_no_game
+
+        def without_handler(self, *args, **kwargs):
+            del self.off_season_handler
+            return original(self, *args, **kwargs)
+
+        monkeypatch.setattr(GameStateHandler, 'display_no_game',
+                            without_handler)
+        handler = self._run(monkeypatch, 'R', cycle_content=False)
+        handler._display_standings.assert_called_once()

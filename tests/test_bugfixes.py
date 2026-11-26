@@ -1043,14 +1043,15 @@ class TestRotationInterludeOnlyAfterContent:
             'weather', 'bears', 'bears_news', 'pga', 'pga_news',
             'pga_facts', 'cubs_news', 'message', 'bible', 'bible_facts',
             'newsmax', 'usatoday', 'stocks', 'spring_training', 'allstar',
-            'flights', 'clock', 'cubs_history', 'sky', 'iss', 'celebration')}
+            'flights', 'clock', 'cubs_history', 'sky', 'iss', 'celebration',
+            'holiday_facts')}
         for attr in ('weather_display', 'bears_display', 'pga_display',
                      'bible_display', 'newsmax_display', 'usatoday_display',
                      'stock_display',
                      'spring_training_display', 'allstar_display',
                      'flight_display', 'clock_display',
                      'cubs_history_display', 'sky_display', 'iss_display',
-                     'celebration_display'):
+                     'celebration_display', 'holiday_display'):
             setattr(handler, attr, MagicMock())
         handler.display_bears_news = MagicMock()
         handler.display_cubs_news = MagicMock()
@@ -1065,7 +1066,8 @@ class TestRotationInterludeOnlyAfterContent:
             'enable_spring_training', 'enable_allstar', 'enable_sky',
             'enable_cubs_news', 'enable_cubs_history', 'enable_bible',
             'enable_bible_facts', 'enable_newsmax', 'enable_usatoday',
-            'enable_stocks', 'enable_flights', 'enable_iss')}
+            'enable_stocks', 'enable_flights', 'enable_iss',
+            'enable_holiday_facts')}
 
     def test_all_disabled_never_fires_interlude(self):
         handler = self._make_handler(self._all_off())
