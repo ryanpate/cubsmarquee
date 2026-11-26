@@ -407,6 +407,13 @@ class GameStateHandler:
                 else:
                     self._display_playoff_info(game_data, game_index)
 
+                # On a holiday the holiday screen joins this loop: the
+                # rotation does not run before a game (or on an off day)
+                # in auto mode, and half the holidays fall in the season
+                holidays = getattr(self, 'off_season_handler', None)
+                if holidays is not None:
+                    holidays.display_holiday_facts()
+
                 # Check game status
                 game_data = self.manager.get_schedule()
                 if self._should_transition_state(game_data, game_index):

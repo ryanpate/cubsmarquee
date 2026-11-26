@@ -178,6 +178,7 @@ APPLIES_LIVE_KEYS = {
     'enable_stocks', 'enable_spring_training', 'enable_playoff_race',
     'enable_flights', 'enable_flight_radar', 'enable_clock',
     'enable_cubs_history', 'enable_sky', 'enable_iss', 'enable_celebrations',
+    'enable_holiday_facts', 'scroll_speed_holiday_facts',
     'flights_between_displays',
     'scroll_speed_bears', 'scroll_speed_bears_news', 'scroll_speed_pga',
     'scroll_speed_pga_news', 'scroll_speed_pga_facts',
@@ -240,6 +241,7 @@ DEFAULT_CONFIG = {
         'enable_sky': True,
         'enable_iss': True,
         'enable_celebrations': True,
+        'enable_holiday_facts': True,
         'flights_between_displays': False,
         'scroll_speed_bears': 5,
         'scroll_speed_bears_news': 5,
@@ -252,6 +254,7 @@ DEFAULT_CONFIG = {
         'scroll_speed_cubs_news': 5,
         'scroll_speed_bible': 5,
         'scroll_speed_bible_facts': 5,
+        'scroll_speed_holiday_facts': 5,
         'scroll_speed_newsmax': 5,
         'scroll_speed_usatoday': 5,
         'scroll_speed_stocks': 5,
@@ -914,6 +917,7 @@ HTML_TEMPLATE = """
                     {{ toggle('enable_bible', 'Bible verse of the day', 'Shows a daily Bible verse.') }}
                     {{ toggle('enable_bible_facts', 'Bible facts', 'Shows interesting facts about the Bible.') }}
                     {{ toggle('enable_celebrations', 'Holidays & birthdays', 'Celebrates holidays and special days with a themed screen.') }}
+                    {{ toggle('enable_holiday_facts', 'Holiday fun facts', 'On holidays like Christmas, Easter and Thanksgiving, shows a themed picture and fun facts about the day. Only appears on the holiday itself.') }}
                 </div>
             </details>
 
@@ -950,6 +954,7 @@ HTML_TEMPLATE = """
                     {{ speed('scroll_speed_flights', 'Planes') }}
                     {{ speed('scroll_speed_bible', 'Bible verse') }}
                     {{ speed('scroll_speed_bible_facts', 'Bible facts') }}
+                    {{ speed('scroll_speed_holiday_facts', 'Holiday fun facts') }}
                 </div>
             </details>
         </div>
@@ -1361,6 +1366,7 @@ HTML_TEMPLATE = """
             document.getElementById('enable_sky').checked = config.enable_sky !== false;
             document.getElementById('enable_iss').checked = config.enable_iss !== false;
             document.getElementById('enable_celebrations').checked = config.enable_celebrations !== false;
+            document.getElementById('enable_holiday_facts').checked = config.enable_holiday_facts !== false;
             document.getElementById('flights_between_displays').checked = config.flights_between_displays === true;
 
             // Load brightness setting
@@ -1428,6 +1434,7 @@ HTML_TEMPLATE = """
                 'scroll_speed_pga', 'scroll_speed_pga_news', 'scroll_speed_pga_facts',
                 'scroll_speed_cubs_facts', 'scroll_speed_cubs_news',
                 'scroll_speed_bible', 'scroll_speed_bible_facts',
+                'scroll_speed_holiday_facts',
                 'scroll_speed_newsmax', 'scroll_speed_usatoday', 'scroll_speed_stocks',
                 'scroll_speed_spring_training', 'scroll_speed_flights'
             ];
@@ -1646,6 +1653,7 @@ HTML_TEMPLATE = """
                 enable_sky: document.getElementById('enable_sky').checked,
                 enable_iss: document.getElementById('enable_iss').checked,
                 enable_celebrations: document.getElementById('enable_celebrations').checked,
+                enable_holiday_facts: document.getElementById('enable_holiday_facts').checked,
                 flights_between_displays: document.getElementById('flights_between_displays').checked,
                 scroll_speed_bears: parseInt(document.getElementById('scroll_speed_bears').value),
                 scroll_speed_bears_news: parseInt(document.getElementById('scroll_speed_bears_news').value),
@@ -1658,6 +1666,7 @@ HTML_TEMPLATE = """
                 scroll_speed_cubs_news: parseInt(document.getElementById('scroll_speed_cubs_news').value),
                 scroll_speed_bible: parseInt(document.getElementById('scroll_speed_bible').value),
                 scroll_speed_bible_facts: parseInt(document.getElementById('scroll_speed_bible_facts').value),
+                scroll_speed_holiday_facts: parseInt(document.getElementById('scroll_speed_holiday_facts').value),
                 scroll_speed_newsmax: parseInt(document.getElementById('scroll_speed_newsmax').value),
                 scroll_speed_usatoday: parseInt(document.getElementById('scroll_speed_usatoday').value),
                 scroll_speed_stocks: parseInt(document.getElementById('scroll_speed_stocks').value),

@@ -299,3 +299,41 @@ def test_college_basketball_settings_default_on_and_round_trip(client):
     assert saved['enable_ncaab_facts'] is False
     assert saved['scroll_speed_ncaab_news'] == 8
     assert saved['enable_ncaab'] is True  # untouched keys keep their value
+
+
+def test_admin_page_has_holiday_facts_controls(client):
+    html = client.get('/admin').data.decode()
+    assert 'id="enable_holiday_facts"' in html
+    assert 'Holiday fun facts' in html
+    assert 'Only appears on the holiday itself.' in html
+    assert 'id="scroll_speed_holiday_facts"' in html
+    # the page script must both load and save each control
+    assert html.count("getElementById('enable_holiday_facts')") == 2
+    assert "'scroll_speed_holiday_facts'" in html
+    assert ("scroll_speed_holiday_facts: parseInt("
+            "document.getElementById('scroll_speed_holiday_facts').value)"
+            in html)
+
+
+def test_holiday_facts_defaults(client):
+    import wifi_config_server as wcs
+    config = wcs.load_config()
+    assert config['enable_holiday_facts'] is True
+    assert config['scroll_speed_holiday_facts'] == 5
+
+
+def test_holiday_facts_round_trip(client, tmp_path):
+    resp = client.post('/save_config', json={
+        'enable_holiday_facts': False, 'scroll_speed_holiday_facts': 8})
+    assert resp.get_json()['success']
+    saved = json.loads((tmp_path / 'config.json').read_text())
+    assert saved['enable_holiday_facts'] is False
+    assert saved['scroll_speed_holiday_facts'] == 8
+
+
+def test_saving_the_admin_page_keeps_a_holiday_preview(client, tmp_path):
+    (tmp_path / 'config.json').write_text(
+        json.dumps({'holiday_preview': 'christmas'}))
+    client.post('/save_config', json={'enable_holiday_facts': True})
+    saved = json.loads((tmp_path / 'config.json').read_text())
+    assert saved['holiday_preview'] == 'christmas'

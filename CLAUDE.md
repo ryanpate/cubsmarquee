@@ -35,6 +35,7 @@ sudo systemctl start cubs-scoreboard
 | `bears_display.py` | Chicago Bears NFL scores and game info |
 | `ncaab_display.py` | College basketball: next game / live score / final, team rank card + AP Top 25, conference standings, news, facts |
 | `pga_display.py` | PGA Tour leaderboard and golf facts |
+| `holiday_display.py` | Holiday calendar (18 holidays, incl. Easter by calculation), title card + picture band with facts, and the code-drawn effects (snow, leaves, hearts, confetti, fireworks, twinkle). Silent on every other day |
 
 ### Services & Infrastructure
 | File | Purpose |
@@ -53,11 +54,13 @@ sudo systemctl start cubs-scoreboard
 | `cubs_facts.json` | 305+ Cubs trivia facts |
 | `pga_facts.json` | PGA Tour facts and records |
 | `illini_facts.json`, `kentucky_facts.json`, `indiana_facts.json` | College basketball program facts, one file per pack |
+| `holiday_facts.json` | Facts per holiday, keyed by the slugs in `holiday_display.HOLIDAYS` (uppercase ASCII, 100 characters max) |
 | `/home/pi/config.json` | User configuration (API keys, toggles) |
 
 ### Assets
 - `logos/` - MLB team logos (PNG format, sized for LED matrix)
 - `logos/ncaab/` - Every Division I men's basketball logo, 20x20, named by ESPN team id (`dev/fetch_ncaab_logos.py` regenerates them)
+- `holidays/` - Holiday art, two PNGs per holiday with no lettering in them: `<slug>_card.png` (96x48) and `<slug>_band.png` (96x30). `dev/draw_holiday_art.py` drew the first drafts and **overwrites hand edits** when re-run (pass slugs to redraw only those). When touching up a picture, leave the right-hand column (x=95) as plain background: stars and fireworks are drawn only where a pixel matches that column's color in its row, which is how they stay behind the art
 - `fonts/` - Bitmap fonts (BDF format) for LED display
 - `*.png` - Weather icons (rain, snow, clouds, etc.)
 - `W.gif` - Cubs win celebration animation
@@ -90,6 +93,8 @@ main.py (CubsScoreboard)
 8. Custom message + Cubs facts (4 min)
 9. Cubs news - if available (2 min)
 10. College basketball news, then facts - if basketball season (2 min each)
+
+On a holiday, a holiday slot (8 s title card, then facts; 2 min) follows the custom message / celebration slot. It only exists on the date itself.
 
 ## Development
 
@@ -193,6 +198,8 @@ User configuration stored at `/home/pi/config.json`:
 - `ncaab_team` — active college basketball pack slug (`illini` default, `kentucky`, `indiana`). Adding a school is one `NCAABTeamPack` in `teams.py` plus a facts JSON; the logo is already in `logos/ncaab/`
 - `enable_ncaab`, `enable_ncaab_rankings`, `enable_ncaab_standings`, `enable_ncaab_news`, `enable_ncaab_facts` — the five college basketball screens, all default on. Basketball season is read from the team's ESPN schedule (game within -3/+14 days; Nov–Apr month gate if ESPN is unreachable). A live game takes the whole screen in `display_mode: auto` after the MLB season, and during the MLB season whenever no MLB game is on (`OffSeasonHandler.ncaab_fills_idle_screen()` — the NCAA tournament overlaps spring training and Opening Day). When an NFL game and a basketball game are live together they alternate every 90 s rather than one hiding the other. There is no basketball equivalent of `nfl_preempt_mlb`: a live MLB game always wins
 - `nfl_preempt_mlb` — when `true`, a live NFL game takes over the display the way a live MLB game does: the run loop skips `process_game_cycle()` entirely, so no MLB content is shown until the NFL game leaves ESPN's `state: 'in'` (default `false`). The demotion to a scheduled NFL card is the *other* direction — it is what the NFL rotation slot does when this key is off and an MLB game is in progress. Independent of this key, during the MLB season a live NFL game takes the screen whenever no MLB game is on (pre-game through the last out, delays included) — see `OffSeasonHandler.nfl_fills_idle_screen()`; it hands back as soon as an MLB game reaches pre-game. After the MLB season ends, `display_mode: auto` likewise gives a live NFL game the whole screen until it ends, instead of one rotation slot (`no_games` does not, since it can be forced mid-season). Football season is detected from the ESPN schedule (game within -3/+14 days), not from a month range, so preseason counts like the regular season; when that schedule is unreachable the code falls back to `extended_month_gate()` (Aug–Feb) so a network blip cannot silently hide all NFL content
+- `enable_holiday_facts` (default on), `scroll_speed_holiday_facts` — the holiday facts screen. It shows only on the holiday's own date (America/Chicago), one holiday per day: when two land together, Palm Sunday, Good Friday or Easter wins, so Good Friday never shares the screen with April Fools' or Earth Day. In `display_mode: auto` the rotation does not run before a game or on an off day, and about half the holidays fall in the season, so `GameStateHandler.display_no_game()` also runs one holiday pass per trip round its next-game / standings loop (not in the `cycle_content` or spring-training paths, where the rotation follows anyway)
+- `holiday_preview` — a holiday slug (e.g. `christmas`, `good_friday`); forces that holiday on whatever the date, for checking a screen on real hardware. Hand-set in config.json, not in the admin, and survives admin saves. Remove it when done
 - `panel_version` — panel hardware revision (`v1` default, `v2`); set by `install_panel_v2.sh`
 - `hardware_mapping` — matrix wiring revision (`regular` default = direct to GPIO; `adafruit-hat` / `adafruit-hat-pwm` for the Adafruit bonnet). Per-Pi, since the units are not wired alike; omit to keep `DisplayConfig.HARDWARE_MAPPING`
 - `gpio_slowdown` — optional matrix timing override (Pi 5: 2, Pi 4/earlier: 4). Set the **lowest value that renders clean** — higher costs refresh. Measured: cubsmarquee (Pi 4, bonnet) is clean at **3**, ghosts at 2. Too low shows as ghosting/noisy pixels, and the threshold scales with CPU clock: curing that Pi's undervoltage took it from 600 MHz to 1800 and introduced ghosting that had never appeared before (2026-08-13)
@@ -243,6 +250,8 @@ Test coverage includes:
 - College basketball ESPN parsing (recorded payloads in `tests/data/ncaab_*.json`), season window, live takeover
 
 Render every college basketball screen to PNG without a Pi: `python3 tools/render_ncaab_previews.py` (output in `ncaab_previews/`).
+
+Render every holiday card and band the same way: `python3 tools/render_holiday_previews.py` (output in `holiday_previews/`, including `contact_sheet.png`). Adding a holiday is a `_holiday(...)` row in `holiday_display.py`, two PNGs and a facts list; `tests/test_holiday_display.py` fails until all three exist.
 - Configuration validation
 - Off-season detection logic
 
