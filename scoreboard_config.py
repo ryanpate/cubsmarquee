@@ -340,6 +340,8 @@ class GameConfig:
     SKY_DISPLAY_DURATION: int = 2
     ISS_DISPLAY_DURATION: int = 1
     CELEBRATION_DURATION: int = 2
+    HOLIDAY_FACTS_DURATION: int = 2
+    HOLIDAY_CARD_SECONDS: int = 8  # title card before the facts band
     SPRING_TRAINING_DISPLAY_DURATION: int = 2
     FLIGHT_DISPLAY_DURATION: int = 2
     BIBLE_DISPLAY_DURATION: int = 3

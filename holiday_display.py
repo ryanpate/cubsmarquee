@@ -3,12 +3,22 @@
 from __future__ import annotations
 
 import json
+import math
+import random
+import time
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
-from scoreboard_config import DisplayConfig, RGBColor
+import pendulum
+from PIL import Image, ImageChops
+
+from scoreboard_config import (
+    DisplayConfig, GameConfig, RGBColor, get_scroll_delay, load_user_config)
 from teams import data_path_candidates
+
+if TYPE_CHECKING:
+    from scoreboard_manager import ScoreboardManager
 
 ART_DIR = 'holidays'
 
@@ -203,3 +213,246 @@ def load_holiday_facts() -> dict[str, list[str]]:
             continue
     print('holiday_facts.json not found')
     return {}
+
+
+# ---------------------------------------------------------------------------
+# Effects: each is a pure function of the tick, so a frame can be redrawn
+# (or rendered for a preview) without any state
+# ---------------------------------------------------------------------------
+
+COLS = DisplayConfig.MATRIX_COLS
+BAND_ROWS = 30
+FACT_BASELINE = 45
+
+_CONFETTI: tuple[RGBColor, ...] = (
+    (255, 90, 90), (255, 210, 60), (90, 200, 255),
+    (120, 230, 120), (240, 130, 240), (255, 160, 60))
+_LEAVES: tuple[RGBColor, ...] = (
+    (210, 70, 30), (240, 140, 30), (250, 205, 60), (175, 95, 35))
+_HEARTS: tuple[RGBColor, ...] = ((255, 90, 130), (255, 170, 190), (235, 40, 70))
+_FIREWORKS: tuple[RGBColor, ...] = (
+    (255, 80, 80), (255, 220, 90), (120, 180, 255), (255, 255, 255),
+    (120, 255, 150))
+
+
+def _plot(manager, sky, height: int, x: int, y: int, color: RGBColor) -> None:
+    """One effect pixel, clipped to the rows above `height` and, when a
+    sky mask is given, to open sky"""
+    if not (0 <= x < COLS and 0 <= y < height):
+        return
+    if sky is not None and not sky.getpixel((x, y)):
+        return
+    manager.draw_pixel(x, y, *color)
+
+
+def _snow(manager, tick: float, height: int, colors, sky) -> None:
+    for i in range(height * 3 // 10):
+        x = (i * 37 + 11 + int(1.5 * math.sin(tick * 0.8 + i))) % COLS
+        y = int(i * 13 + tick * (5 + (i * 7) % 6)) % height
+        _plot(manager, None, height, x, y, WHITE)
+        if i % 3 == 0:  # nearer flakes, the weather screen's soft shape
+            for dx, dy in ((-1, 0), (1, 0), (0, -1)):
+                _plot(manager, None, height, x + dx, y + dy, (240, 240, 245))
+
+
+def _leaves(manager, tick: float, height: int, colors, sky) -> None:
+    for i in range(height // 4):
+        x = (i * 41 + 7 + int(4 * math.sin(tick * 1.3 + i * 2))) % COLS
+        y = int(i * 17 + tick * (4 + i % 4)) % height
+        color = _LEAVES[i % len(_LEAVES)]
+        lean = 1 if int(tick * 2 + i) % 2 else -1
+        _plot(manager, None, height, x, y, color)
+        _plot(manager, None, height, x + lean, y + 1, color)
+
+
+def _hearts(manager, tick: float, height: int, colors, sky) -> None:
+    for i in range(height // 6):
+        x = (i * 43 + 9 + int(2 * math.sin(tick + i * 1.9))) % COLS
+        y = height + 2 - int(i * 11 + tick * (4 + i % 3)) % (height + 6)
+        color = _HEARTS[i % len(_HEARTS)]
+        for dx, dy in ((-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1), (0, 2)):
+            _plot(manager, None, height, x + dx, y + dy, color)
+
+
+def _confetti(manager, tick: float, height: int, colors, sky) -> None:
+    palette = colors or _CONFETTI
+    for i in range(height * 5 // 8):
+        x = (i * 29 + 13) % COLS
+        y = int(i * 11 + tick * (6 + (i * 7) % 9)) % height
+        color = palette[i % len(palette)]
+        _plot(manager, None, height, x, y, color)
+        _plot(manager, None, height, x, (y + 1) % height, color)
+
+
+def _fireworks(manager, tick: float, height: int, colors, sky) -> None:
+    period, reach = 2.4, 6 + height // 8
+    ceiling = height - 3  # stay clear of the skyline / ground rows
+    for slot in range(3):
+        clock = tick + slot * 0.8
+        burst, phase = int(clock / period), (clock % period) / period
+        cx = 6 + (burst * 37 + slot * 53) % (COLS - 12)
+        cy = 5 + (burst * 19 + slot * 29) % max(1, height // 2 - 4)
+        color = _FIREWORKS[(burst + slot) % len(_FIREWORKS)]
+        if phase < 0.2:  # the rocket climbing
+            y = height - 1 - int(phase / 0.2 * (height - 1 - cy))
+            _plot(manager, sky, ceiling, cx, y, (255, 240, 200))
+            _plot(manager, sky, ceiling, cx, y + 1, (150, 120, 70))
+            continue
+        spread = (phase - 0.2) / 0.8
+        fade = 1.0 - spread ** 3 * 0.7
+        for ring, count in ((1.0, 12), (0.55, 8)):
+            for k in range(count):
+                angle = 2 * math.pi * k / count + ring
+                # each spark drags a dimmer tail one step behind it
+                for lag, dim in ((0.14, 0.6), (0.0, 1.0)):
+                    step = max(0.0, spread - lag)
+                    radius = reach * ring * (1 - (1 - step) ** 2)
+                    x = cx + int(round(radius * math.cos(angle)))
+                    y = cy + int(round(radius * math.sin(angle)
+                                       + step * step * reach * 0.35))
+                    _plot(manager, sky, ceiling, x, y,
+                          tuple(int(c * fade * dim) for c in color))
+
+
+def _twinkle(manager, tick: float, height: int, colors, sky) -> None:
+    for i in range(height // 3):
+        x = (i * 29 + 13) % COLS
+        y = (i * 17 + 5) % max(1, height * 3 // 5)
+        glow = 0.5 + 0.5 * math.sin(tick * 2 + i * 1.7)
+        if glow < 0.25:
+            continue
+        level = int(255 * glow)
+        _plot(manager, sky, height - 3, x, y, (level, level, int(level * 0.9)))
+
+
+_EFFECT_DRAWERS = {
+    'snow': _snow, 'leaves': _leaves, 'hearts': _hearts,
+    'confetti': _confetti, 'fireworks': _fireworks, 'twinkle': _twinkle,
+}
+
+
+def draw_effect(manager, effect: str, tick: float, height: int,
+                colors: tuple[RGBColor, ...] = (),
+                sky: Image.Image | None = None) -> None:
+    """Draw one frame of an effect on the rows above `height`.
+
+    Falling effects pass in front of the art. Stars and fireworks belong
+    behind it: given a `sky` mask they only light pixels of open sky.
+    """
+    drawer = _EFFECT_DRAWERS.get(effect)
+    if drawer is not None:
+        drawer(manager, tick, height, colors, sky)
+
+
+def _sky_mask(art: Image.Image) -> Image.Image:
+    """Pixels still showing the plain background. The lettering side of
+    every picture is bare background, so the right-hand column gives each
+    row's background color."""
+    backdrop = art.crop((COLS - 1, 0, COLS, art.height)).resize(
+        art.size, Image.NEAREST)
+    difference = ImageChops.difference(art, backdrop).convert('L')
+    return difference.point(lambda value: 255 if value == 0 else 0)
+
+
+class HolidayDisplay:
+    """Title card, then a picture band with facts, on the holiday itself"""
+
+    def __init__(self, scoreboard_manager: ScoreboardManager) -> None:
+        self.manager = scoreboard_manager
+        self.facts: dict[str, list[str]] = load_holiday_facts()
+        # (picture, sky mask) per '<slug>_card' / '<slug>_band'
+        self._art: dict[str, tuple[Image.Image, Image.Image]] = {}
+        self._deck: list[str] = []
+        self._deck_slug: str | None = None
+        self._deck_index: int = 0
+
+    def current_holiday(self, today: date | None = None) -> Holiday | None:
+        """Today's holiday, or the one named by the holiday_preview key
+        in config.json (for checking a screen on a Pi before its date)"""
+        preview = load_user_config().get('holiday_preview')
+        if preview in HOLIDAYS_BY_SLUG:
+            return HOLIDAYS_BY_SLUG[preview]
+        if today is None:
+            now = pendulum.now('America/Chicago')
+            today = date(now.year, now.month, now.day)
+        return holiday_on(today)
+
+    def _picture(self, holiday: Holiday, kind: str
+                 ) -> tuple[Image.Image, Image.Image]:
+        key = f'{holiday.slug}_{kind}'
+        if key not in self._art:
+            with Image.open(f'{ART_DIR}/{key}.png') as source:
+                art = source.convert('RGB')
+            self._art[key] = (art, _sky_mask(art))
+        return self._art[key]
+
+    def _next_fact(self, holiday: Holiday) -> str:
+        """Walk a shuffled deck, re-dealt only when the holiday changes;
+        wrapping without a re-shuffle keeps a fact from repeating back
+        to back"""
+        if holiday.slug != self._deck_slug:
+            deck = self.facts[holiday.slug]
+            self._deck = random.sample(deck, len(deck))
+            self._deck_slug = holiday.slug
+            self._deck_index = 0
+        fact = self._deck[self._deck_index]
+        self._deck_index = (self._deck_index + 1) % len(self._deck)
+        return fact
+
+    def _draw(self, holiday: Holiday, kind: str, lines: tuple[TextLine, ...],
+              tick: float) -> None:
+        art, sky = self._picture(holiday, kind)
+        self.manager.clear_canvas()
+        self.manager.set_image(art, 0, 0)
+        draw_effect(self.manager, holiday.effect, tick, art.height,
+                    holiday.effect_colors, sky)
+        for line in lines:
+            self.manager.draw_text(
+                line.font, line.x, line.baseline, line.color, line.text)
+
+    def draw_card(self, holiday: Holiday, tick: float) -> None:
+        """The full-screen title card (does not swap the canvas)"""
+        self._draw(holiday, 'card', holiday.card_text, tick)
+
+    def draw_band(self, holiday: Holiday, tick: float, fact: str,
+                  scroll_x: int) -> None:
+        """Picture band on top, the fact below (does not swap)"""
+        self._draw(holiday, 'band', holiday.band_text, tick)
+        self.manager.draw_text(
+            'medium_bold', scroll_x, FACT_BASELINE, CREAM, fact)
+
+    def display_holiday(self, duration: float = 120) -> bool:
+        """Show today's holiday; False when there is nothing to show"""
+        holiday = self.current_holiday()
+        if holiday is None:
+            return False
+        if not self.facts.get(holiday.slug):
+            print(f'No holiday facts for {holiday.slug}')
+            return False
+        try:
+            self._picture(holiday, 'card')
+            self._picture(holiday, 'band')
+        except OSError as e:
+            print(f'Holiday art missing for {holiday.slug}: {e}')
+            return False
+
+        print(f'Displaying holiday facts: {holiday.slug}')
+        start = time.time()
+        while time.time() - start < min(
+                GameConfig.HOLIDAY_CARD_SECONDS, duration):
+            self.draw_card(holiday, time.time() - start)
+            self.manager.swap_canvas()
+            time.sleep(0.1)
+
+        fact = self._next_fact(holiday)
+        scroll_x = COLS
+        while time.time() - start < duration:
+            self.draw_band(holiday, time.time() - start, fact, scroll_x)
+            self.manager.swap_canvas()
+            scroll_x -= 1
+            if scroll_x + len(fact) * _CHAR_WIDTH['medium_bold'] < 0:
+                scroll_x = COLS
+                fact = self._next_fact(holiday)
+            time.sleep(get_scroll_delay(
+                load_user_config().get('scroll_speed_holiday_facts', 5)))
+        return True
