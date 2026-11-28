@@ -1,0 +1,685 @@
+{
+ "id": "401913531",
+ "uid": "s:40~l:41~e:401913531",
+ "date": "2026-11-27T23:00Z",
+ "name": "Western Kentucky Hilltoppers at Illinois Fighting Illini",
+ "shortName": "WKU @ ILL",
+ "season": {
+  "year": 2027,
+  "type": 2,
+  "slug": "regular-season"
+ },
+ "competitions": [
+  {
+   "id": "401913531",
+   "uid": "s:40~l:41~e:401913531~c:401913531",
+   "date": "2026-11-27T23:00Z",
+   "attendance": 0,
+   "type": {
+    "id": "1",
+    "abbreviation": "STD"
+   },
+   "timeValid": true,
+   "neutralSite": false,
+   "conferenceCompetition": false,
+   "playByPlayAvailable": true,
+   "recent": true,
+   "competitors": [
+    {
+     "id": "356",
+     "uid": "s:40~l:41~t:356",
+     "type": "team",
+     "order": 0,
+     "homeAway": "home",
+     "team": {
+      "id": "356",
+      "uid": "s:40~l:41~t:356",
+      "location": "Illinois",
+      "name": "Fighting Illini",
+      "abbreviation": "ILL",
+      "displayName": "Illinois Fighting Illini",
+      "shortDisplayName": "Illinois",
+      "color": "ff5f05",
+      "alternateColor": "13294b",
+      "isActive": true,
+      "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/356.png",
+      "logoDark": "https://a.espncdn.com/i/teamlogos/ncaa/500-dark/356.png",
+      "conferenceId": "7"
+     },
+     "score": "16",
+     "linescores": [
+      {
+       "value": 16.0,
+       "displayValue": "16",
+       "period": 1
+      }
+     ],
+     "statistics": [
+      {
+       "name": "rebounds",
+       "abbreviation": "REB",
+       "displayValue": "8"
+      },
+      {
+       "name": "avgRebounds",
+       "abbreviation": "REB",
+       "displayValue": "8.0"
+      },
+      {
+       "name": "assists",
+       "abbreviation": "AST",
+       "displayValue": "5"
+      },
+      {
+       "name": "fieldGoalsAttempted",
+       "abbreviation": "FGA",
+       "displayValue": "14"
+      },
+      {
+       "name": "fieldGoalsMade",
+       "abbreviation": "FGM",
+       "displayValue": "7"
+      },
+      {
+       "name": "fieldGoalPct",
+       "abbreviation": "FG%",
+       "displayValue": "50.0"
+      },
+      {
+       "name": "freeThrowPct",
+       "abbreviation": "FT%",
+       "displayValue": "0.0"
+      },
+      {
+       "name": "freeThrowsAttempted",
+       "abbreviation": "FTA",
+       "displayValue": "0"
+      },
+      {
+       "name": "freeThrowsMade",
+       "abbreviation": "FTM",
+       "displayValue": "0"
+      },
+      {
+       "name": "points",
+       "abbreviation": "PTS",
+       "displayValue": "16"
+      },
+      {
+       "name": "threePointFieldGoalsAttempted",
+       "abbreviation": "3PA",
+       "displayValue": "8"
+      },
+      {
+       "name": "threePointFieldGoalsMade",
+       "abbreviation": "3PM",
+       "displayValue": "2"
+      },
+      {
+       "name": "avgPoints",
+       "abbreviation": "PTS",
+       "displayValue": "16.0"
+      },
+      {
+       "name": "avgAssists",
+       "abbreviation": "AST",
+       "displayValue": "5.0"
+      },
+      {
+       "name": "threePointFieldGoalPct",
+       "abbreviation": "3P%",
+       "displayValue": "25.0"
+      }
+     ],
+     "leaders": [
+      {
+       "name": "points",
+       "displayName": "Points",
+       "shortDisplayName": "Pts",
+       "abbreviation": "Pts",
+       "leaders": [
+        {
+         "displayValue": "5",
+         "value": 5.0,
+         "athlete": {
+          "id": "5325990",
+          "fullName": "Ethan Brown",
+          "displayName": "Ethan Brown",
+          "shortName": "E. Brown",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mens-college-basketball/player/_/id/5325990/ethan-brown"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mens-college-basketball/players/full/5325990.png",
+          "jersey": "34",
+          "position": {
+           "abbreviation": "G"
+          },
+          "team": {
+           "id": "356"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "356"
+         }
+        }
+       ]
+      },
+      {
+       "name": "rebounds",
+       "displayName": "Rebounds",
+       "shortDisplayName": "Reb",
+       "abbreviation": "Reb",
+       "leaders": [
+        {
+         "displayValue": "2",
+         "value": 2.0,
+         "athlete": {
+          "id": "5325990",
+          "fullName": "Ethan Brown",
+          "displayName": "Ethan Brown",
+          "shortName": "E. Brown",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mens-college-basketball/player/_/id/5325990/ethan-brown"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mens-college-basketball/players/full/5325990.png",
+          "jersey": "34",
+          "position": {
+           "abbreviation": "G"
+          },
+          "team": {
+           "id": "356"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "356"
+         }
+        }
+       ]
+      },
+      {
+       "name": "assists",
+       "displayName": "Assists",
+       "shortDisplayName": "Ast",
+       "abbreviation": "Ast",
+       "leaders": [
+        {
+         "displayValue": "2",
+         "value": 2.0,
+         "athlete": {
+          "id": "5325990",
+          "fullName": "Ethan Brown",
+          "displayName": "Ethan Brown",
+          "shortName": "E. Brown",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mens-college-basketball/player/_/id/5325990/ethan-brown"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mens-college-basketball/players/full/5325990.png",
+          "jersey": "34",
+          "position": {
+           "abbreviation": "G"
+          },
+          "team": {
+           "id": "356"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "356"
+         }
+        }
+       ]
+      },
+      {
+       "name": "rating",
+       "displayName": "Rating",
+       "shortDisplayName": "RAT",
+       "abbreviation": "RAT",
+       "leaders": [
+        {
+         "displayValue": "5 PTS",
+         "value": 10.800000190734863,
+         "athlete": {
+          "id": "5325990",
+          "fullName": "Ethan Brown",
+          "displayName": "Ethan Brown",
+          "shortName": "E. Brown",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mens-college-basketball/player/_/id/5325990/ethan-brown"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mens-college-basketball/players/full/5325990.png",
+          "jersey": "34",
+          "position": {
+           "abbreviation": "G"
+          },
+          "team": {
+           "id": "356"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "356"
+         }
+        }
+       ]
+      }
+     ],
+     "curatedRank": {
+      "current": 4
+     },
+     "records": [
+      {
+       "name": "overall",
+       "abbreviation": "Season",
+       "type": "total",
+       "summary": "6-1"
+      },
+      {
+       "name": "Home",
+       "abbreviation": "Home",
+       "type": "home",
+       "summary": "5-0"
+      },
+      {
+       "name": "Road",
+       "abbreviation": "AWAY",
+       "type": "road",
+       "summary": "1-1"
+      },
+      {
+       "name": "vs. Conf.",
+       "abbreviation": "VS CONF",
+       "type": "vsconf",
+       "summary": "0-0"
+      }
+     ]
+    },
+    {
+     "id": "98",
+     "uid": "s:40~l:41~t:98",
+     "type": "team",
+     "order": 1,
+     "homeAway": "away",
+     "team": {
+      "id": "98",
+      "uid": "s:40~l:41~t:98",
+      "location": "Western Kentucky",
+      "name": "Hilltoppers",
+      "abbreviation": "WKU",
+      "displayName": "Western Kentucky Hilltoppers",
+      "shortDisplayName": "Western KY",
+      "color": "e13a3e",
+      "alternateColor": "ffffff",
+      "isActive": true,
+      "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/98.png",
+      "logoDark": "https://a.espncdn.com/i/teamlogos/ncaa/500-dark/98.png",
+      "conferenceId": "11"
+     },
+     "score": "12",
+     "linescores": [
+      {
+       "value": 12.0,
+       "displayValue": "12",
+       "period": 1
+      }
+     ],
+     "statistics": [
+      {
+       "name": "rebounds",
+       "abbreviation": "REB",
+       "displayValue": "6"
+      },
+      {
+       "name": "avgRebounds",
+       "abbreviation": "REB",
+       "displayValue": "6.0"
+      },
+      {
+       "name": "assists",
+       "abbreviation": "AST",
+       "displayValue": "4"
+      },
+      {
+       "name": "fieldGoalsAttempted",
+       "abbreviation": "FGA",
+       "displayValue": "12"
+      },
+      {
+       "name": "fieldGoalsMade",
+       "abbreviation": "FGM",
+       "displayValue": "5"
+      },
+      {
+       "name": "fieldGoalPct",
+       "abbreviation": "FG%",
+       "displayValue": "41.7"
+      },
+      {
+       "name": "freeThrowPct",
+       "abbreviation": "FT%",
+       "displayValue": "50.0"
+      },
+      {
+       "name": "freeThrowsAttempted",
+       "abbreviation": "FTA",
+       "displayValue": "2"
+      },
+      {
+       "name": "freeThrowsMade",
+       "abbreviation": "FTM",
+       "displayValue": "1"
+      },
+      {
+       "name": "points",
+       "abbreviation": "PTS",
+       "displayValue": "12"
+      },
+      {
+       "name": "threePointFieldGoalsAttempted",
+       "abbreviation": "3PA",
+       "displayValue": "4"
+      },
+      {
+       "name": "threePointFieldGoalsMade",
+       "abbreviation": "3PM",
+       "displayValue": "1"
+      },
+      {
+       "name": "avgPoints",
+       "abbreviation": "PTS",
+       "displayValue": "12.0"
+      },
+      {
+       "name": "avgAssists",
+       "abbreviation": "AST",
+       "displayValue": "4.0"
+      },
+      {
+       "name": "threePointFieldGoalPct",
+       "abbreviation": "3P%",
+       "displayValue": "25.0"
+      }
+     ],
+     "leaders": [
+      {
+       "name": "points",
+       "displayName": "Points",
+       "shortDisplayName": "Pts",
+       "abbreviation": "Pts",
+       "leaders": [
+        {
+         "displayValue": "5",
+         "value": 5.0,
+         "athlete": {
+          "id": "5241470",
+          "fullName": "Sharron Young",
+          "displayName": "Sharron Young",
+          "shortName": "S. Young",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mens-college-basketball/player/_/id/5241470/sharron-young"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mens-college-basketball/players/full/5241470.png",
+          "jersey": "3",
+          "position": {
+           "abbreviation": "G"
+          },
+          "team": {
+           "id": "98"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "98"
+         }
+        }
+       ]
+      },
+      {
+       "name": "rebounds",
+       "displayName": "Rebounds",
+       "shortDisplayName": "Reb",
+       "abbreviation": "Reb",
+       "leaders": [
+        {
+         "displayValue": "2",
+         "value": 2.0,
+         "athlete": {
+          "id": "5176780",
+          "fullName": "Teagan Moore",
+          "displayName": "Teagan Moore",
+          "shortName": "T. Moore",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mens-college-basketball/player/_/id/5176780/teagan-moore"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mens-college-basketball/players/full/5176780.png",
+          "jersey": "30",
+          "position": {
+           "abbreviation": "G"
+          },
+          "team": {
+           "id": "98"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "98"
+         }
+        }
+       ]
+      },
+      {
+       "name": "assists",
+       "displayName": "Assists",
+       "shortDisplayName": "Ast",
+       "abbreviation": "Ast",
+       "leaders": [
+        {
+         "displayValue": "1",
+         "value": 1.0,
+         "athlete": {
+          "id": "5241470",
+          "fullName": "Sharron Young",
+          "displayName": "Sharron Young",
+          "shortName": "S. Young",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mens-college-basketball/player/_/id/5241470/sharron-young"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mens-college-basketball/players/full/5241470.png",
+          "jersey": "3",
+          "position": {
+           "abbreviation": "G"
+          },
+          "team": {
+           "id": "98"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "98"
+         }
+        }
+       ]
+      },
+      {
+       "name": "rating",
+       "displayName": "Rating",
+       "shortDisplayName": "RAT",
+       "abbreviation": "RAT",
+       "leaders": [
+        {
+         "displayValue": "3 PTS",
+         "value": 6.050000190734863,
+         "athlete": {
+          "id": "5313163",
+          "fullName": "LJ Hackman",
+          "displayName": "LJ Hackman",
+          "shortName": "L. Hackman",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mens-college-basketball/player/_/id/5313163/lj-hackman"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mens-college-basketball/players/full/5313163.png",
+          "jersey": "2",
+          "position": {
+           "abbreviation": "G"
+          },
+          "team": {
+           "id": "98"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "98"
+         }
+        }
+       ]
+      }
+     ],
+     "curatedRank": {
+      "current": 99
+     },
+     "records": [
+      {
+       "name": "overall",
+       "abbreviation": "Season",
+       "type": "total",
+       "summary": "5-2"
+      },
+      {
+       "name": "Home",
+       "abbreviation": "Home",
+       "type": "home",
+       "summary": "3-0"
+      },
+      {
+       "name": "Road",
+       "abbreviation": "AWAY",
+       "type": "road",
+       "summary": "0-2"
+      },
+      {
+       "name": "vs. Conf.",
+       "abbreviation": "VS CONF",
+       "type": "vsconf",
+       "summary": "0-0"
+      }
+     ]
+    }
+   ],
+   "notes": [],
+   "situation": {
+    "lastPlay": {
+     "id": "401913531122110717",
+     "type": {
+      "id": "572",
+      "text": "LayUpShot"
+     },
+     "text": "Emondrek Erkins-Ford makes layup (Sharron Young assists)",
+     "scoreValue": 2,
+     "team": {
+      "id": "98"
+     },
+     "probability": {
+      "tiePercentage": 0.0,
+      "homeWinPercentage": 0.988,
+      "awayWinPercentage": 0.01200000000000001
+     }
+    }
+   },
+   "status": {
+    "clock": 760.0,
+    "displayClock": "12:40",
+    "period": 1,
+    "type": {
+     "id": "2",
+     "name": "STATUS_IN_PROGRESS",
+     "state": "in",
+     "completed": false,
+     "description": "In Progress",
+     "detail": "12:40 - 1st Half",
+     "shortDetail": "12:40 - 1st"
+    }
+   },
+   "broadcasts": [
+    {
+     "market": "national",
+     "names": [
+      "FS1"
+     ]
+    }
+   ],
+   "startDate": "2026-11-27T23:00Z",
+   "broadcast": "FS1"
+  }
+ ],
+ "status": {
+  "clock": 760.0,
+  "displayClock": "12:40",
+  "period": 1,
+  "type": {
+   "id": "2",
+   "name": "STATUS_IN_PROGRESS",
+   "state": "in",
+   "completed": false,
+   "description": "In Progress",
+   "detail": "12:40 - 1st Half",
+   "shortDetail": "12:40 - 1st"
+  }
+ }
+}

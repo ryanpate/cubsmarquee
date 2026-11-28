@@ -11,8 +11,10 @@ Five screens, all from ESPN's public endpoints:
 from __future__ import annotations
 
 import json
+import math
 import random
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any
 
 import pendulum
@@ -35,22 +37,53 @@ ESPN_SITE = ('https://site.api.espn.com/apis/site/v2/sports/basketball/'
              'mens-college-basketball')
 ESPN_STANDINGS = ('https://site.api.espn.com/apis/v2/sports/basketball/'
                   'mens-college-basketball/standings')
+ESPN_CORE = ('https://sports.core.api.espn.com/v2/sports/basketball/leagues/'
+             'mens-college-basketball')
 # League-wide feed, keyword-filtered; only used when the team feed is empty
 FALLBACK_NEWS_RSS = 'https://www.espn.com/espn/rss/ncb/news'
 
 # ESPN's rank for a team outside the poll
 UNRANKED = 99
 
-# Scores move far faster than football's, so the live poll is tighter than
-# GameConfig.LIVE_SCORE_UPDATE_INTERVAL
-LIVE_UPDATE_SECONDS = 20
+# ESPN caches the live game for about four seconds, so asking sooner
+# returns the same answer
+LIVE_UPDATE_SECONDS = 4
 PREGAME_UPDATE_SECONDS = 60
+# yield_to asks other sports' APIs, so it keeps the slower beat the score
+# poll used to have
+YIELD_CHECK_SECONDS = 20
+
+# The live screen is drawn from ESPN's play-by-play and shown this far behind
+# the real game, clock and score in step. The scoreboard feed cannot drive a
+# clock: its clock moves only on baskets and whistles, and its last play
+# arrives separately about 11 seconds late. Each play-by-play entry carries
+# its own game clock and wallclock and arrives about 7 seconds after it
+# happened (15 at worst), so half a minute back the next play is usually
+# already known and the clock can stop or restart on time instead of
+# guessing. Simulated on 39 games (2026-11-27): about 5 backward steps a
+# game at 30 seconds, 15 at 20, 40 at 12.
+LIVE_DELAY_SECONDS = 30
+# Between known plays the clock counts down only after a play that leaves the
+# ball live. On those 39 games it ran for 63-91% of the gap to the next play
+# after a shot, defensive rebound or steal, and 0-7% after a foul, timeout or
+# dead-ball rebound. (Offensive rebounds: 38%, but the next play is seconds
+# away either way.) Substitutions, free throws and out-of-bounds turnovers
+# stop it too; it restarts on the inbound, which ESPN never reports.
+LIVE_BALL_PLAYS = frozenset(
+    {'Defensive Rebound', 'Offensive Rebound', 'Steal', 'Jumpball'})
+SHOT_CLOCK_SECONDS = 30
+# Play-by-play is fetched in pages; a longer gap than this many plays is
+# reloaded as history rather than one request per play
+PLAYS_PAGE = 25
+MAX_NEW_PLAYS = 12
 
 # A late West Coast tip ends after midnight Central. Without this the game
 # stops being "today's" at 12:00 and the live screen drops mid-game.
 RECENT_START_HOURS = 4
 
 FRAME_SECONDS = 0.5
+# Live frames are short so each second of the clock lands on time
+LIVE_FRAME_SECONDS = 0.1
 # How long a live takeover lingers on the final score before releasing
 FINAL_HOLD_SECONDS = 60
 PAGE_SECONDS = 5
@@ -140,6 +173,127 @@ def lead_text(team_abbr: str, team_score, opp_abbr: str, opp_score) -> str:
         return 'TIED'
     leader = team_abbr if team_int > opp_int else opp_abbr
     return f'{leader} BY {abs(team_int - opp_int)}'
+
+
+def clock_runs_after(play: dict | None, period: int, clock: float) -> bool:
+    """True when ESPN's last play leaves the game clock running"""
+    play = play or {}
+    kind = (play.get('type') or {}).get('text') or ''
+    if 'Shot' in kind:
+        # A made basket stops the clock in the last minute of the second
+        # half and of overtime
+        made = ' makes ' in (play.get('text') or '')
+        return not (made and period >= 2 and clock < 60)
+    return kind in LIVE_BALL_PLAYS
+
+
+def format_clock(seconds: int) -> str:
+    return f'{seconds // 60}:{seconds % 60:02d}'
+
+
+def period_label(period: int) -> str:
+    """'1ST' and '2ND' for the halves, then 'OT', '2OT', ..."""
+    if period <= 2:
+        return ('1ST', '2ND')[period - 1]
+    return 'OT' if period == 3 else f'{period - 2}OT'
+
+
+def parse_play(item: dict) -> dict | None:
+    """One play-by-play entry as PlayTimeline wants it, or None when ESPN
+    sent it without a clock or a wallclock"""
+    try:
+        period = item['period']['number']
+        clock = float(item['clock']['value'])
+        kind = (item.get('type') or {}).get('text') or ''
+        return {
+            'at': pendulum.parse(item['wallclock']).timestamp(),
+            'period': period,
+            'clock': clock,
+            'running': clock_runs_after(item, period, clock),
+            'over': kind.startswith('End'),
+            'home': item.get('homeScore'),
+            'away': item.get('awayScore'),
+        }
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+class PlayTimeline:
+    """The game as the play-by-play tells it, readable at any past moment"""
+
+    KEEP = 60
+
+    def __init__(self) -> None:
+        self._plays: list[dict] = []
+
+    def add(self, play: dict) -> None:
+        if self._plays:
+            last = self._plays[-1]
+            # A play entered late carries an old game clock; following it
+            # would turn the clock back
+            if (play['period'], -play['clock']) < (
+                    last['period'], -last['clock']):
+                return
+            play = dict(play, at=max(play['at'], last['at']))
+        self._plays.append(play)
+        del self._plays[:-self.KEEP]
+
+    def caught_up(self, moment: float) -> bool:
+        """True once the last known play is in the past at `moment`"""
+        return bool(self._plays) and moment >= self._plays[-1]['at']
+
+    def at(self, moment: float) -> dict | None:
+        """Period, clock, score and whether the period is over, as they
+        stood at `moment`. None without plays."""
+        if not self._plays:
+            return None
+        index = 0
+        for index in range(len(self._plays) - 1, -1, -1):
+            if self._plays[index]['at'] <= moment:
+                break
+        play = self._plays[index]
+        since = max(moment - play['at'], 0)
+        clock = play['clock']
+        following = self._plays[index + 1:index + 2]
+        if following and following[0]['period'] == play['period']:
+            # The next play is known: after a live ball the clock ran until
+            # it reached that play's reading; after a whistle it restarted
+            # just in time to get there
+            after = following[0]
+            if play['running']:
+                clock = max(clock - since, after['clock'])
+            else:
+                restart = after['at'] - (clock - after['clock'])
+                clock -= max(moment - restart, 0)
+        elif play['running']:
+            clock = max(clock - min(since, SHOT_CLOCK_SECONDS), 0)
+        return {'period': play['period'], 'seconds': math.ceil(clock),
+                'home': play['home'], 'away': play['away'],
+                'over': play['over']}
+
+
+def delayed_scores(score_data: dict, timeline: PlayTimeline,
+                   moment: float) -> dict:
+    """score_data with the clock and score as they stood at `moment`.
+    Without play-by-play it is returned as ESPN's scoreboard sent it."""
+    reading = timeline.at(moment)
+    if reading is None:
+        return score_data
+    team, opp = reading['home'], reading['away']
+    if not score_data.get('team_home'):
+        team, opp = opp, team
+    label = period_label(reading['period'])
+    if reading['over']:
+        # Said from the timeline: ESPN's status has moved on to the next
+        # period up to half a minute before this screen gets there
+        detail = 'HALFTIME' if reading['period'] == 1 else f'END OF {label}'
+    elif (score_data['status'] != 'STATUS_IN_PROGRESS'
+            and timeline.caught_up(moment)):
+        detail = score_data['detail']
+    else:
+        detail = f"{format_clock(reading['seconds'])} - {label}"
+    return dict(score_data, team_score=str(team), opp_score=str(opp),
+                detail=detail)
 
 
 def short_note(competition: dict) -> str:
@@ -463,6 +617,7 @@ class CollegeBasketballDisplay:
                 'status': status_type.get('name'),
                 'state': status_type.get('state'),
                 'detail': (status_type.get('shortDetail') or '').upper(),
+                'team_home': team.get('homeAway') == 'home',
                 'team_score': competitor_score(team),
                 'opp_score': competitor_score(opponent),
                 'opp_abbr': (opp_team.get('abbreviation') or 'OPP').upper(),
@@ -475,6 +630,40 @@ class CollegeBasketballDisplay:
         except Exception as e:
             print(f'Error reading basketball score: {e}')
             return None
+
+    def _get_json_once(self, url: str) -> dict:
+        """No retries: the live poll comes round again in seconds"""
+        return retry_http_request(url, max_retries=0, timeout=5).json()
+
+    def _fetch_plays(self, game_id,
+                     seen: int | None) -> tuple[int | None, list[dict]]:
+        """Play-by-play entries after the first `seen`, with the new count.
+        seen=None loads recent history. Any failure returns nothing new and
+        the old count, so the next poll asks again."""
+        base = f'{ESPN_CORE}/events/{game_id}/competitions/{game_id}/plays'
+        try:
+            count = self._get_json_once(f'{base}?limit=1')['count']
+            if seen is not None and count - seen <= MAX_NEW_PLAYS:
+                # One play per request: a page of one has its own URL per
+                # play, where the shared last page is cached for 10 seconds
+                items = [
+                    self._get_json_once(
+                        f'{base}?limit=1&page={number}')['items'][0]
+                    for number in range(seen + 1, count + 1)]
+            else:
+                last = max(-(-count // PLAYS_PAGE), 1)
+                first = max(last - 1, 1)
+                items = []
+                for page in range(first, last + 1):
+                    items += self._get_json_once(
+                        f'{base}?limit={PLAYS_PAGE}&page={page}')['items']
+                # The cached last page may be a few plays short
+                count = (first - 1) * PLAYS_PAGE + len(items)
+            plays = [parse_play(item) for item in items]
+            return count, [play for play in plays if play]
+        except Exception as e:
+            print(f'Error fetching basketball play-by-play: {e}')
+            return seen, []
 
     def _get_rankings(self) -> dict[str, Any] | None:
         if (self._rankings is None
@@ -632,7 +821,7 @@ class CollegeBasketballDisplay:
         loop_until_final: hold the live game on screen until it ends.
         force_scheduled: show today's game as an upcoming card rather
             than live scores, because another sport owns the screen.
-        yield_to: optional callable polled at each score refresh;
+        yield_to: optional callable polled every YIELD_CHECK_SECONDS;
             returning True hands the screen back.
         """
         if not self._ensure_schedule():
@@ -741,53 +930,87 @@ class CollegeBasketballDisplay:
     def _display_game_day(self, game: dict, duration: float,
                           loop_until_final: bool, yield_to) -> None:
         start = time.time()
-        last_update = time.time()
-        frame = 0
+        last_update = last_yield_check = time.time()
         celebrated = False
+        timeline = PlayTimeline()
+        # The delayed screen outlives ESPN's 'in' by the delay
+        live_until = 0.0
+        # Refreshes run off the drawing thread: a slow reply every few
+        # seconds would otherwise freeze the clock mid-count
+        fetcher = ThreadPoolExecutor(max_workers=1)
+        pending = None
+
+        def refresh(plays_seen):
+            scores = self._get_current_scores(game)
+            # Plays are only needed live, and through the delayed ending
+            if not scores or (scores['state'] != 'in'
+                              and plays_seen is None):
+                return scores, plays_seen, []
+            return (scores, *self._fetch_plays(game.get('id'), plays_seen))
+
         try:
-            score_data = self._get_current_scores(game)
+            score_data, plays_seen, plays = refresh(None)
             if not score_data:
                 return
+            for play in plays:
+                timeline.add(play)
             print(f"Basketball game status: {score_data['status']} "
                   f"({score_data['detail']})")
 
             while True:
+                now = time.time()
                 state = score_data.get('state')
+                if state == 'in':
+                    live_until = now + LIVE_DELAY_SECONDS
+                live = now < live_until
                 if loop_until_final:
                     # Entered on state 'in', so left on anything else:
                     # 'post' also covers a postponed or cancelled game
                     # that never reaches STATUS_FINAL.
-                    if (state != 'in' or is_shutdown_requested()
-                            or time.time() - start >= TAKEOVER_MAX_SECONDS):
+                    if (not live or is_shutdown_requested()
+                            or now - start >= TAKEOVER_MAX_SECONDS):
                         break
-                elif time.time() - start >= duration:
+                elif now - start >= duration:
                     break
 
-                interval = (LIVE_UPDATE_SECONDS if state == 'in'
-                            else PREGAME_UPDATE_SECONDS)
-                if state != 'post' and time.time() - last_update >= interval:
-                    score_data = (self._get_current_scores(game)
-                                  or score_data)
-                    last_update = time.time()
-                    if yield_to is not None and yield_to():
-                        break
+                if pending is not None and pending.done():
+                    scores, plays_seen, plays = pending.result()
+                    score_data = scores or score_data
+                    for play in plays:
+                        timeline.add(play)
+                    pending = None
                     continue
 
-                if state == 'post' and not celebrated:
+                polling = live or state != 'post'
+                interval = (LIVE_UPDATE_SECONDS if live
+                            else PREGAME_UPDATE_SECONDS)
+                if (polling and pending is None
+                        and now - last_update >= interval):
+                    last_update = now
+                    pending = fetcher.submit(refresh, plays_seen)
+                if (polling and yield_to is not None
+                        and now - last_yield_check >= YIELD_CHECK_SECONDS):
+                    last_yield_check = now
+                    if yield_to():
+                        break
+
+                if state == 'post' and not live and not celebrated:
                     celebrated = True
                     self._celebrate_if_won(score_data)
 
+                frame = int((now - start) / FRAME_SECONDS)
                 self.manager.clear_canvas()
                 self._draw_header()
-                if state == 'in':
-                    self._draw_live_content(score_data, frame)
+                if live:
+                    self._draw_live_content(delayed_scores(
+                        score_data, timeline, now - LIVE_DELAY_SECONDS),
+                        frame)
                 elif score_data['status'] == 'STATUS_FINAL':
                     self._draw_final_content(score_data, frame)
                 else:
                     self._draw_matchup_card(game, frame)
                 self.manager.swap_canvas()
-                frame += 1
-                self._sleep_frame()
+                time.sleep(LIVE_FRAME_SECONDS if live else FRAME_SECONDS)
 
             # A takeover that ran to the final horn shows the result
             # before handing the screen back, rather than cutting from a
@@ -805,6 +1028,8 @@ class CollegeBasketballDisplay:
             print(f'Error displaying basketball game: {e}')
             import traceback
             traceback.print_exc()
+        finally:
+            fetcher.shutdown(wait=False)
 
     def _celebrate_if_won(self, score_data: dict) -> None:
         team_int, opp_int = _score_pair(

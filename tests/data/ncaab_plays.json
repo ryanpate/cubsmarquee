@@ -1,0 +1,50 @@
+{
+ "count": 246,
+ "pageIndex": 1,
+ "pageSize": 2,
+ "pageCount": 1,
+ "items": [
+  {
+   "id": "401913531122108777",
+   "sequenceNumber": "122108777",
+   "type": {
+    "id": "558",
+    "text": "JumpShot"
+   },
+   "text": "Sharron Young makes 25-foot three point jumper (Armelo Boone assists)",
+   "awayScore": 3,
+   "homeScore": 0,
+   "period": {
+    "number": 1,
+    "displayValue": "1st Half"
+   },
+   "clock": {
+    "value": 1187.0,
+    "displayValue": "19:47"
+   },
+   "scoringPlay": true,
+   "wallclock": "2026-11-27T23:01:48Z"
+  },
+  {
+   "id": "401913531122108814",
+   "sequenceNumber": "122108814",
+   "type": {
+    "id": "519",
+    "text": "PersonalFoul"
+   },
+   "text": "Foul on Emondrek Erkins-Ford.",
+   "awayScore": 3,
+   "homeScore": 2,
+   "period": {
+    "number": 1,
+    "displayValue": "1st Half"
+   },
+   "clock": {
+    "value": 1152.0,
+    "displayValue": "19:12"
+   },
+   "scoringPlay": false,
+   "wallclock": "2026-11-27T23:02:26Z"
+  }
+ ]
+}

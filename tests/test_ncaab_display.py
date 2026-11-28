@@ -1,13 +1,14 @@
 """College basketball screens: ESPN parsing, season gating, live takeover.
 
-The JSON under tests/data/ncaab_*.json is recorded ESPN output (2026-11-12),
-trimmed of logo and link arrays.
+The JSON under tests/data/ncaab_*.json is recorded ESPN output (2026-11-12;
+ncaab_live_running_event.json 2026-11-27), trimmed of logo and link arrays.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import time as real_time
 from unittest.mock import Mock
 
 import pendulum
@@ -377,6 +378,448 @@ class TestLiveGame:
             nd.FINAL_HOLD_SECONDS / nd.FRAME_SECONDS)
         drawn = [call.args[4] for call in d.manager.draw_text.call_args_list]
         assert 'LOSS' in drawn and 'FINAL' in drawn
+
+
+class _FakeTime:
+    """Stands in for the time module inside ncaab_display. Sleeping moves
+    the clock on at once; the short real pause lets the background score
+    fetch land before the next frame."""
+
+    def __init__(self):
+        self.now = 1000.0
+
+    def time(self):
+        return self.now
+
+    monotonic = time
+
+    def sleep(self, seconds):
+        self.now += seconds
+        real_time.sleep(0.001)
+
+
+def _play(type_text, text=''):
+    return {'type': {'text': type_text}, 'text': text}
+
+
+class TestClockRuns:
+    def test_runs_after_a_live_ball_play(self):
+        for play in ('JumpShot', 'LayUpShot', 'DunkShot', 'TipShot',
+                     'Block Shot', 'Defensive Rebound', 'Offensive Rebound',
+                     'Steal', 'Jumpball'):
+            assert nd.clock_runs_after(_play(play), period=1, clock=600), play
+
+    def test_stopped_after_a_whistle(self):
+        for play in ('PersonalFoul', 'Technical Foul', 'MadeFreeThrow',
+                     'OfficialTVTimeOut', 'ShortTimeOut', 'RegularTimeOut',
+                     'Substitution', 'Dead Ball Rebound',
+                     'Lost Ball Turnover', 'End Period'):
+            assert not nd.clock_runs_after(
+                _play(play), period=1, clock=600), play
+
+    def test_stopped_when_espn_names_no_play(self):
+        assert not nd.clock_runs_after(None, period=1, clock=600)
+        assert not nd.clock_runs_after({}, period=1, clock=600)
+
+    def test_made_basket_stops_the_clock_in_the_final_minute(self):
+        made = _play('LayUpShot', 'Kylan Boswell makes layup')
+        missed = _play('LayUpShot', 'Kylan Boswell misses layup')
+        assert not nd.clock_runs_after(made, period=2, clock=45)
+        assert not nd.clock_runs_after(made, period=3, clock=45)  # overtime
+        assert nd.clock_runs_after(made, period=1, clock=45)
+        assert nd.clock_runs_after(made, period=2, clock=75)
+        assert nd.clock_runs_after(missed, period=2, clock=45)
+
+
+def _tl(*plays):
+    """A timeline from (period, clock, at, running) rows, with an optional
+    fifth item of extra fields"""
+    timeline = nd.PlayTimeline()
+    for period, clock, at, running, *extra in plays:
+        timeline.add(dict({
+            'period': period, 'clock': float(clock), 'at': float(at),
+            'running': running, 'over': False, 'home': 0, 'away': 0},
+            **(extra[0] if extra else {})))
+    return timeline
+
+
+def _clock(timeline, moment):
+    reading = timeline.at(moment)
+    return reading['period'], reading['seconds']
+
+
+class TestPlayTimeline:
+    def test_empty_timeline_has_no_reading(self):
+        assert nd.PlayTimeline().at(1000) is None
+
+    def test_clock_holds_after_a_whistle(self):
+        timeline = _tl((1, 850, 1000, False))
+        assert _clock(timeline, 1090) == (1, 850)
+
+    def test_clock_counts_down_from_when_the_play_happened(self):
+        timeline = _tl((1, 850, 1000, True))
+        assert _clock(timeline, 1000) == (1, 850)
+        assert _clock(timeline, 1000.9) == (1, 850)
+        assert _clock(timeline, 1001) == (1, 849)
+        assert _clock(timeline, 1007.5) == (1, 843)
+
+    def test_never_runs_past_one_shot_clock(self):
+        """A live ball must produce a play within 30 seconds; silence
+        beyond that means the feed stalled, not that the game ran on."""
+        timeline = _tl((1, 850, 1000, True))
+        assert _clock(timeline, 1300) == (1, 850 - nd.SHOT_CLOCK_SECONDS)
+
+    def test_never_runs_below_zero(self):
+        timeline = _tl((2, 5, 1000, True))
+        assert _clock(timeline, 1020) == (2, 0)
+
+    def test_stops_at_the_next_play_already_known(self):
+        """The whistle was logged at 14:00 but reached ESPN 20 seconds
+        after the shot; the count must not run on past it."""
+        timeline = _tl((1, 850, 1000, True), (1, 840, 1020, False))
+        assert _clock(timeline, 1005) == (1, 845)
+        assert _clock(timeline, 1015) == (1, 840)
+        assert _clock(timeline, 1020) == (1, 840)
+
+    def test_restarts_in_time_to_reach_the_next_play(self):
+        """After a whistle the inbound is never logged, but a known next
+        play says when the clock must have started again."""
+        timeline = _tl((1, 850, 1000, False), (1, 835, 1040, True))
+        assert _clock(timeline, 1020) == (1, 850)
+        assert _clock(timeline, 1030) == (1, 845)
+        assert _clock(timeline, 1040) == (1, 835)
+
+    def test_before_the_first_known_play_holds_its_clock(self):
+        timeline = _tl((1, 1200, 1000, True))
+        assert _clock(timeline, 980) == (1, 1200)
+
+    def test_a_play_entered_late_does_not_turn_the_clock_back(self):
+        timeline = _tl((1, 850, 1000, False), (1, 900, 1010, False))
+        assert _clock(timeline, 1020) == (1, 850)
+
+    def test_a_play_stamped_before_the_last_one_counts_from_it(self):
+        timeline = _tl((1, 850, 1000, False), (1, 850, 990, True))
+        assert _clock(timeline, 1003) == (1, 847)
+
+    def test_a_new_period_starts_from_its_own_clock(self):
+        timeline = _tl((1, 0, 1000, False), (2, 1200, 2000, True))
+        assert _clock(timeline, 1500) == (1, 0)
+        assert _clock(timeline, 2003) == (2, 1197)
+
+    def test_score_is_the_one_at_that_moment(self):
+        timeline = _tl(
+            (1, 850, 1000, True, {'home': 10, 'away': 8}),
+            (1, 830, 1020, True, {'home': 12, 'away': 8}))
+        assert timeline.at(1019)['home'] == 10
+        assert timeline.at(1020)['home'] == 12
+        assert timeline.at(1020)['away'] == 8
+
+    def test_caught_up_once_the_last_play_has_been_shown(self):
+        timeline = _tl((1, 850, 1000, True), (1, 840, 1020, False))
+        assert not timeline.caught_up(1019)
+        assert timeline.caught_up(1020)
+
+    def test_period_over_after_its_end_play(self):
+        timeline = _tl((1, 3, 1000, True),
+                       (1, 0, 1004, False, {'over': True}))
+        assert not timeline.at(1003)['over']
+        assert timeline.at(1004)['over']
+
+
+class TestPlayParsing:
+    def test_recorded_made_shot(self):
+        play = nd.parse_play(_fixture('ncaab_plays.json')['items'][0])
+        assert play['period'] == 1
+        assert play['clock'] == 1187.0
+        assert play['at'] == pendulum.parse(
+            '2026-11-27T23:01:48Z').timestamp()
+        assert play['running'] is True
+        assert play['over'] is False
+        assert (play['home'], play['away']) == (0, 3)
+
+    def test_recorded_foul_stops_the_clock(self):
+        play = nd.parse_play(_fixture('ncaab_plays.json')['items'][1])
+        assert play['running'] is False
+        assert (play['home'], play['away']) == (2, 3)
+
+    def test_end_of_period(self):
+        item = dict(_fixture('ncaab_plays.json')['items'][1],
+                    type={'id': '412', 'text': 'End Period'})
+        assert nd.parse_play(item)['over'] is True
+
+    def test_play_without_a_timestamp_is_skipped(self):
+        item = dict(_fixture('ncaab_plays.json')['items'][0])
+        del item['wallclock']
+        assert nd.parse_play(item) is None
+
+    def test_period_label(self):
+        assert [nd.period_label(n) for n in (1, 2, 3, 4)] == [
+            '1ST', '2ND', 'OT', '2OT']
+
+    def test_format_clock(self):
+        assert nd.format_clock(755) == '12:35'
+        assert nd.format_clock(9) == '0:09'
+        assert nd.format_clock(0) == '0:00'
+
+
+class TestPlayFetch:
+    """_fetch_plays against a fake ESPN holding `total` plays"""
+
+    def _espn(self, monkeypatch, total):
+        d = _display()
+        item = _fixture('ncaab_plays.json')['items'][0]
+        urls = []
+
+        def get(url):
+            urls.append(url.split('/plays')[1])
+            query = dict(pair.split('=') for pair in
+                         url.split('?')[1].split('&'))
+            limit, page = int(query['limit']), int(query.get('page', 1))
+            first = (page - 1) * limit
+            return {'count': total[0], 'items': [
+                dict(item, id=str(n))
+                for n in range(first, min(first + limit, total[0]))]}
+
+        monkeypatch.setattr(d, '_get_json_once', get)
+        return d, urls
+
+    def test_first_fetch_loads_recent_history(self, monkeypatch):
+        d, urls = self._espn(monkeypatch, [60])
+        seen, plays = d._fetch_plays('1', None)
+        assert seen == 60
+        assert len(plays) == 35  # the last two pages of 25: plays 25-59
+        assert urls == ['?limit=1', '?limit=25&page=2', '?limit=25&page=3']
+
+    def test_nothing_new_costs_one_small_request(self, monkeypatch):
+        d, urls = self._espn(monkeypatch, [60])
+        assert d._fetch_plays('1', 60) == (60, [])
+        assert urls == ['?limit=1']
+
+    def test_new_plays_are_fetched_one_by_one(self, monkeypatch):
+        """A page of one has its own URL per play, so ESPN's 10-second
+        cache of the shared last page cannot hide a new play."""
+        d, urls = self._espn(monkeypatch, [62])
+        seen, plays = d._fetch_plays('1', 60)
+        assert seen == 62 and len(plays) == 2
+        assert urls == ['?limit=1', '?limit=1&page=61', '?limit=1&page=62']
+
+    def test_a_long_gap_reloads_history_instead(self, monkeypatch):
+        d, urls = self._espn(monkeypatch, [100])
+        seen, plays = d._fetch_plays('1', 60)
+        assert seen == 100
+        assert urls == ['?limit=1', '?limit=25&page=3', '?limit=25&page=4']
+
+    def test_a_deleted_play_lowers_the_count(self, monkeypatch):
+        d, _ = self._espn(monkeypatch, [59])
+        assert d._fetch_plays('1', 60) == (59, [])
+
+    def test_failure_keeps_the_old_count(self, monkeypatch):
+        d = _display()
+        monkeypatch.setattr(
+            d, '_get_json_once', Mock(side_effect=RuntimeError('boom')))
+        assert d._fetch_plays('1', 60) == (60, [])
+
+
+class TestHomeAway:
+    """The play-by-play scores are home and away; the screen wants the
+    team's own and the opponent's"""
+
+    def _scores(self, monkeypatch, team_id):
+        d = _display()
+        event = _fixture('ncaab_live_running_event.json')  # WKU @ ILL
+        d.team = Mock(espn_team_id=team_id)
+        monkeypatch.setattr(d, '_fetch_live_event', lambda game_id: event)
+        return d._get_current_scores(event)
+
+    def test_home_team(self, monkeypatch):
+        scores = self._scores(monkeypatch, ILLINI)
+        assert scores['team_home'] is True
+        assert (scores['team_score'], scores['opp_score']) == ('16', '12')
+
+    def test_away_team(self, monkeypatch):
+        scores = self._scores(monkeypatch, '98')
+        assert scores['team_home'] is False
+        assert (scores['team_score'], scores['opp_score']) == ('12', '16')
+
+
+class TestDelayedScores:
+    SCORES = {'status': 'STATUS_IN_PROGRESS', 'state': 'in',
+              'detail': '11:39 - 1ST', 'team_score': '20', 'opp_score': '14',
+              'team_home': True}
+
+    def test_clock_and_score_come_from_the_delayed_timeline(self):
+        timeline = _tl((1, 760, 1000, True, {'home': 16, 'away': 12}))
+        view = nd.delayed_scores(self.SCORES, timeline, 1005)
+        assert view['detail'] == '12:35 - 1ST'
+        assert (view['team_score'], view['opp_score']) == ('16', '12')
+
+    def test_away_team_reads_the_away_score(self):
+        timeline = _tl((1, 760, 1000, True, {'home': 16, 'away': 12}))
+        view = nd.delayed_scores(
+            dict(self.SCORES, team_home=False), timeline, 1005)
+        assert (view['team_score'], view['opp_score']) == ('12', '16')
+
+    def test_without_plays_espns_own_line_is_shown(self):
+        view = nd.delayed_scores(self.SCORES, nd.PlayTimeline(), 1005)
+        assert view == self.SCORES
+
+    def test_halftime_waits_for_the_delayed_clock_to_run_out(self):
+        halftime = dict(self.SCORES, status='STATUS_HALFTIME',
+                        detail='HALFTIME')
+        timeline = _tl((1, 20, 1000, True),
+                       (1, 0, 1020, False, {'over': True}))
+        assert nd.delayed_scores(
+            halftime, timeline, 1010)['detail'] == '0:10 - 1ST'
+        assert nd.delayed_scores(
+            halftime, timeline, 1021)['detail'] == 'HALFTIME'
+
+    def test_break_text_does_not_wait_for_espns_status(self):
+        """ESPN's status flips to the second half up to 30 seconds before
+        the delayed screen gets there."""
+        timeline = _tl((1, 0, 1000, False, {'over': True}))
+        assert nd.delayed_scores(
+            self.SCORES, timeline, 1500)['detail'] == 'HALFTIME'
+        overtime = _tl((2, 0, 1000, False, {'over': True}))
+        assert nd.delayed_scores(
+            self.SCORES, overtime, 1500)['detail'] == 'END OF 2ND'
+
+    def test_espns_status_shows_once_caught_up_if_no_end_play_came(self):
+        delayed = dict(self.SCORES, status='STATUS_DELAYED', detail='DELAYED')
+        timeline = _tl((1, 300, 1000, False))
+        assert nd.delayed_scores(
+            delayed, timeline, 1500)['detail'] == 'DELAYED'
+
+
+class TestLiveScreen:
+    """The live loop on a fake clock, with ESPN answering from a script"""
+
+    def _run(self, monkeypatch, schedule, duration, plays_at=None,
+             status_at=None, yield_to=None, loop_until_final=False):
+        """plays_at(now) -> list of timeline rows known by then;
+        status_at(now) -> overrides for the status feed"""
+        d = _display(schedule)
+        d._header_bg = d._compact_bg = Mock()
+        d._logo_cache = {}
+        d.PRIMARY, d.ACCENT = d.team.primary_color, d.team.accent_color
+        d.TEXT_WHITE = d.TEXT_GRAY = d.LOSS_RED = (1, 1, 1)
+        monkeypatch.setattr(d, '_play_win_celebration', lambda: None)
+        clock = _FakeTime()
+        monkeypatch.setattr(nd, 'time', clock)
+        calls = []
+
+        def scores(game):
+            calls.append(clock.now)
+            return dict({
+                'status': 'STATUS_IN_PROGRESS', 'state': 'in',
+                'detail': '9:99 - ESPN', 'team_score': '99',
+                'opp_score': '98', 'opp_abbr': 'SHSU', 'opp_id': '2534',
+                'team_home': True, 'team_lines': ['30', '40'],
+                'opp_lines': ['38', '40']},
+                **(status_at(clock.now) if status_at else {}))
+
+        def plays(game_id, seen):
+            rows = plays_at(clock.now) if plays_at else []
+            seen = seen or 0
+            return len(rows), [
+                {'period': r[0], 'clock': float(r[1]), 'at': float(r[2]),
+                 'running': r[3], 'over': False, 'home': r[4], 'away': r[5]}
+                for r in rows[seen:]]
+
+        monkeypatch.setattr(d, '_get_current_scores', scores)
+        monkeypatch.setattr(d, '_fetch_plays', plays)
+        started = clock.now
+        d._display_game_day(_event(schedule, 'SHSU @ ILL'), duration,
+                            loop_until_final=loop_until_final,
+                            yield_to=yield_to)
+        drawn = [call.args[4] for call in d.manager.draw_text.call_args_list]
+        return drawn, calls, clock.now - started
+
+    START = 1000.0  # _FakeTime's first reading
+
+    def test_clock_ticks_thirty_seconds_behind(self, monkeypatch, schedule):
+        """A live-ball play logged 30 seconds ago is 'now' on the panel"""
+        delay = nd.LIVE_DELAY_SECONDS
+        drawn, _, _ = self._run(
+            monkeypatch, schedule, duration=3.5, plays_at=lambda now: [
+                (1, 850, self.START - delay, True, 16, 12)])
+        ticks = [text for text in drawn if text.endswith(' - 1ST')]
+        assert list(dict.fromkeys(ticks)) == [
+            '14:10 - 1ST', '14:09 - 1ST', '14:08 - 1ST', '14:07 - 1ST']
+
+    def test_score_stays_in_step_with_the_delayed_clock(
+            self, monkeypatch, schedule):
+        """A basket ESPN reports now reaches the panel when the delayed
+        clock gets to it, not before."""
+        delay = nd.LIVE_DELAY_SECONDS
+        drawn, _, _ = self._run(
+            monkeypatch, schedule, duration=10, plays_at=lambda now: [
+                (1, 850, self.START - delay, True, 16, 12),
+                (1, 845, self.START - delay + 5, True, 18, 12)])
+        scores = [text for text in drawn if text in ('16', '18', '99')]
+        assert '99' not in scores  # ESPN's undelayed status score
+        assert scores[0] == '16' and scores[-1] == '18'
+        first_18 = drawn.index('18')
+        assert '14:06 - 1ST' in drawn[:first_18]
+        assert '14:05 - 1ST' in drawn[first_18:first_18 + 12]
+
+    def test_without_plays_espns_own_line_is_shown(
+            self, monkeypatch, schedule):
+        drawn, _, _ = self._run(monkeypatch, schedule, duration=2)
+        assert '9:99 - ESPN' in drawn and '99' in drawn
+
+    def test_feeds_are_asked_every_few_seconds(self, monkeypatch, schedule):
+        _, calls, _ = self._run(monkeypatch, schedule, duration=20.5)
+        assert len(calls) == 1 + 20 // nd.LIVE_UPDATE_SECONDS
+        assert nd.LIVE_UPDATE_SECONDS <= 5
+
+    def test_a_play_arriving_mid_screen_is_used(self, monkeypatch, schedule):
+        delay = nd.LIVE_DELAY_SECONDS
+
+        def plays_at(now):
+            rows = [(1, 850, self.START - delay, False, 16, 12)]
+            if now >= self.START + 6:
+                rows.append((1, 838, self.START - delay + 12, False, 16, 14))
+            return rows
+
+        drawn, _, _ = self._run(
+            monkeypatch, schedule, duration=14, plays_at=plays_at)
+        assert '13:58 - 1ST' in drawn and '14' in drawn
+
+    def test_takeover_outlasts_espns_final_by_the_delay(
+            self, monkeypatch, schedule):
+        """ESPN calls the game over 30 seconds before the delayed screen
+        has shown its last play."""
+        delay = nd.LIVE_DELAY_SECONDS
+        final_at = self.START + 8
+
+        def status_at(now):
+            if now < final_at:
+                return {}
+            return {'status': 'STATUS_FINAL', 'state': 'post',
+                    'detail': 'FINAL', 'team_score': '70',
+                    'opp_score': '78'}
+
+        drawn, _, elapsed = self._run(
+            monkeypatch, schedule, duration=0, status_at=status_at,
+            loop_until_final=True, plays_at=lambda now: [
+                (2, 20, self.START - delay, True, 68, 78),
+                (2, 3, final_at + 2 - delay + 15, True, 70, 78)])
+        assert '0:03 - 2ND' in drawn
+        assert drawn.index('0:03 - 2ND') < drawn.index('FINAL')
+        assert elapsed >= 8 + delay
+
+    def test_hand_back_is_checked_no_more_often_than_before(
+            self, monkeypatch, schedule):
+        """yield_to asks other sports' APIs; the faster score poll must
+        not multiply those requests."""
+        yield_to = Mock(return_value=False)
+        self._run(monkeypatch, schedule, duration=41, yield_to=yield_to)
+        assert yield_to.call_count == 2
+
+    def test_hand_back_ends_the_screen(self, monkeypatch, schedule):
+        _, _, elapsed = self._run(
+            monkeypatch, schedule, duration=600, yield_to=lambda: True)
+        assert elapsed < 30
 
 
 class TestOffSeasonHooks:
